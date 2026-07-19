@@ -18,6 +18,6 @@
     "health-check": "bash deploy/health-check.sh"
   },
   "engines": {
-    "node": ">=24.0.0"
+    "node": ">=24.18.0"
   }
 }

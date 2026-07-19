@@ -21,6 +21,8 @@ export interface TelemetryRow {
 }
 
 export function initDb(): void {
+  // Clear cached prepared statements (they belong to old db instance)
+  Object.keys(stmts).forEach(k => delete stmts[k]);
   db = new DatabaseSync(config.DB_PATH);
   db.exec('PRAGMA journal_mode = WAL');
   db.exec('PRAGMA foreign_keys = ON');

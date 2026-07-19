@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { initDb, prepareStatements, insertTelemetry, upsertDeviceState, insertCommand, updateCommandAck, getLatestTelemetry, getDeviceState, getRecentCommands } from '../src/db';
+import { initDb, insertTelemetry, upsertDeviceState, insertCommand, updateCommandAck, getLatestTelemetry, getDeviceState, getRecentCommands } from '../src/db';
 
 beforeAll(() => {
   initDb();
-  prepareStatements();
 });
 
 describe('db telemetry + commands', () => {
@@ -29,7 +28,7 @@ describe('db telemetry + commands', () => {
     expect(t!.humidity_pct).toBe(54);
   });
 
-  it('upserts device state with all fields (no missing-param error)', () => {
+  it('upserts device state with all fields', () => {
     upsertDeviceState({
       device_id: 'bedroom-ac-01',
       availability: 'online',
@@ -67,7 +66,7 @@ describe('db telemetry + commands', () => {
     expect(c!.status).toBe('blocked_by_ir_policy');
   });
 
-  it('upsertDeviceState with minimal fields (telemetry path) does not throw', () => {
+  it('upsertDeviceState with minimal fields does not throw', () => {
     expect(() =>
       upsertDeviceState({
         device_id: 'bedroom-ac-01',
