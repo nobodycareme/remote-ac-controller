@@ -8,7 +8,7 @@ import path from 'path';
 
 import { config } from './config';
 import { log } from './logger';
-import { initDb, prepareStatements, retentionCleanup, getDb } from './db';
+import { initDb, retentionCleanup, getDb } from './db';
 import { getSession } from './auth';
 import { startMqttBridge } from './mqtt_bridge';
 import { confirmGeocoding } from './weather';
@@ -50,6 +50,14 @@ async function buildServer() {
     }
     done();
   });
+
+  // Health / Ready / Version
+  fastify.get('/api/health', async () => ({ status: 'ok', uptime: process.uptime() }));
+  fastify.get('/api/ready', async () => {
+    try { getDb().prepare('SELECT 1').get(); return { status: 'ready', db: 'ok' }; }
+    catch { return { status: 'not_ready', db: 'error' }; }
+  });
+  fastify.get('/api/version', async () => ({ version: '0.4.0', node: process.version }));
 
   // Routes (registered before static so /api wins).
   await registerAuthRoutes(fastify);
@@ -123,7 +131,6 @@ async function buildServer() {
 
 async function main() {
   initDb();
-  prepareStatements();
 
   startMqttBridge();
   confirmGeocoding().catch(() => {});
