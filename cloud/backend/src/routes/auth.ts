@@ -18,12 +18,12 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       return;
     }
     const { username, password } = parsed.data;
-    if (!verifyPassword(password) || username !== (process.env.WEB_USER || 'admin')) {
-      log.warn('login failed', { username });
+    if (!(await verifyPassword(password)) || username !== (process.env.WEB_USER || 'admin')) {
+      log.warn('login failed', { username }); // Password/Cookie/SessionID NEVER logged
       reply.code(401).send({ error: 'invalid_credentials' });
       return;
     }
-    const { sessionId, csrf } = createSession();
+    const { sessionId, csrf } = await createSession();
     reply.setCookie('sid', sessionId, {
       httpOnly: true,
       sameSite: 'strict',
@@ -31,7 +31,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       secure: process.env.NODE_ENV === 'production',
       maxAge: 60 * (Number(process.env.SESSION_TTL_MIN) || 480) * 60,
     });
-    log.info('login ok', { username });
+    log.info('login ok', { username }); // Session ID NEVER logged
     reply.send({ ok: true, csrf, user: username });
   });
 
@@ -45,7 +45,6 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
   });
 
   // Session probe — tells frontend if logged in (and returns csrf if so).
-  // Does NOT use requireAuth: returns 200 {authenticated:false} instead of 401.
   fastify.get('/api/auth/session', async (req, reply) => {
     const sid = req.cookies?.sid;
     const session = sid ? getSession(sid) : null;
