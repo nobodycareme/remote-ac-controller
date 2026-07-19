@@ -1,0 +1,59 @@
+# remote-ac-cloud stack: secure MQTT broker + backend (serves API + frontend).
+# Isolated Compose project name "remote-ac" (separate from Halo on the same host).
+# Ports: 8883 (MQTT over TLS, public) + 3100 (backend HTTP, private/Tailscale).
+# 1883 is internal-only (no host port) — backend reaches broker over the docker network.
+# 443/8090/8888/9443 are intentionally NOT touched (Halo/derper/frps/BT-Panel own them).
+
+services:
+  broker:
+    image: eclipse-mosquitto:2
+    container_name: remote-ac-broker
+    restart: unless-stopped
+    env_file:
+      - ./deploy/secrets.env
+    command: >
+      sh -c "mosquitto_passwd -b -c /mosquitto/run/passwordfile $$MQTT_DEVICE_USERNAME $$MQTT_DEVICE_PASSWORD &&
+             mosquitto_passwd -b /mosquitto/run/passwordfile $$MQTT_USERNAME $$MQTT_PASSWORD &&
+             mosquitto -c /mosquitto/config/mosquitto.conf"
+    volumes:
+      - ./broker/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./broker/certs:/mosquitto/certs:ro
+      - ./broker/acl/aclfile:/mosquitto/acl/aclfile:ro
+      - broker-run:/mosquitto/run
+    ports:
+      - "8883:8883"
+    networks:
+      - remote-ac
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: remote-ac-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env.example
+      - ./deploy/secrets.env
+    environment:
+      NODE_ENV: production
+      PORT: "3100"
+      HOST: 0.0.0.0
+      MQTT_URL: mqtt://broker:1883
+      DB_PATH: /data/app.db
+      NODE_OPTIONS: --max-old-space-size=192
+    depends_on:
+      - broker
+    volumes:
+      - backend-data:/data
+    networks:
+      - remote-ac
+    ports:
+      - "3100:3100"
+
+volumes:
+  broker-run:
+  backend-data:
+
+networks:
+  remote-ac:
+    driver: bridge

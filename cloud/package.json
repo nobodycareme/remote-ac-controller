@@ -1,0 +1,23 @@
+{
+  "name": "remote-ac-cloud",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Remote AC Controller - Cloud Server & Web Dashboard",
+  "workspaces": [
+    "apps/server",
+    "apps/web",
+    "packages/shared"
+  ],
+  "scripts": {
+    "dev": "echo 'Run: npm run dev -w apps/server or -w apps/web'",
+    "build": "npm run build -w packages/shared && npm run build -w apps/server && npm run build -w apps/web",
+    "test": "npm run test -w packages/shared && npm run test -w apps/server && npm run test -w apps/web",
+    "lint": "echo TODO",
+    "deploy": "bash deploy/deploy.sh",
+    "status": "bash deploy/status.sh",
+    "health-check": "bash deploy/health-check.sh"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}

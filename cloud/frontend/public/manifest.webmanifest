@@ -1,0 +1,17 @@
+{
+  "name": "云端空调管家",
+  "short_name": "空调管家",
+  "description": "手机远程查看室内温湿度与西安天气，向设备下发控制指令",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0f1420",
+  "theme_color": "#0f1420",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
