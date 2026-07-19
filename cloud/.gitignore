@@ -34,3 +34,4 @@ Thumbs.db
 # Secrets
 *.secret
 private/
+deploy/secrets.env

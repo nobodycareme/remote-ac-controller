@@ -6,11 +6,11 @@
 #   commands/ack                      (device -> broker, publish)
 # ============================================================
 
-# --- Device account: bedroom-ac-01 ---
+# --- Device account: remote-ac-device ---
 # May PUBLISH its own telemetry/state/availability/ack.
 # May SUBSCRIBE only to its own commands/set.
 # Must NOT publish to commands/set, must NOT touch other devices.
-user bedroom-ac-01
+user remote-ac-device
 topic write remote-ac/v1/devices/bedroom-ac-01/telemetry
 topic write remote-ac/v1/devices/bedroom-ac-01/state
 topic write remote-ac/v1/devices/bedroom-ac-01/availability
