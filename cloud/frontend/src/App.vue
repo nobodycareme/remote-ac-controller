@@ -1,21 +1,59 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed, onErrorCaptured } from 'vue';
 import {
   fetchSession,
-  login as apiLogin,
   logout as apiLogout,
   fetchDashboard,
   fetchTelemetryHistory,
   fetchEvents,
   sendCommand,
+  sendIrAction,
+  fetchWeatherCurrent,
   connectWS,
+  login,
   type SessionInfo,
   type Dashboard,
   type CommandRow,
+  type ApiError,
 } from './api';
 import TrendChart from './components/TrendChart.vue';
 
-const session = ref<SessionInfo | null>(null);
+// Build identity (injected by Vite define at build time). Non-sensitive — used
+// only to confirm which release the browser actually loaded, and shown on the
+// visible error page so failures are diagnosable without leaking secrets.
+declare const __APP_BUILD_ID__: string;
+declare const __APP_GIT_COMMIT__: string;
+declare const __APP_BUILD_TS__: string;
+const BUILD_ID = typeof __APP_BUILD_ID__ !== 'undefined' ? __APP_BUILD_ID__ : 'dev';
+const GIT_COMMIT = typeof __APP_GIT_COMMIT__ !== 'undefined' ? __APP_GIT_COMMIT__ : 'unknown';
+const BUILD_TS = typeof __APP_BUILD_TS__ !== 'undefined' ? __APP_BUILD_TS__ : '0';
+
+// ── Visible error fallback (Task §八) ──
+// If any descendant render throws, we capture it here and show a readable error
+// card instead of an empty page. We never echo tokens, stacks with secrets, or
+// raw request bodies — only a short message + the non-sensitive build id.
+const fatalError = ref<{ id: string; message: string } | null>(null);
+onErrorCaptured((err: any) => {
+  const message = (err?.message || '渲染时发生未知错误').toString().slice(0, 160);
+  fatalError.value = { id: BUILD_ID, message };
+  return false; // stop propagation; we render our own fallback
+});
+
+// Safe timestamp formatter. The backend returns `observedAt` as a unix-ms
+// NUMBER (not a string), so calling .slice() on it throws "not a function".
+// Normalize to a string first, then format. Accepts number | string | null.
+function formatTimestamp(ts: number | string | null | undefined): string {
+  if (ts === null || ts === undefined || ts === '') return '—';
+  const n = typeof ts === 'string' ? Number(ts) : ts;
+  if (!Number.isFinite(n) || n <= 0) return '—';
+  const d = new Date(n);
+  if (isNaN(d.getTime())) return '—';
+  const p = (x: number) => String(x).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+
+const csrf = ref<string>('');
 const dashboard = ref<Dashboard | null>(null);
 const history = ref<{ t: number; temperature_c: number; humidity_pct: number }[]>([]);
 const historyRange = ref<string>('1h');
@@ -23,15 +61,40 @@ const events = ref<{ id: number; event_type: string; device_id: string; message:
 const ws = ref<WebSocket | null>(null);
 const theme = ref<'dark' | 'light'>('dark');
 
+// ── Session role (Task §二/§五) ──
+// Guests (auto-created anonymous sessions) must NEVER see the armed real-IR button.
+// The backend derives ir_armed from the session ROLE, but we also track it here so
+// the login UI appears/disappears immediately after login/logout.
+const sessionRole = ref<string>('guest');
+const ownerUser = ref<string>('');
+const showLogin = ref(false);
 const loginUser = ref('');
 const loginPass = ref('');
+const loginBusy = ref(false);
 const loginErr = ref('');
+
+// ── Independent weather (Task §十一/§十二/§十三) ──
+// Decoupled from device state: fed by /api/weather/current (backend WeatherService),
+// updated via WS 'weather_update'. Shows last snapshot even when device is offline.
+const weatherCurrent = ref<any>(null);
+const weatherError = ref<string | null>(null);
 
 const powerOn = ref(false);
 const targetTemp = ref(26);
 const busy = ref(false);
 const ackMsg = ref('');
 const lastAckAt = ref(0);
+
+// ── Real-IR action (Section 九) ──────────────────────────────────────────
+// Single button → one vendor PROGMEM code → device emits raw 22H frame once.
+// Layered status: we can confirm the MODULE emitted IR (device ACK), but we can
+// NOT confirm the physical AC responded, so AC status stays "pending" by design.
+const IR_CODE_ID = 'hisense_cool_24_quiet_swing_v_on_swing_h_on_power_on_v1';
+const irBusy = ref(false);
+const irAckMsg = ref('');
+const irModuleEmitted = ref(false); // device ACKed + module drove IR LED (NOT = AC success)
+const irLastAt = ref(0);
+const acPhysicalResponse = ref<'pending' | 'confirmed' | 'unknown'>('pending');
 
 const weatherText = (code: number): string => {
   const m: Record<number, string> = {
@@ -52,6 +115,15 @@ const availabilityText = computed(() => {
   const a = dashboard.value?.availability;
   return a === 'online' ? '在线' : a === 'offline' ? '离线' : '未知';
 });
+
+const isOnline = computed(() => dashboard.value?.availability === 'online');
+const isOwner = computed(() => sessionRole.value === 'owner');
+
+const settings = computed(() => dashboard.value?.settings ?? null);
+const samplePeriodS = computed(() => (settings.value?.device_sample_interval_ms ?? 0) / 1000);
+const publishPeriodS = computed(() => (settings.value?.device_publish_interval_ms ?? 0) / 1000);
+const staleThresholdS = computed(() => (settings.value?.stale_threshold_ms ?? 0) / 1000);
+const offlineThresholdS = computed(() => (settings.value?.offline_threshold_ms ?? 0) / 1000);
 
 const tempNow = computed(() => dashboard.value?.latest_telemetry?.temperature_c ?? null);
 const humNow = computed(() => dashboard.value?.latest_telemetry?.humidity_pct ?? null);
@@ -82,12 +154,34 @@ function toggleTheme() {
   applyTheme();
 }
 
+async function loadSession() {
+  try {
+    const s: SessionInfo = await fetchSession();
+    if (s.csrf) csrf.value = s.csrf;
+    sessionRole.value = s.role ?? 'guest';
+    ownerUser.value = s.user ?? '';
+  } catch {
+    sessionRole.value = 'guest';
+  }
+}
+
 async function loadDashboard() {
   try {
     dashboard.value = await fetchDashboard();
     syncControlFromIntent();
   } catch {
     /* session may have expired */
+  }
+}
+
+// Independent weather fetch — never depends on device/dashboard payload.
+async function loadWeather() {
+  try {
+    const w = await fetchWeatherCurrent();
+    weatherCurrent.value = w;
+    weatherError.value = null;
+  } catch (e: any) {
+    weatherError.value = e?.message || '天气暂时不可用';
   }
 }
 
@@ -130,44 +224,67 @@ function onWs(type: string, payload: any) {
     loadHistory();
   } else if (type === 'availability' && payload) {
     if (dashboard.value) dashboard.value.availability = payload.status;
+  } else if (type === 'weather_update' && payload) {
+    // Independent push from the backend WeatherService (device state irrelevant).
+    weatherCurrent.value = payload;
+    weatherError.value = null;
   } else if (type === 'ack' && payload) {
-    ackMsg.value = `命令 ${payload.command_id.slice(0, 8)} → ${payload.status}${payload.reason ? ' (' + payload.reason + ')' : ''}`;
+    ackMsg.value = `命令 ${String(payload.command_id).slice(0, 8)} → ${payload.status}${payload.reason ? ' (' + payload.reason + ')' : ''}`;
     lastAckAt.value = Date.now();
+    // Layered IR status: device ACKed an IR action → module drove the IR LED.
+    // This confirms EMISSION only — NOT that the physical AC responded.
+    if (payload.status === 'ir_executed') {
+      irModuleEmitted.value = true;
+      irAckMsg.value = `红外模块已发射（命令 ${String(payload.command_id).slice(0, 8)}）· 空调是否响应未知`;
+      irLastAt.value = Date.now();
+      acPhysicalResponse.value = 'pending';
+    } else if (payload.status === 'ir_module_busy' || payload.status === 'ir_execute_failed') {
+      irAckMsg.value = `红外发射失败：${payload.status}${payload.reason ? ' (' + payload.reason + ')' : ''}`;
+    }
     loadDashboard();
     loadEvents();
   }
 }
 
-async function doLogin() {
-  loginErr.value = '';
-  try {
-    session.value = await apiLogin(loginUser.value, loginPass.value);
-    await afterAuth();
-  } catch (e: any) {
-    loginErr.value = '登录失败：' + (e?.message || '凭据错误');
-  }
-}
-
-async function doLogout() {
-  try {
-    await apiLogout();
-  } catch {
-    /* ignore */
-  }
-  session.value = null;
-  csrfCleared();
-  ws.value?.close();
-}
-
-function csrfCleared() {
-  // csrf cleared inside api client
-}
-
-async function afterAuth() {
+async function initGuest() {
+  await loadSession();
   await loadDashboard();
+  await loadWeather();
   await loadHistory();
   await loadEvents();
   ws.value = connectWS(onWs);
+}
+
+async function doLogout() {
+  try { await apiLogout(); } catch { /* ignore */ }
+  sessionRole.value = 'guest';
+  ownerUser.value = '';
+  showLogin.value = false;
+  // Re-init guest session
+  ws.value?.close();
+  await initGuest();
+}
+
+async function doLogin() {
+  loginBusy.value = true;
+  loginErr.value = '';
+  try {
+    const s = await fetchSession(); // ensure a guest cookie exists first
+    const r: SessionInfo = await login(loginUser.value, loginPass.value);
+    csrf.value = r.csrf || s.csrf || '';
+    sessionRole.value = r.role ?? 'owner';
+    ownerUser.value = r.user ?? '';
+    showLogin.value = false;
+    loginUser.value = '';
+    loginPass.value = '';
+    await loadDashboard();
+    await loadWeather();
+  } catch (e: any) {
+    const ae = e as ApiError;
+    loginErr.value = ae?.message || e?.message || '登录失败';
+  } finally {
+    loginBusy.value = false;
+  }
 }
 
 async function sendSetState() {
@@ -175,7 +292,7 @@ async function sendSetState() {
   ackMsg.value = '';
   try {
     const r = await sendCommand('set_state', { power: powerOn.value, target_temperature_c: targetTemp.value });
-    ackMsg.value = `已下发（${r.command_id.slice(0, 8)}）…等待设备回执`;
+    ackMsg.value = `已下发（${String(r.command_id).slice(0, 8)}）…等待设备回执`;
   } catch (e: any) {
     ackMsg.value = '下发失败：' + (e?.message || '');
   } finally {
@@ -207,7 +324,34 @@ async function sendTemp() {
   }
 }
 
+// Single real-IR action (Section 九). Only rendered when dashboard.ir_armed is true,
+// which the backend sets ONLY for an OWNER session with WEB_REAL_IR_ENABLED=true.
+// (This is the root-cause fix for the spurious guest 403 — guests never see the
+// button, so they can no longer click it and hit OWNER_REQUIRED.)
+async function sendIrActionOnce() {
+  if (!dashboard.value?.ir_armed) {
+    irAckMsg.value = '真实红外未启用（需所有者登录且 WEB_REAL_IR_ENABLED=true）';
+    return;
+  }
+  irBusy.value = true;
+  irAckMsg.value = '';
+  irModuleEmitted.value = false;
+  acPhysicalResponse.value = 'pending';
+  try {
+    const r = await sendIrAction(IR_CODE_ID);
+    irAckMsg.value = `已下发（${r.command_id.slice(0, 8)}）…等待设备回执`;
+  } catch (e: any) {
+    const ae = e as ApiError;
+    // Show the precise structured envelope: [errorCode] message — not a bare "403 ".
+    irAckMsg.value = `下发失败：${ae?.errorCode ? '[' + ae.errorCode + '] ' : ''}${ae?.message || e?.message || ''}`;
+  } finally {
+    irBusy.value = false;
+    loadEvents();
+  }
+}
+
 let pollTimer: any = null;
+let weatherTimer: any = null;
 onMounted(async () => {
   try {
     const saved = localStorage.getItem('rac-theme') as 'dark' | 'light' | null;
@@ -216,52 +360,63 @@ onMounted(async () => {
     /* ignore */
   }
   applyTheme();
-  try {
-    const s = await fetchSession();
-    if (s.authenticated) {
-      session.value = s;
-      await afterAuth();
-    }
-  } catch {
-    /* not authed */
-  }
+  await initGuest();
   pollTimer = setInterval(() => {
-    if (session.value?.authenticated) {
-      loadDashboard();
-      loadEvents();
-    }
+    loadDashboard();
+    loadEvents();
   }, 10000);
+  // Independent weather poll (backend refreshes every 10 min; this is the fallback).
+  weatherTimer = setInterval(() => {
+    loadWeather();
+  }, 60000);
 });
 
 onBeforeUnmount(() => {
   if (pollTimer) clearInterval(pollTimer);
+  if (weatherTimer) clearInterval(weatherTimer);
   ws.value?.close();
 });
 </script>
 
 <template>
   <div>
-    <!-- Login modal -->
-    <div v-if="!session?.authenticated" class="modal-mask">
-      <div class="modal">
-        <h2>云端空调管家</h2>
-        <label>用户名</label>
-        <input v-model="loginUser" type="text" placeholder="admin" autocomplete="username" />
-        <label>密码</label>
-        <input v-model="loginPass" type="password" placeholder="••••••" autocomplete="current-password" @keyup.enter="doLogin" />
-        <div class="err">{{ loginErr }}</div>
-        <button style="width: 100%; margin-top: 12px" @click="doLogin">登录</button>
-        <div class="muted" style="margin-top: 12px; text-align: center">手机远程控制空调 · 云端联调</div>
+    <!-- Visible error fallback (Task §八): a captured render error shows a
+         readable card instead of an empty page. No tokens / secrets / raw stacks. -->
+    <div v-if="fatalError" class="error-fallback">
+      <div class="error-card">
+        <h2>⚠️ 页面渲染出错</h2>
+        <p class="error-msg">{{ fatalError.message }}</p>
+        <p class="error-meta">
+          错误编号：{{ fatalError.id }}<br />
+          构建标识：{{ BUILD_ID }} · 提交：{{ GIT_COMMIT.slice(0, 12) }}<br />
+          请刷新页面重试；若反复出现，请联系管理员并提供以上编号。
+        </p>
       </div>
     </div>
 
-    <!-- Main -->
-    <template v-else>
+    <!-- Main (public guest mode — no login required for read-only view) -->
+    <div>
       <div class="topbar">
         <div class="title">☁️ 云端空调管家</div>
         <div style="display: flex; gap: 8px">
           <button class="icon-btn" @click="toggleTheme">{{ theme === 'dark' ? '🌙' : '☀️' }}</button>
-          <button class="icon-btn" @click="doLogout">退出</button>
+          <button v-if="isOwner" class="icon-btn" @click="doLogout">退出</button>
+          <button v-else class="icon-btn" @click="showLogin = true">所有者登录</button>
+        </div>
+      </div>
+
+      <!-- Owner login card -->
+      <div class="card" v-if="showLogin">
+        <h3>🔐 所有者登录（真实红外操作需要）</h3>
+        <div class="sub" style="margin-bottom: 8px">登录后本页才会显示「单次真实红外发射」按钮。普通控制无需登录。</div>
+        <div style="display: flex; flex-direction: column; gap: 8px; max-width: 320px">
+          <input v-model="loginUser" placeholder="用户名" :disabled="loginBusy" style="padding: 8px; border-radius: 8px; border: 1px solid var(--border)" />
+          <input v-model="loginPass" type="password" placeholder="密码" :disabled="loginBusy" @keyup.enter="doLogin" style="padding: 8px; border-radius: 8px; border: 1px solid var(--border)" />
+          <div v-if="loginErr" class="badge-offline-msg">{{ loginErr }}</div>
+          <div class="btn-row">
+            <button :disabled="loginBusy" @click="doLogin">{{ loginBusy ? '登录中…' : '登录' }}</button>
+            <button class="ghost" @click="showLogin = false">取消</button>
+          </div>
         </div>
       </div>
 
@@ -269,7 +424,10 @@ onBeforeUnmount(() => {
       <div class="card">
         <div class="row">
           <span :class="availabilityClass">{{ availabilityText }}</span>
-          <span class="sub">设备 {{ dashboard?.ir_control === 'disabled' ? '（红外控制已禁用）' : '' }}</span>
+          <span class="sub">
+            设备 {{ dashboard?.ir_control === 'disabled' ? '（红外控制已禁用）' : '' }}
+            <span v-if="dashboard?.latest_telemetry?.simulated" class="badge badge-sim-sm">模拟</span>
+          </span>
         </div>
         <div class="row" style="margin-top: 8px">
           <span class="sub">最后心跳：{{ lastSeen }}</span>
@@ -280,9 +438,14 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
+      <div class="dashboard-grid">
+
       <!-- Indoor -->
       <div class="card">
-        <h3>🛏️ 室内（卧室）</h3>
+        <h3>🛏️ 室内（卧室）
+          <span v-if="dashboard?.latest_telemetry?.simulated" class="badge badge-sim">模拟</span>
+          <span v-else-if="dashboard?.latest_telemetry" class="badge badge-real">真实设备</span>
+        </h3>
         <div class="grid2">
           <div>
             <div class="sub">温度</div>
@@ -297,44 +460,95 @@ onBeforeUnmount(() => {
           RSSI {{ dashboard?.latest_telemetry?.wifi_rssi_dbm ?? '—' }} dBm ·
           空闲堆 {{ dashboard?.latest_telemetry?.free_heap_bytes ? (dashboard.latest_telemetry.free_heap_bytes / 1024).toFixed(0) + ' KB' : '—' }}
         </div>
-      </div>
-
-      <!-- Xi'an weather -->
-      <div class="card" v-if="dashboard?.weather">
-        <h3>🌤️ 西安室外天气</h3>
-        <div class="row">
-          <div>
-            <div class="big">{{ dashboard.weather.temperature_2m.toFixed(1) }}<span style="font-size: 18px">℃</span></div>
-            <div class="sub">{{ weatherText(dashboard.weather.weather_code) }} · 体感 {{ dashboard.weather.apparent_temperature.toFixed(1) }}℃</div>
-          </div>
-          <div style="text-align: right">
-            <div class="sub">湿度 {{ dashboard.weather.relative_humidity_2m }}%</div>
-            <div class="sub">风速 {{ dashboard.weather.wind_speed_10m }} km/h</div>
-            <div class="sub">{{ dashboard.weather.stale ? '（缓存）' : '实时' }} · {{ dashboard.weather.time }}</div>
-          </div>
+        <div class="sub" style="margin-top: 4px; font-size: 10px; color: var(--text-dim)">
+          最后更新：{{ lastSeen }} ·
+          数据来源：{{ dashboard?.latest_telemetry?.simulated ? '模拟设备' : dashboard?.latest_telemetry ? '真实设备' : '无数据' }}
         </div>
       </div>
-      <div class="card" v-else-if="dashboard?.weather_error">
+
+      <!-- Xi'an weather (INDEPENDENT of device state) -->
+      <div class="card" v-if="weatherCurrent?.current">
+        <h3>🌤️ 西安室外天气
+          <span v-if="weatherCurrent.stale" class="badge badge-cache">数据略旧</span>
+          <span v-else class="badge badge-real">实时</span>
+        </h3>
+        <div class="row">
+          <div>
+            <div class="big">{{ weatherCurrent.current.temperatureC.toFixed(1) }}<span style="font-size: 18px">℃</span></div>
+            <div class="sub">{{ weatherText(weatherCurrent.current.weatherCode) }} · 体感 {{ weatherCurrent.current.apparentTemperatureC.toFixed(1) }}℃</div>
+          </div>
+          <div style="text-align: right">
+            <div class="sub">湿度 {{ weatherCurrent.current.relativeHumidity }}%</div>
+            <div class="sub">风速 {{ weatherCurrent.current.windSpeed }} km/h</div>
+            <div class="sub" style="font-size: 10px; color: var(--text-dim)">来源：Open-Meteo（独立服务）</div>
+            <div class="sub" style="font-size: 10px; color: var(--text-dim)">观测时间：{{ formatTimestamp(weatherCurrent.observedAt) }}</div>
+          </div>
+        </div>
+        <div class="sub" style="margin-top: 6px; font-size: 10px; color: var(--text-dim)" v-if="weatherCurrent.error">
+          上次刷新出错，已保留最后成功数据：{{ weatherCurrent.error }}
+        </div>
+      </div>
+      <div class="card" v-else-if="weatherError">
         <h3>🌤️ 西安室外天气</h3>
-        <div class="sub">暂不可用：{{ dashboard.weather_error }}</div>
+        <div class="sub">暂不可用：{{ weatherError }}（天气服务与设备状态无关，稍后自动重试）</div>
       </div>
 
       <!-- Control -->
       <div class="card">
         <h3>🎛️ 控制（网页 → 云端 → ESP8266）</h3>
         <div class="btn-row" style="margin-bottom: 12px">
-          <button :class="powerOn ? 'ok' : 'ghost'" @click="sendPower(true)">开机</button>
-          <button :class="!powerOn ? 'danger' : 'ghost'" @click="sendPower(false)">关机</button>
+          <button :class="powerOn ? 'ok' : 'ghost'" :disabled="busy || !isOnline" @click="sendPower(true)">开机</button>
+          <button :class="!powerOn ? 'danger' : 'ghost'" :disabled="busy || !isOnline" @click="sendPower(false)">关机</button>
         </div>
+        <div v-if="!isOnline" class="badge-offline-msg">设备离线，无法下发命令</div>
         <div class="sub">目标温度：{{ targetTemp }}℃</div>
-        <input type="range" min="16" max="30" step="1" v-model.number="targetTemp" />
+        <input type="range" min="16" max="30" step="1" v-model.number="targetTemp" :disabled="!isOnline" />
         <div class="btn-row" style="margin-top: 12px">
-          <button :disabled="busy" @click="sendTemp">仅设温</button>
-          <button :disabled="busy" @click="sendSetState">下发完整状态</button>
+          <button :disabled="busy || !isOnline" @click="sendTemp">仅设温</button>
+          <button :disabled="busy || !isOnline" @click="sendSetState">下发完整状态</button>
         </div>
-        <div class="badge-ir">真实红外发射已按安全策略禁用；命令将真实下发并由设备回执（blocked_by_ir_policy）</div>
+        <div class="badge-ir">命令已到达设备，但红外控制仍处于安全禁用状态（blocked_by_ir_policy）</div>
         <div v-if="ackMsg" class="sub" style="margin-top: 10px; color: var(--accent)">{{ ackMsg }}</div>
       </div>
+
+      <!-- Real-IR action (Section 九): single button → module emits raw 22H frame once -->
+      <div class="card" v-if="dashboard?.ir_armed">
+        <h3>📡 真实红外发射（模块 → 空调）</h3>
+        <div class="sub" style="margin-bottom: 8px">
+          一次性发射：开机 · 制冷 24℃ · 静音 · 双向扫风
+        </div>
+        <button :class="irModuleEmitted ? 'ok' : 'ir'" :disabled="irBusy || !isOnline" @click="sendIrActionOnce">
+          {{ irBusy ? '发射中…' : '开机：制冷24℃·静音·双向扫风' }}
+        </button>
+        <div v-if="!isOnline" class="badge-offline-msg">设备离线，无法下发红外命令</div>
+        <!-- Layered status: emission confirmed ≠ AC responded -->
+        <div class="ir-layers" style="margin-top: 10px">
+          <div class="layer" :class="irModuleEmitted ? 'done' : ''">
+            ① 模块已发射红外：{{ irModuleEmitted ? '是' : '否' }}
+          </div>
+          <div class="layer" :class="acPhysicalResponse === 'confirmed' ? 'done' : ''">
+            ② 空调是否响应：{{ acPhysicalResponse === 'pending' ? '未知（需人工确认）' : acPhysicalResponse === 'confirmed' ? '已确认' : '未知' }}
+          </div>
+        </div>
+        <div v-if="irAckMsg" class="sub" style="margin-top: 10px; color: var(--accent)">{{ irAckMsg }}</div>
+      </div>
+      <div class="card" v-else-if="dashboard">
+        <h3>📡 真实红外发射</h3>
+        <div class="badge-ir">真实红外发射未启用（安全默认：WEB_REAL_IR_ENABLED=false）。需<strong>所有者登录</strong>并显式开启后，本卡片才会激活单次发射按钮。访客点击不会触发 403 —— 因为按钮对访客根本不显示。</div>
+        <button v-if="!isOwner" class="ghost" style="margin-top: 10px" @click="showLogin = true">所有者登录</button>
+      </div>
+
+      <!-- Run params (real device, read from code/runtime — not suggested values) -->
+      <div class="card" v-if="settings">
+        <h3>⚙️ 运行参数（真实设备）</h3>
+        <div class="sub">采样周期：{{ samplePeriodS }}s · 上传周期：{{ publishPeriodS }}s</div>
+        <div class="sub">陈旧阈值：{{ staleThresholdS }}s · 离线阈值：{{ offlineThresholdS }}s</div>
+        <div class="sub" style="margin-top: 4px; font-size: 10px; color: var(--text-dim)">
+          数据来源：ESP8266 + DHT11 · 数据类型：真实设备 · 模拟：否
+        </div>
+      </div>
+
+      </div><!-- dashboard-grid -->
 
       <!-- Trend -->
       <div class="card">
@@ -353,6 +567,11 @@ onBeforeUnmount(() => {
           <span class="t">{{ new Date(e.created_at).toLocaleTimeString() }}</span> · {{ e.event_type }} · {{ e.message }}
         </div>
       </div>
-    </template>
+
+      <!-- Build/release identity (non-sensitive; confirms loaded release) -->
+      <div class="footer-build">
+        构建：{{ BUILD_ID }} · 提交：{{ GIT_COMMIT.slice(0, 12) }} · 时间：{{ BUILD_TS }}
+      </div>
+    </div>
   </div>
 </template>

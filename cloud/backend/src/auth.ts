@@ -1,19 +1,45 @@
 import crypto from 'node:crypto';
 import { v4 as uuid } from 'uuid';
+import { DatabaseSync } from 'node:sqlite';
 import { config } from './config';
 import { log } from './logger';
-import { getDb } from './db';
+
+export type SessionRole = 'owner' | 'guest';
 
 export interface Session {
   id: string;       // session ID (sent as cookie)
   hash: string;     // SHA-256 hash of session ID (stored in DB)
   user: string;
+  role: SessionRole; // 'owner' (authenticated with password) | 'guest' (anonymous)
   csrf: string;
   createdAt: number;
   lastAccess: number;
 }
 
 const TTL = config.SESSION_TTL_MIN * 60_000;
+
+// Sessions use a DEDICATED connection to avoid any lock/contention with the
+// high-frequency telemetry writer on the main `db` connection. WAL allows this
+// read-mostly store to proceed concurrently with telemetry inserts.
+let _sessionDb: DatabaseSync | null = null;
+function sessionDb(): DatabaseSync {
+  if (!_sessionDb) {
+    _sessionDb = new DatabaseSync(config.DB_PATH);
+    _sessionDb.exec('PRAGMA journal_mode = WAL');
+    _sessionDb.exec('PRAGMA busy_timeout = 5000');
+    _sessionDb.exec(
+      `CREATE TABLE IF NOT EXISTS sessions (
+        sid_hash TEXT PRIMARY KEY,
+        user_name TEXT NOT NULL DEFAULT 'admin',
+        role TEXT NOT NULL DEFAULT 'guest',
+        csrf TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL,
+        last_access INTEGER NOT NULL DEFAULT 0
+      )`
+    );
+  }
+  return _sessionDb;
+}
 
 // ── Password ──────────────────────────────────────────
 // Use Node.js built-in crypto.scrypt (no native module, no bcryptjs)
@@ -82,22 +108,21 @@ const memoryFallback = new Map<string, Session>(); // Fallback when DB not avail
 
 function dbSessions() {
   try {
-    const db = getDb();
+    const db = sessionDb();
     return {
       insert: (s: Session) => {
-        db.prepare('INSERT OR REPLACE INTO sessions(sid_hash, user_name, csrf, created_at, last_access) VALUES(?,?,?,?,?)')
-          .run(s.hash, s.user, s.csrf, s.createdAt, s.lastAccess);
+        db.prepare('INSERT OR REPLACE INTO sessions(sid_hash, user_name, role, csrf, created_at, last_access) VALUES(?,?,?,?,?,?)')
+          .run(s.hash, s.user, s.role, s.csrf, s.createdAt, s.lastAccess);
       },
       get: (hash: string) => {
-        return db.prepare('SELECT sid_hash, user_name, csrf, created_at, last_access FROM sessions WHERE sid_hash=?')
+        return db.prepare('SELECT sid_hash, user_name, role, csrf, created_at, last_access FROM sessions WHERE sid_hash=?')
           .get(hash) as any;
       },
       delete: (hash: string) => {
         db.prepare('DELETE FROM sessions WHERE sid_hash=?').run(hash);
       },
-      cleanExpired: () => {
-        const cutoff = Date.now() - TTL;
-        db.prepare('DELETE FROM sessions WHERE last_access < ?').run(cutoff);
+      touch: (hash: string, ts: number) => {
+        db.prepare('UPDATE sessions SET last_access=? WHERE sid_hash=?').run(ts, hash);
       },
     };
   } catch {
@@ -105,13 +130,14 @@ function dbSessions() {
   }
 }
 
-export async function createSession(): Promise<{ sessionId: string; csrf: string }> {
+export async function createSession(role: SessionRole = 'guest'): Promise<{ sessionId: string; csrf: string }> {
   await initPassword();
   const sessionId = uuid();
   const csrf = uuid();
   const hash = sessionHash(sessionId);
   const now = Date.now();
-  const session: Session = { id: sessionId, hash, user: config.WEB_USER, csrf, createdAt: now, lastAccess: now };
+  const user = role === 'owner' ? config.IR_OWNER_USER : 'guest';
+  const session: Session = { id: sessionId, hash, user, role, csrf, createdAt: now, lastAccess: now };
 
   const sdb = dbSessions();
   if (sdb) {
@@ -120,6 +146,19 @@ export async function createSession(): Promise<{ sessionId: string; csrf: string
     memoryFallback.set(sessionId, session);
   }
   return { sessionId, csrf };
+}
+
+// Mint an owner session after successful password verification. Returns null if
+// the configured owner password is empty (owner login is disabled).
+export async function loginOwner(password: string): Promise<{ sessionId: string; csrf: string; user: string } | null> {
+  await initPassword();
+  if (!config.IR_OWNER_PASSWORD) {
+    return null; // owner login disabled when no password configured
+  }
+  const ok = await verifyPassword(password);
+  if (!ok) return null;
+  const { sessionId, csrf } = await createSession('owner');
+  return { sessionId, csrf, user: config.IR_OWNER_USER };
 }
 
 export function getSession(sessionId?: string): Session | null {
@@ -134,9 +173,13 @@ export function getSession(sessionId?: string): Session | null {
       sdb.delete(row.sid_hash);
       return null;
     }
-    // Update last access
-    sdb.cleanExpired();
-    return { id: sessionId, hash: row.sid_hash, user: row.user_name, csrf: row.csrf, createdAt: row.created_at, lastAccess: now };
+    // NOTE: last_access update + expired cleanup run on a background timer
+    // (startSessionCleanup), NOT on the request hot path, to keep getSession read-only.
+    try {
+      sdb.touch(row.sid_hash, now);
+    } catch { /* best-effort */ }
+    const role = row.role === 'owner' ? 'owner' : 'guest';
+    return { id: sessionId, hash: row.sid_hash, user: row.user_name, role, csrf: row.csrf, createdAt: row.created_at, lastAccess: now };
   }
 
   // Memory fallback
@@ -148,6 +191,16 @@ export function getSession(sessionId?: string): Session | null {
   }
   s.lastAccess = Date.now();
   return s;
+}
+
+// Periodic cleanup of expired sessions — runs off the request path.
+export function startSessionCleanup(intervalMs = 10 * 60_000): void {
+  setInterval(() => {
+    try {
+      sessionDb().prepare('DELETE FROM sessions WHERE last_access < ? OR created_at < ?')
+        .run(Date.now() - TTL, Date.now() - TTL);
+    } catch { /* ignore */ }
+  }, intervalMs).unref();
 }
 
 export function destroySession(sessionId?: string): void {

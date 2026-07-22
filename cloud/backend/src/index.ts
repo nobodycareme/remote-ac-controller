@@ -9,10 +9,11 @@ import path from 'path';
 import { config } from './config';
 import { log } from './logger';
 import { initDb, retentionCleanup, getDb } from './db';
-import { getSession } from './auth';
+import { getSession, startSessionCleanup } from './auth';
 import { startMqttBridge } from './mqtt_bridge';
-import { confirmGeocoding } from './weather';
+import { weatherService, confirmGeocoding } from './weather';
 import { bus } from './bus';
+import { requireOrigin } from './guards';
 
 import { registerAuthRoutes } from './routes/auth';
 import { registerDashboardRoutes } from './routes/dashboard';
@@ -27,9 +28,11 @@ const ALLOWED_ORIGINS = (config.ALLOWED_ORIGINS || '')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
+const ALLOWED_ORIGIN_SET = new Set(ALLOWED_ORIGINS);
 
 async function buildServer() {
-  const fastify = Fastify({ logger: false, trustProxy: true });
+  // Only trust reverse proxy from loopback (cloudflared runs on localhost)
+  const fastify = Fastify({ logger: false, trustProxy: ['127.0.0.1', '::1'] });
 
   await fastify.register(cookie, { secret: config.SESSION_SECRET });
   await fastify.register(rateLimit, { max: 100, timeWindow: '1 minute', allowList: ['127.0.0.1', '::1'] });
@@ -38,7 +41,7 @@ async function buildServer() {
   // CORS for same-origin + configured origins (browser fetch from Tailscale domain).
   fastify.addHook('onRequest', (req, reply, done) => {
     const origin = req.headers.origin;
-    if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    if (origin && ALLOWED_ORIGIN_SET.has(origin)) {
       reply.header('access-control-allow-origin', origin);
       reply.header('access-control-allow-credentials', 'true');
       reply.header('access-control-allow-headers', 'content-type, x-csrf-token');
@@ -68,8 +71,8 @@ async function buildServer() {
   await registerAcRoutes(fastify);
   await registerEventsRoutes(fastify);
 
-  // WebSocket: authenticated live updates.
-  fastify.get('/api/ws', { websocket: true, preHandler: undefined }, (connection: any, req: any) => {
+  // WebSocket: authenticated live updates with Origin validation.
+  fastify.get('/api/ws', { websocket: true, preHandler: [requireOrigin] }, (connection: any, req: any) => {
     const socket = connection.socket;
     const sid = req.cookies?.sid;
     const session = sid ? getSession(sid) : null;
@@ -89,11 +92,13 @@ async function buildServer() {
     const onAvail = (p: unknown) => send('availability', p);
     const onAck = (p: unknown) => send('ack', p);
     const onCommand = (p: unknown) => send('command', p);
+    const onWeather = (p: unknown) => send('weather_update', p);
     bus.on('telemetry', onTelemetry);
     bus.on('state', onState);
     bus.on('availability', onAvail);
     bus.on('ack', onAck);
     bus.on('command', onCommand);
+    bus.on('weather_update', onWeather);
     send('hello', { device_id: config.DEVICE_ID });
 
     socket.on('close', () => {
@@ -102,6 +107,7 @@ async function buildServer() {
       bus.off('availability', onAvail);
       bus.off('ack', onAck);
       bus.off('command', onCommand);
+      bus.off('weather_update', onWeather);
     });
   });
 
@@ -132,7 +138,10 @@ async function buildServer() {
 async function main() {
   initDb();
 
+  startSessionCleanup();
+
   startMqttBridge();
+  weatherService.start();
   confirmGeocoding().catch(() => {});
 
   // Retention cleanup hourly.

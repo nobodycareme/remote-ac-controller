@@ -16,6 +16,9 @@ export interface TelemetryRow {
   uptime_s: number;
   wifi_reconnect_count: number;
   mqtt_reconnect_count: number;
+  mqtt_initial_connect_count: number;
+  mqtt_reconnect_attempt_count: number;
+  mqtt_reconnect_success_count: number;
   firmware_version: string;
   simulated: number;
 }
@@ -106,7 +109,8 @@ export function initDb(): void {
       completed_at INTEGER,
       expires_at INTEGER,
       failure_reason TEXT,
-      requested_by TEXT
+      requested_by TEXT,
+      idempotency_key TEXT UNIQUE
     );
     CREATE INDEX IF NOT EXISTS idx_commands_created ON commands(created_at);
 
@@ -127,6 +131,78 @@ export function initDb(): void {
       expires_at INTEGER
     );
   `);
+  // Migration: add idempotency_key column if missing.
+  // NOTE: older SQLite builds reject `ALTER TABLE ADD COLUMN ... UNIQUE` inline, so we
+  // add the column without the constraint, then create a separate UNIQUE index
+  // (NULLs are not considered equal, so existing all-NULL rows are fine).
+  try {
+    db.exec('ALTER TABLE commands ADD COLUMN idempotency_key TEXT');
+  } catch (e: any) {
+    if (!/duplicate column/i.test(e?.message ?? '')) {
+      log.warn('idempotency migration skip', { err: e?.message });
+    }
+  }
+  try {
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_commands_idempotency ON commands(idempotency_key)');
+  } catch (e: any) {
+    log.warn('idempotency index skip', { err: e?.message });
+  }
+  // Migration: add ir_code_id column for real-IR actions (Section 七/八/九).
+  try {
+    db.exec('ALTER TABLE commands ADD COLUMN ir_code_id TEXT');
+  } catch (e: any) {
+    if (!/duplicate column/i.test(e?.message ?? '')) {
+      log.warn('ir_code_id migration skip', { err: e?.message });
+    }
+  }
+  // Migration: add role column to sessions (Section 七 owner/guest model). The
+  // sessions table is also declared in auth.ts; this migration keeps the schema
+  // created by initDb in sync for existing deployments.
+  try {
+    db.exec("ALTER TABLE sessions ADD COLUMN role TEXT NOT NULL DEFAULT 'guest'");
+  } catch (e: any) {
+    if (!/duplicate column/i.test(e?.message ?? '')) {
+      log.warn('sessions.role migration skip', { err: e?.message });
+    }
+  }
+
+  // Migration: add liveness-split columns (Section 五). `availability` is reused as the
+  // raw availability hint (online/offline/unknown). `last_seen_at` is advanced ONLY by real
+  // activity (telemetry/state/ack); availability messages (retained or not) must NOT touch it.
+  const livenessCols = [
+    'availability_payload_sent_at INTEGER',
+    'availability_received_at INTEGER',
+    'availability_retained INTEGER DEFAULT 0',
+    'last_telemetry_at INTEGER',
+    'last_heartbeat_at INTEGER',
+  ];
+  for (const col of livenessCols) {
+    const name = col.split(' ')[0];
+    try {
+      db.exec(`ALTER TABLE device_state ADD COLUMN ${col}`);
+    } catch (e: any) {
+      if (!/duplicate column/i.test(e?.message ?? '')) {
+        log.warn('liveness migration skip', { col: name, err: e?.message });
+      }
+    }
+  }
+
+  // Migration: add MQTT reconnect-counter columns (Section 四) so the dashboard can
+  // prove initial-connect vs runtime-reconnect instrumentation. Added to BOTH
+  // device_state (current values) and telemetry (time-series history).
+  const counterCols = [
+    'mqtt_initial_connect_count INTEGER',
+    'mqtt_reconnect_attempt_count INTEGER',
+    'mqtt_reconnect_success_count INTEGER',
+  ];
+  for (const col of counterCols) {
+    const name = col.split(' ')[0];
+    try { db.exec(`ALTER TABLE device_state ADD COLUMN ${col}`); }
+    catch (e: any) { if (!/duplicate column/i.test(e?.message ?? '')) log.warn('counter migration skip', { table: 'device_state', col: name, err: e?.message }); }
+    try { db.exec(`ALTER TABLE telemetry ADD COLUMN ${col}`); }
+    catch (e: any) { if (!/duplicate column/i.test(e?.message ?? '')) log.warn('counter migration skip', { table: 'telemetry', col: name, err: e?.message }); }
+  }
+
   log.info('db initialized', { path: config.DB_PATH });
 }
 
@@ -139,40 +215,85 @@ function prep(sql: string) {
 
 export function insertTelemetry(r: TelemetryRow): void {
   prep(`INSERT INTO telemetry
-    (device_id, seq, server_received_at, temperature_c, humidity_pct, sensor_ok, wifi_rssi_dbm, free_heap_bytes, uptime_s, wifi_reconnect_count, mqtt_reconnect_count, firmware_version, simulated)
-    VALUES (@device_id, @seq, @server_received_at, @temperature_c, @humidity_pct, @sensor_ok, @wifi_rssi_dbm, @free_heap_bytes, @uptime_s, @wifi_reconnect_count, @mqtt_reconnect_count, @firmware_version, @simulated)`).run(r);
+    (device_id, seq, server_received_at, temperature_c, humidity_pct, sensor_ok, wifi_rssi_dbm, free_heap_bytes, uptime_s, wifi_reconnect_count, mqtt_reconnect_count, mqtt_initial_connect_count, mqtt_reconnect_attempt_count, mqtt_reconnect_success_count, firmware_version, simulated)
+    VALUES (@device_id, @seq, @server_received_at, @temperature_c, @humidity_pct, @sensor_ok, @wifi_rssi_dbm, @free_heap_bytes, @uptime_s, @wifi_reconnect_count, @mqtt_reconnect_count, @mqtt_initial_connect_count, @mqtt_reconnect_attempt_count, @mqtt_reconnect_success_count, @firmware_version, @simulated)`).run(r);
 }
 
 export function upsertDeviceState(s: {
-  device_id: string; availability?: string; last_seen_at: number; data_freshness: string;
-  power_reported?: number; target_temperature_reported?: number; control_mode?: string; updated_at: number; simulated?: number;
+  device_id: string;
+  availability?: string | null;
+  last_seen_at?: number | null;
+  data_freshness?: string | null;
+  last_telemetry_at?: number | null;
+  last_heartbeat_at?: number | null;
+  availability_received_at?: number | null;
+  availability_retained?: number | null;
+  availability_payload_sent_at?: number | null;
+  updated_at: number;
+  simulated?: number | null;
+  power_reported?: number | null;
+  target_temperature_reported?: number | null;
+  control_mode?: string | null;
+  mqtt_initial_connect_count?: number | null;
+  mqtt_reconnect_attempt_count?: number | null;
+  mqtt_reconnect_success_count?: number | null;
 }): void {
+  // COALESCE keeps each existing column value when the caller passes null. This is the
+  // core of the false-online fix: callers that pass `last_seen_at: null` (availability
+  // messages) leave last_seen_at UNCHANGED, while telemetry/ack pass a real timestamp to
+  // advance it. `availability` is only a hint and never proves realtime presence.
   prep(`INSERT INTO device_state
-    (device_id, availability, last_seen_at, data_freshness, power_reported, target_temperature_reported, control_mode, updated_at, simulated)
-    VALUES (@device_id, @availability, @last_seen_at, @data_freshness, @power_reported, @target_temperature_reported, @control_mode, @updated_at, @simulated)
+    (device_id, availability, last_seen_at, data_freshness, last_telemetry_at, last_heartbeat_at,
+     availability_received_at, availability_retained, availability_payload_sent_at, updated_at, simulated, power_reported, target_temperature_reported, control_mode,
+     mqtt_initial_connect_count, mqtt_reconnect_attempt_count, mqtt_reconnect_success_count)
+    VALUES (@device_id, @availability, @last_seen_at, @data_freshness, @last_telemetry_at, @last_heartbeat_at,
+      @availability_received_at, @availability_retained, @availability_payload_sent_at, @updated_at, @simulated, @power_reported, @target_temperature_reported, @control_mode,
+      @mqtt_initial_connect_count, @mqtt_reconnect_attempt_count, @mqtt_reconnect_success_count)
     ON CONFLICT(device_id) DO UPDATE SET
-      availability=excluded.availability, last_seen_at=excluded.last_seen_at, data_freshness=excluded.data_freshness,
-      power_reported=excluded.power_reported, target_temperature_reported=excluded.target_temperature_reported,
-      control_mode=excluded.control_mode, updated_at=excluded.updated_at, simulated=excluded.simulated`).run({
+      availability = COALESCE(excluded.availability, device_state.availability),
+      last_seen_at = COALESCE(excluded.last_seen_at, device_state.last_seen_at),
+      data_freshness = COALESCE(excluded.data_freshness, device_state.data_freshness),
+      last_telemetry_at = COALESCE(excluded.last_telemetry_at, device_state.last_telemetry_at),
+      last_heartbeat_at = COALESCE(excluded.last_heartbeat_at, device_state.last_heartbeat_at),
+      availability_received_at = COALESCE(excluded.availability_received_at, device_state.availability_received_at),
+      availability_retained = COALESCE(excluded.availability_retained, device_state.availability_retained),
+      availability_payload_sent_at = COALESCE(excluded.availability_payload_sent_at, device_state.availability_payload_sent_at),
+      updated_at = excluded.updated_at,
+      simulated = COALESCE(excluded.simulated, device_state.simulated),
+      power_reported = COALESCE(excluded.power_reported, device_state.power_reported),
+      target_temperature_reported = COALESCE(excluded.target_temperature_reported, device_state.target_temperature_reported),
+      control_mode = COALESCE(excluded.control_mode, device_state.control_mode),
+      mqtt_initial_connect_count = COALESCE(excluded.mqtt_initial_connect_count, device_state.mqtt_initial_connect_count),
+      mqtt_reconnect_attempt_count = COALESCE(excluded.mqtt_reconnect_attempt_count, device_state.mqtt_reconnect_attempt_count),
+      mqtt_reconnect_success_count = COALESCE(excluded.mqtt_reconnect_success_count, device_state.mqtt_reconnect_success_count)
+  `).run({
     device_id: s.device_id,
     availability: s.availability ?? null,
-    last_seen_at: s.last_seen_at,
-    data_freshness: s.data_freshness,
+    last_seen_at: s.last_seen_at ?? null,
+    data_freshness: s.data_freshness ?? null,
+    last_telemetry_at: s.last_telemetry_at ?? null,
+    last_heartbeat_at: s.last_heartbeat_at ?? null,
+    availability_received_at: s.availability_received_at ?? null,
+    availability_retained: s.availability_retained ?? null,
+    availability_payload_sent_at: s.availability_payload_sent_at ?? null,
+    updated_at: s.updated_at,
+    simulated: s.simulated ?? 0,
     power_reported: s.power_reported ?? null,
     target_temperature_reported: s.target_temperature_reported ?? null,
     control_mode: s.control_mode ?? null,
-    updated_at: s.updated_at,
-    simulated: s.simulated ?? 0,
+    mqtt_initial_connect_count: s.mqtt_initial_connect_count ?? null,
+    mqtt_reconnect_attempt_count: s.mqtt_reconnect_attempt_count ?? null,
+    mqtt_reconnect_success_count: s.mqtt_reconnect_success_count ?? null,
   });
 }
 
 export function insertCommand(c: {
   command_id: string; device_id: string; action: string; requested_power: number; requested_temperature_c: number;
-  status: string; created_at: number; expires_at: number; failure_reason?: string;
+  status: string; created_at: number; expires_at: number; failure_reason?: string; idempotency_key?: string | null;
 }): void {
   prep(`INSERT OR IGNORE INTO commands
-    (command_id, device_id, action, requested_power, requested_temperature_c, status, created_at, expires_at, failure_reason)
-    VALUES (@command_id, @device_id, @action, @requested_power, @requested_temperature_c, @status, @created_at, @expires_at, @failure_reason)`).run({
+    (command_id, device_id, action, requested_power, requested_temperature_c, status, created_at, expires_at, failure_reason, idempotency_key)
+    VALUES (@command_id, @device_id, @action, @requested_power, @requested_temperature_c, @status, @created_at, @expires_at, @failure_reason, @idempotency_key)`).run({
     command_id: c.command_id,
     device_id: c.device_id,
     action: c.action,
@@ -182,7 +303,70 @@ export function insertCommand(c: {
     created_at: c.created_at,
     expires_at: c.expires_at,
     failure_reason: c.failure_reason ?? null,
+    idempotency_key: c.idempotency_key ?? null,
   });
+}
+
+/**
+ * Atomic idempotent command insert.
+ * - If a row with the same idempotency_key already exists, the INSERT OR IGNORE is a no-op
+ *   (changes === 0) and we return the existing command WITHOUT inserting a new one.
+ * - The caller must publish the MQTT command ONLY when `inserted === true`. This guarantees
+ *   that the same idempotency key can never produce more than one MQTT publish, even under
+ *   concurrent requests (SQLite serializes the write; only the winning writer sees changes > 0).
+ */
+export function tryInsertCommand(c: {
+  command_id: string; device_id: string; action: string; requested_power: number; requested_temperature_c: number;
+  status: string; created_at: number; expires_at: number; idempotency_key?: string | null;
+}): { inserted: boolean; existing?: any } {
+  const r = prep(`INSERT OR IGNORE INTO commands
+    (command_id, device_id, action, requested_power, requested_temperature_c, status, created_at, expires_at, idempotency_key)
+    VALUES (@command_id, @device_id, @action, @requested_power, @requested_temperature_c, @status, @created_at, @expires_at, @idempotency_key)`).run({
+    command_id: c.command_id,
+    device_id: c.device_id,
+    action: c.action,
+    requested_power: c.requested_power,
+    requested_temperature_c: c.requested_temperature_c,
+    status: c.status,
+    created_at: c.created_at,
+    expires_at: c.expires_at,
+    idempotency_key: c.idempotency_key ?? null,
+  });
+  if ((r as any).changes > 0) return { inserted: true };
+  const existing = getCommandByIdempotencyKey(c.idempotency_key ?? '');
+  return { inserted: false, existing };
+}
+
+export function getCommandByIdempotencyKey(idempotency_key: string): any | null {
+  if (!idempotency_key) return null;
+  return prep(`SELECT * FROM commands WHERE idempotency_key=?`).get(idempotency_key);
+}
+
+/**
+ * Atomic idempotent IR-action insert. Same guarantee as tryInsertCommand: the same
+ * idempotency_key can never produce more than one MQTT publish. `ir_code_id` identifies
+ * which PROGMEM vendor frame the device should emit.
+ */
+export function tryInsertIrCommand(c: {
+  command_id: string; device_id: string; action: string; ir_code_id: string;
+  status: string; created_at: number; expires_at: number; requested_by?: string; idempotency_key?: string | null;
+}): { inserted: boolean; existing?: any } {
+  const r = prep(`INSERT OR IGNORE INTO commands
+    (command_id, device_id, action, ir_code_id, status, created_at, expires_at, requested_by, idempotency_key)
+    VALUES (@command_id, @device_id, @action, @ir_code_id, @status, @created_at, @expires_at, @requested_by, @idempotency_key)`).run({
+    command_id: c.command_id,
+    device_id: c.device_id,
+    action: c.action,
+    ir_code_id: c.ir_code_id,
+    status: c.status,
+    created_at: c.created_at,
+    expires_at: c.expires_at,
+    requested_by: c.requested_by ?? null,
+    idempotency_key: c.idempotency_key ?? null,
+  });
+  if ((r as any).changes > 0) return { inserted: true };
+  const existing = getCommandByIdempotencyKey(c.idempotency_key ?? '');
+  return { inserted: false, existing };
 }
 
 export function markCommandPublished(command_id: string, published_at: number): void {
@@ -215,6 +399,16 @@ export function getRecentCommands(limit = 20): any[] {
 }
 export function getCommand(command_id: string): any {
   return prep(`SELECT * FROM commands WHERE command_id=?`).get(command_id);
+}
+/** Find a pending command with matching params within timeWindowMs. Used for deduplication. */
+export function findPendingCommand(device_id: string, action: string, requested_power: number, requested_temperature_c: number, timeWindowMs: number): any | null {
+  const since = Date.now() - timeWindowMs;
+  return prep(
+    `SELECT * FROM commands
+     WHERE device_id=? AND action=? AND requested_power=? AND requested_temperature_c=?
+       AND status='pending' AND created_at>=?
+     ORDER BY created_at DESC LIMIT 1`
+  ).get(device_id, action, requested_power, requested_temperature_c, since);
 }
 export function getEvents(limit = 50): any[] {
   return prep(`SELECT * FROM events ORDER BY created_at DESC LIMIT ?`).all(limit);
