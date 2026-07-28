@@ -693,9 +693,19 @@ export function updateAcSchedule(id: number, patch: Partial<{
 }>): boolean {
   const existing = prep(`SELECT * FROM ac_schedules WHERE id=?`).get(id) as any;
   if (!existing) return false;
-  const merged = { ...existing, ...patch, updated_at: Date.now() };
+  const merged = { ...existing, ...patch };
+  // node:sqlite 命名参数默认拒绝多余键：只传 SQL 中声明的参数，禁止 spread 整行。
   prep(`UPDATE ac_schedules SET name=@name, state_id=@state_id, time_hhmm=@time_hhmm,
-    days_mask=@days_mask, one_shot=@one_shot, enabled=@enabled, updated_at=@updated_at WHERE id=@id`).run(merged);
+    days_mask=@days_mask, one_shot=@one_shot, enabled=@enabled, updated_at=@updated_at WHERE id=@id`).run({
+    id: merged.id,
+    name: merged.name,
+    state_id: merged.state_id,
+    time_hhmm: merged.time_hhmm,
+    days_mask: merged.days_mask,
+    one_shot: merged.one_shot,
+    enabled: merged.enabled,
+    updated_at: Date.now(),
+  });
   return true;
 }
 
@@ -751,11 +761,23 @@ export function upsertTemperatureRule(patch: {
     });
     return getTemperatureRule();
   }
-  const merged = { ...existing, ...patch, updated_at: now };
+  const merged = { ...existing, ...patch };
+  // node:sqlite 命名参数默认拒绝多余键：只传 SQL 中声明的参数，禁止 spread 整行。
   prep(`UPDATE ac_temperature_rules SET enabled=@enabled, on_threshold_c=@on_threshold_c,
     off_threshold_c=@off_threshold_c, on_state_id=@on_state_id, off_state_id=@off_state_id,
     min_interval_s=@min_interval_s, sensor_stale_s=@sensor_stale_s, manual_suppress_s=@manual_suppress_s,
-    updated_at=@updated_at WHERE id=@id`).run(merged);
+    updated_at=@updated_at WHERE id=@id`).run({
+    id: merged.id,
+    enabled: merged.enabled,
+    on_threshold_c: merged.on_threshold_c,
+    off_threshold_c: merged.off_threshold_c,
+    on_state_id: merged.on_state_id,
+    off_state_id: merged.off_state_id,
+    min_interval_s: merged.min_interval_s,
+    sensor_stale_s: merged.sensor_stale_s,
+    manual_suppress_s: merged.manual_suppress_s,
+    updated_at: now,
+  });
   return getTemperatureRule();
 }
 
