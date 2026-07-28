@@ -1,0 +1,18 @@
+{
+  "brand": "海信",
+  "acModel": "",
+  "remoteModel": "",
+  "captureCount": "3",
+  "state": {
+    "power": "on",
+    "mode": "cool",
+    "temperatureC": "24",
+    "fan": "quiet",
+    "swingVertical": "on",
+    "swingHorizontal": "on",
+    "quiet": "off",
+    "turbo": "off",
+    "sleep": "off"
+  },
+  "lastSaveDir": "C:\\Users\\user\\AppData\\Local\\Temp\\studio_smoke_bmswiotq\\20260721_225115_HISENSE_COOL_STATE_SET_HISENSE"
+}

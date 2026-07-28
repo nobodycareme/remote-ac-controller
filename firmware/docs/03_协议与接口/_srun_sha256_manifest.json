@@ -1,0 +1,9 @@
+{
+  "include/srun.h": "eee399bda20b9968a81993700e057216f4096dceef99af52bfc3031b5d9ae234",
+  "include/compat.h": "9e8928bc5781c937569f156e29e91fc572dbf815d728dcbabe020eb44eab3dfe",
+  "src/srun.c": "660b62b98b037a0705f2f602b892810f94bad5bd97b7133d123f38de3171a9f6",
+  "src/md.c": "b4007b3c392d10197f12f8dd64b786cc5ab2956bab4c53e2d87ae94462559df2",
+  "src/arduinojson.cpp": "bbbc3c059160b0f74d92abca487c042d59155faa268a194d18abed3bab431f7b",
+  "LICENSE": "0356258391e190dc1d44ea01565cfe627fe44e27dad693a0a54c2483a7b223e5",
+  "README_UPSTREAM.md": "a7c1707d63f9d37197ce823f16ec0205a52b3d68eb9266cecce510112587ea3f"
+}

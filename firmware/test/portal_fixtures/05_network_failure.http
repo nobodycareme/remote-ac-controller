@@ -1,0 +1,2 @@
+# Network failure: HTTPClient::GET() returns <= 0 (no HTTP code, no body).
+# Represented in the embedded unit test as Fixture{ code=-1, location="", body="", ... }.

@@ -1,0 +1,18 @@
+{
+  "name": "srun-c",
+  "version": "1.1.0",
+  "description": "Vendored srun-c campus network authentication client (fixed commit 1881da8fa98e52041fb92f38888b3d5eb4789f7a) for ESP8266 Arduino. Algorithm is byte-identical to upstream; the only project modification is the ESP8266 HTTPS adapter (certificate pinning instead of setInsecure()).",
+  "keywords": "srun, campus, auth, portal.campus.example.edu",
+  "homepage": "https://github.com/45gfg9/srun-c",
+  "license": "WTFPL",
+  "frameworks": "arduino",
+  "platforms": "espressif8266",
+  "headers": "srun.h",
+  "dependencies": [
+    {
+      "owner": "bblanchon",
+      "name": "ArduinoJson",
+      "version": "6.21.5"
+    }
+  ]
+}

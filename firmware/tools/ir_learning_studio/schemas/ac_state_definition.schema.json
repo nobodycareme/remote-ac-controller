@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.example/ir-learning-studio/ac-state-definition.schema.json",
+  "title": "IR Learning Studio AC State Definition",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schemaVersion",
+    "codeId",
+    "displayName",
+    "brand",
+    "deviceModel",
+    "remoteModel",
+    "state",
+    "remoteDisplayText",
+    "triggerButton",
+    "notes",
+    "captureOperator",
+    "status"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "codeId": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:_[a-z0-9]+)*_v[1-9][0-9]*$"
+    },
+    "displayName": { "type": "string", "minLength": 1 },
+    "brand": { "type": "string", "minLength": 1 },
+    "deviceModel": { "type": "string" },
+    "remoteModel": { "type": "string" },
+    "remoteDisplayText": { "type": "string", "minLength": 1 },
+    "triggerButton": { "type": "string", "minLength": 1 },
+    "notes": { "type": "string" },
+    "captureOperator": { "type": "string" },
+    "status": { "enum": ["draft", "captured", "approved"] },
+    "unknownApprovalConfirmed": { "type": "boolean" },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "power",
+        "mode",
+        "targetTemperatureC",
+        "fanSpeed",
+        "turboMode",
+        "quietMode",
+        "sleepMode",
+        "ecoMode",
+        "swingVertical",
+        "swingHorizontal",
+        "auxHeat",
+        "displayLight",
+        "timer"
+      ],
+      "properties": {
+        "power": { "enum": ["on", "off"] },
+        "mode": { "enum": ["cool", "heat", "dry", "fan", "auto", "other"] },
+        "targetTemperatureC": {
+          "enum": ["16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "N/A"]
+        },
+        "fanSpeed": { "enum": ["silent", "low", "medium", "high", "turbo", "auto", "other"] },
+        "turboMode": { "enum": ["on", "off", "N/A"] },
+        "quietMode": { "enum": ["on", "off", "N/A"] },
+        "sleepMode": { "enum": ["on", "off", "N/A"] },
+        "ecoMode": { "enum": ["on", "off", "N/A"] },
+        "swingVertical": { "enum": ["on", "off", "fixed", "unknown"] },
+        "swingHorizontal": { "enum": ["on", "off", "fixed", "unknown"] },
+        "auxHeat": { "enum": ["on", "off", "N/A"] },
+        "displayLight": { "enum": ["on", "off", "N/A"] },
+        "timer": { "enum": ["off", "configured", "N/A"] }
+      }
+    }
+  }
+}

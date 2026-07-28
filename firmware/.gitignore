@@ -1,0 +1,65 @@
+# Private data — never track
+Private/
+Evidence/
+Deliverables/
+PackageValidation/
+ForensicSnapshots/
+
+# Build artifacts
+.pio/
+build/
+Environment/
+*.bin
+*.elf
+*.map
+*.hex
+
+# PlatformIO
+packages.lock
+platforms.lock
+
+# Python
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Secrets and credentials
+*.key
+*.pem
+.env
+secrets.env
+secrets.h
+
+# SQLite databases
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+
+# Generated IR code (auto-generated, not authored)
+src/private_ir_codes/generated/
+
+# Delivery archives
+*.zip
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+logs/
+*.log
+
+# Crash dumps
+*.dmp
+*.core
+
