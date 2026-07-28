@@ -2,11 +2,25 @@ import { createApp } from 'vue';
 import App from './App.vue';
 import './style.css';
 
-createApp(App).mount('#app');
+async function clearLegacyPwaState(): Promise<void> {
+  try {
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+    }
+  } catch {
+    /* ignore */
+  }
 
-// Register PWA service worker (best-effort).
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
-  });
+  try {
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => caches.delete(key)));
+    }
+  } catch {
+    /* ignore */
+  }
 }
+
+void clearLegacyPwaState();
+createApp(App).mount('#app');

@@ -5,6 +5,10 @@ export interface SessionInfo {
   authenticated: boolean;
   user?: string;
   role?: string;
+  trusted?: boolean;
+  trusted_expires_at?: number | null;
+  trusted_label?: string | null;
+  ir_control?: 'armed' | 'disabled';
   csrf?: string;
 }
 
@@ -76,12 +80,16 @@ export interface Dashboard {
 }
 
 let csrfToken: string | null = null;
+let irDebugCsrfToken: string | null = null;
 export function getCsrf(): string | null {
   return csrfToken;
 }
 
 async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {};
+  if (opts.headers && !(opts.headers instanceof Headers) && !Array.isArray(opts.headers)) {
+    Object.assign(headers, opts.headers as Record<string, string>);
+  }
   if (opts.body) headers['content-type'] = 'application/json';
   if (csrfToken && (opts.method || 'GET') !== 'GET') headers['x-csrf-token'] = csrfToken;
   const res = await fetch(BASE + path, { ...opts, headers, credentials: 'include' });
@@ -121,13 +129,13 @@ export async function fetchSession(): Promise<SessionInfo> {
   return r;
 }
 
-export async function login(username: string, password: string): Promise<SessionInfo> {
-  const r = await req<{ ok: boolean; csrf: string; user: string; role?: string }>('/auth/login', {
+export async function login(password: string): Promise<SessionInfo> {
+  const r = await req<SessionInfo & { ok: boolean }>('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ password }),
   });
-  csrfToken = r.csrf;
-  return { authenticated: true, user: r.user, role: r.role ?? 'owner', csrf: r.csrf };
+  if (r.csrf) csrfToken = r.csrf;
+  return r;
 }
 
 export async function logout(): Promise<void> {
@@ -135,8 +143,97 @@ export async function logout(): Promise<void> {
   csrfToken = null;
 }
 
+export async function revokeTrustedDevice(): Promise<void> {
+  await req('/auth/trusted-device/revoke', { method: 'POST' });
+  csrfToken = null;
+}
+
+export async function revokeAllTrustedDevices(): Promise<{ ok: boolean; revoked: number }> {
+  const r = await req<{ ok: boolean; revoked: number }>('/auth/trusted-devices/revoke-all', { method: 'POST' });
+  csrfToken = null;
+  return r;
+}
+
 export async function fetchDashboard(): Promise<Dashboard> {
   return req<Dashboard>('/dashboard');
+}
+
+export interface IrDebugStage {
+  commandId: string;
+  status: string;
+  mqttPublished: boolean;
+  deviceReceived: boolean;
+  codeValidated: boolean;
+  uartFrameWritten: boolean;
+  moduleAcknowledged: boolean;
+  acResponse: 'unknown';
+}
+
+export interface IrDebugStatus {
+  ok: boolean;
+  debugMode: boolean;
+  debugWindowConfigured: boolean;
+  expiresAt: string | null;
+  expiresInSeconds: number | null;
+  remainingCommands: number | null;
+  maxCommands: number | null;
+  allowedCodeId: string;
+  codeLength: number;
+  deviceOnline: boolean;
+  deviceFresh: boolean;
+  deviceFreshness: string;
+  deviceLivenessReason: string;
+  mqttBackendConnected: boolean;
+  webRealIrEnabled: boolean;
+  irReady: boolean;
+  telemetryMetadataUsable: boolean;
+  legacyModuleAckPass: boolean;
+  irGateSource: string;
+  codeIdMatch: boolean;
+  codeLengthMatch: boolean;
+  codeShaMatch: boolean;
+  ir22hStructurePass: boolean;
+  commandInFlight: boolean;
+  cooldownActive: boolean;
+  cooldownRemainingSeconds: number;
+  commandTtlSeconds: number;
+  transmitEnabled: boolean;
+  latestDebugCommand: IrDebugStage | null;
+  csrfHeader?: string;
+  debugCsrf?: string;
+}
+
+export interface IrDebugTransmitResult {
+  ok: boolean;
+  requestId: string;
+  commandId: string | null;
+  commandCreated: boolean;
+  mqttPublished: boolean;
+  deviceReceived: boolean;
+  codeValidated: boolean;
+  uartFrameWritten: boolean;
+  moduleAcknowledged: boolean;
+  acResponse: 'unknown';
+  status?: string;
+  allowedCodeId?: string;
+  expiresAt?: string;
+}
+
+export async function fetchIrDebugStatus(): Promise<IrDebugStatus> {
+  const r = await req<IrDebugStatus>('/ir/debug/status');
+  if (r.debugCsrf) irDebugCsrfToken = r.debugCsrf;
+  return r;
+}
+
+export async function transmitIrDebugOnce(commandId: string, idempotencyKey: string): Promise<IrDebugTransmitResult> {
+  if (!irDebugCsrfToken) {
+    await fetchIrDebugStatus();
+  }
+  return req<IrDebugTransmitResult>('/ir/debug/transmit', {
+    method: 'POST',
+    headers: irDebugCsrfToken ? { 'x-ir-debug-csrf': irDebugCsrfToken } : {},
+    body: JSON.stringify({ confirm: true, commandId, idempotencyKey }),
+  });
 }
 
 export async function fetchTelemetryHistory(range: string): Promise<{ range: string; unit: string; points: { t: number; temperature_c: number; humidity_pct: number }[] }> {
@@ -174,8 +271,9 @@ export async function sendCommand(action: 'set_state' | 'set_power' | 'set_tempe
   });
 }
 
-// Real-IR action (Section 九). Owner-only; requires WEB_REAL_IR_ENABLED=true on the
-// server. Sends a vendor PROGMEM code id; the device emits the raw 22H frame once.
+// Real-IR action. Owner-only; requires a trusted owner session and the
+// production IR control flag on the server. Sends a vendor PROGMEM code id; the
+// device emits the raw 22H frame once.
 // Returns immediately after the device ACK — it does NOT confirm the AC physically
 // responded (that is out of band), so the UI must keep AC status as "pending".
 export interface IrActionResult extends CommandResult {
@@ -193,6 +291,103 @@ export async function sendIrAction(ir_code_id: string): Promise<IrActionResult> 
     method: 'POST',
     body: JSON.stringify({ ir_code_id, idempotency_key }),
   });
+}
+
+// ===== v0.5.0 全状态控制 / 定时 / 温控自动化 API =====
+
+export interface AcStateInfo {
+  stateId: string;
+  displayName: string;
+  mode: 'cool' | 'dry' | 'heat' | 'off' | string;
+  temperature: number;
+  fan: string;
+  swingVertical: boolean;
+  swingHorizontal: boolean;
+  powerOn: boolean;
+  frameLength: number;
+  frameSha256: string;
+  enabled: boolean;
+}
+
+export async function fetchAcStates(): Promise<{ states: AcStateInfo[]; ir_armed: boolean }> {
+  return req('/ac/states');
+}
+
+export async function patchAcState(stateId: string, enabled: boolean): Promise<{ ok: boolean; state: AcStateInfo }> {
+  return req(`/ac/states/${encodeURIComponent(stateId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+export interface AcSchedule {
+  id: number;
+  name: string;
+  state_id: string;
+  time_hhmm: string;
+  days_mask: number;
+  one_shot: number;
+  enabled: number;
+  last_fired_minute: string | null;
+  last_fired_at: number | null;
+  created_by: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export async function fetchSchedules(): Promise<{ schedules: AcSchedule[] }> {
+  return req('/ac/schedules');
+}
+
+export async function createSchedule(body: { name: string; state_id: string; time_hhmm: string; days_mask: number; one_shot?: boolean; enabled?: boolean }): Promise<{ ok: boolean; schedule: AcSchedule }> {
+  return req('/ac/schedules', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export async function updateSchedule(id: number, patch: Partial<{ name: string; state_id: string; time_hhmm: string; days_mask: number; one_shot: boolean; enabled: boolean }>): Promise<{ ok: boolean; schedule: AcSchedule }> {
+  return req(`/ac/schedules/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
+}
+
+export async function deleteSchedule(id: number): Promise<{ ok: boolean }> {
+  return req(`/ac/schedules/${id}`, { method: 'DELETE' });
+}
+
+export interface TemperatureRule {
+  id: number;
+  enabled: number;
+  on_threshold_c: number;
+  off_threshold_c: number;
+  on_state_id: string;
+  off_state_id: string;
+  min_interval_s: number;
+  sensor_stale_s: number;
+  manual_suppress_s: number;
+  last_action: string | null;
+  last_action_at: number | null;
+  last_eval_reason: string | null;
+  last_eval_at: number | null;
+}
+
+export async function fetchTemperatureRule(): Promise<{ rule: TemperatureRule }> {
+  return req('/ac/temperature-rule');
+}
+
+export async function putTemperatureRule(patch: Partial<{ enabled: boolean; on_threshold_c: number; off_threshold_c: number; on_state_id: string; off_state_id: string; min_interval_s: number }>): Promise<{ ok: boolean; rule: TemperatureRule }> {
+  return req('/ac/temperature-rule', { method: 'PUT', body: JSON.stringify(patch) });
+}
+
+export interface AutomationExecution {
+  id: number;
+  source: string;
+  rule_id: number | null;
+  state_id: string;
+  command_id: string | null;
+  status: string;
+  detail: string | null;
+  created_at: number;
+}
+
+export async function fetchAutomationExecutions(limit = 30): Promise<{ executions: AutomationExecution[] }> {
+  return req(`/ac/automation/executions?limit=${limit}`);
 }
 
 export function connectWS(onMessage: (type: string, payload: any) => void): WebSocket | null {
