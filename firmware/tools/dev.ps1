@@ -273,44 +273,291 @@ if ($Profile -eq 'ir-lab') {
 
 # ============================================================
 # CH9102 Detection (VID:PID=1A86:55D4, dynamic, never hardcoded)
+# Dual-channel enumeration, single source of truth: Resolve-Ch9102Port.
+#   Channel A: Get-PnpDevice -PresentOnly (fallback CIM Win32_PnPEntity)
+#              + Win32_SerialPort (matched by PNPDeviceID)
+#              + registry Device Parameters\PortName per matched instance
+#   Channel B: pySerial cross-check via tools\ch9102_enum.py (numeric vid/pid)
+# COM extraction never relies on FriendlyName alone; FriendlyName regex is
+# the LAST resort only. Bounded retry (default 10 x 500ms). Distinct result
+# classes -- never a blanket "device not connected".
 # ============================================================
+$Ch9102VidPidPattern = 'VID_1A86&PID_55D4'
+$Ch9102PortRegex     = '^COM[0-9]+$'
+
+function Test-WindowsExecutionHost {
+    $isWin  = ($env:OS -eq 'Windows_NT')
+    $rootOk = Test-Path $CanonicalRoot
+    $fwOk   = Test-Path $FirmwarePhys
+    $pnpOk  = ($null -ne (Get-Command Get-PnpDevice -ErrorAction SilentlyContinue))
+    $cimOk  = ($null -ne (Get-Command Get-CimInstance -ErrorAction SilentlyContinue))
+    return @{
+        IsWindows = $isWin; RootOk = $rootOk; FirmwareOk = $fwOk
+        PnpCmdOk = $pnpOk; CimCmdOk = $cimOk
+        Pass = ($isWin -and $rootOk -and $fwOk -and ($pnpOk -or $cimOk))
+    }
+}
+
+function Get-Ch9102RegistryPortName {
+    param([string]$InstanceId)
+    if ([string]::IsNullOrWhiteSpace($InstanceId)) { return $null }
+    try {
+        $key = 'HKLM:\SYSTEM\CurrentControlSet\Enum\' + $InstanceId + '\Device Parameters'
+        $rp = Get-ItemProperty -Path $key -Name PortName -ErrorAction SilentlyContinue
+        if ($null -ne $rp -and $rp.PortName) { return [string]$rp.PortName }
+    } catch {}
+    return $null
+}
+
+function Get-Ch9102PySerialResult {
+    $helper = Join-Path $FirmwarePhys 'tools\ch9102_enum.py'
+    if (-not (Test-Path $helper) -or -not (Test-Path $PyExePhys)) {
+        return @{ Available = $false; Ports = @() }
+    }
+    try {
+        $raw = (& $PyExePhys -u $helper 2>$null | Out-String).Trim()
+        if ([string]::IsNullOrWhiteSpace($raw)) { return @{ Available = $false; Ports = @() } }
+        $obj = $raw | ConvertFrom-Json
+        $ports = @()
+        foreach ($p in @($obj.ports)) {
+            if ($null -eq $p) { continue }
+            if (([int]$p.vid -eq 0x1A86) -and ([int]$p.pid -eq 0x55D4)) { $ports += $p }
+        }
+        return @{ Available = [bool]$obj.available; Ports = $ports }
+    } catch {
+        return @{ Available = $false; Ports = @() }
+    }
+}
+
+function Merge-Ch9102PortCandidates {
+    param([object[]]$RawPorts)
+    $valid = @()
+    foreach ($p in @($RawPorts)) {
+        if ($null -eq $p) { continue }
+        $t = ([string]$p).Trim().ToUpperInvariant()
+        if ($t -match $Ch9102PortRegex) {
+            if ($valid -notcontains $t) { $valid += $t }
+        }
+    }
+    Write-Output -NoEnumerate ([string[]]$valid)
+}
+
+function New-Ch9102ResolutionResult {
+    param([string]$Result, [string]$Port, [string[]]$Ports,
+          [string[]]$PnpIds, [string[]]$SpIds,
+          [bool]$PyAvail, [int]$PyCount, [int]$Attempts)
+    return @{
+        Result = $Result
+        Port = $Port
+        Ports = [string[]]@($Ports)
+        PnpCount = @($PnpIds).Count
+        PnpInstanceIds = [string[]]@($PnpIds)
+        SerialPortCount = @($SpIds).Count
+        SerialPortDeviceIds = [string[]]@($SpIds)
+        PySerialAvailable = $PyAvail
+        PySerialCount = $PyCount
+        Attempts = $Attempts
+    }
+}
+
+function Resolve-Ch9102Port {
+    [CmdletBinding()]
+    param(
+        [int]$MaxAttempts = 10,
+        [int]$IntervalMs = 500,
+        [hashtable]$TestInput = $null
+    )
+    if ($null -ne $TestInput) { $MaxAttempts = 1; $IntervalMs = 0 }
+
+    # Execution-host gate: USB detection is only meaningful on the Windows
+    # box that physically hosts the board. A non-Windows / remote / sandbox
+    # host must report WRONG_EXECUTION_HOST -- never "device not connected".
+    if ($null -ne $TestInput -and $TestInput.ContainsKey('IsWindows')) {
+        $hostOk = [bool]$TestInput.IsWindows
+    } else {
+        $hostOk = (Test-WindowsExecutionHost).Pass
+    }
+    if (-not $hostOk) {
+        return (New-Ch9102ResolutionResult -Result 'WRONG_EXECUTION_HOST' -Port $null -Ports @() `
+            -PnpIds @() -SpIds @() -PyAvail $false -PyCount 0 -Attempts 0)
+    }
+
+    $final = $null
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        # ---- Channel A1: present PnP devices (never ghosts) ----
+        $pnpMatches = @()
+        if ($null -ne $TestInput) {
+            foreach ($d in @($TestInput.Pnp)) {
+                if ($null -eq $d) { continue }
+                if ($d.ContainsKey('Present') -and (-not [bool]$d.Present)) { continue }
+                if (([string]$d.InstanceId) -imatch $Ch9102VidPidPattern) { $pnpMatches += $d }
+            }
+        } else {
+            try {
+                if (Get-Command Get-PnpDevice -ErrorAction SilentlyContinue) {
+                    $pnpMatches = @(Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue |
+                        Where-Object { $_.InstanceId -imatch $Ch9102VidPidPattern })
+                }
+            } catch { $pnpMatches = @() }
+            if ($pnpMatches.Count -eq 0) {
+                try {
+                    $pnpMatches = @(Get-CimInstance Win32_PnPEntity -ErrorAction SilentlyContinue |
+                        Where-Object { $_.PNPDeviceID -imatch $Ch9102VidPidPattern } |
+                        ForEach-Object { @{ InstanceId = [string]$_.PNPDeviceID; FriendlyName = [string]$_.Name } })
+                } catch { $pnpMatches = @() }
+            }
+        }
+
+        # ---- Channel A2: Win32_SerialPort matched by PNPDeviceID ----
+        $spMatches = @()
+        if ($null -ne $TestInput) {
+            foreach ($s in @($TestInput.SerialPorts)) {
+                if ($null -eq $s) { continue }
+                if (([string]$s.PNPDeviceID) -imatch $Ch9102VidPidPattern) { $spMatches += $s }
+            }
+        } else {
+            try {
+                $spMatches = @(Get-CimInstance Win32_SerialPort -ErrorAction SilentlyContinue |
+                    Where-Object { $_.PNPDeviceID -imatch $Ch9102VidPidPattern })
+            } catch { $spMatches = @() }
+        }
+
+        # ---- Channel B: pySerial cross-check (numeric vid/pid only) ----
+        if ($null -ne $TestInput) {
+            $py = if ($TestInput.ContainsKey('PySerial')) { $TestInput.PySerial } else { @{ Available = $false; Ports = @() } }
+            $pyPorts = @()
+            foreach ($p in @($py.Ports)) {
+                if ($null -eq $p) { continue }
+                if (([int]$p.vid -eq 0x1A86) -and ([int]$p.pid -eq 0x55D4)) { $pyPorts += $p }
+            }
+        } else {
+            $py = Get-Ch9102PySerialResult
+            $pyPorts = @($py.Ports)
+        }
+
+        # ---- Extract raw port strings (priority: SerialPort.DeviceID and
+        #      registry PortName; FriendlyName regex only as last resort) ----
+        $raw = @()
+        foreach ($s in $spMatches) { $raw += [string]$s.DeviceID }
+        foreach ($d in $pnpMatches) {
+            $rp = $null
+            if ($null -ne $TestInput) {
+                if ($TestInput.ContainsKey('RegistryMap') -and $TestInput.RegistryMap.ContainsKey([string]$d.InstanceId)) {
+                    $rp = [string]$TestInput.RegistryMap[[string]$d.InstanceId]
+                }
+            } else {
+                $rp = Get-Ch9102RegistryPortName -InstanceId ([string]$d.InstanceId)
+            }
+            if (-not [string]::IsNullOrWhiteSpace($rp)) { $raw += $rp; continue }
+            $fn = [string]$d.FriendlyName
+            if ($fn -match 'COM([0-9]+)') { $raw += ('COM' + $Matches[1]) }
+        }
+        foreach ($p in $pyPorts) { $raw += [string]$p.device }
+
+        $ports  = Merge-Ch9102PortCandidates -RawPorts $raw
+        $pnpIds = [string[]]@(@($pnpMatches) | ForEach-Object { [string]$_.InstanceId })
+        $spIds  = [string[]]@(@($spMatches)  | ForEach-Object { [string]$_.DeviceID })
+        $pyAvail = [bool]$py.Available
+        $pyCount = @($pyPorts).Count
+
+        if (@($ports).Count -eq 1) {
+            return (New-Ch9102ResolutionResult -Result 'PORT_RESOLVED' -Port ([string]$ports[0]) -Ports $ports `
+                -PnpIds $pnpIds -SpIds $spIds -PyAvail $pyAvail -PyCount $pyCount -Attempts $attempt)
+        }
+        if (@($ports).Count -gt 1) {
+            return (New-Ch9102ResolutionResult -Result 'MULTIPLE_MATCHING_PORTS' -Port $null -Ports $ports `
+                -PnpIds $pnpIds -SpIds $spIds -PyAvail $pyAvail -PyCount $pyCount -Attempts $attempt)
+        }
+        if ((@($pnpMatches).Count + @($spMatches).Count + $pyCount) -gt 0) {
+            $final = New-Ch9102ResolutionResult -Result 'DEVICE_ENUMERATED_NO_COM' -Port $null -Ports @() `
+                -PnpIds $pnpIds -SpIds $spIds -PyAvail $pyAvail -PyCount $pyCount -Attempts $attempt
+        } else {
+            $final = New-Ch9102ResolutionResult -Result 'DEVICE_NOT_ENUMERATED' -Port $null -Ports @() `
+                -PnpIds $pnpIds -SpIds $spIds -PyAvail $pyAvail -PyCount $pyCount -Attempts $attempt
+        }
+        if ($attempt -lt $MaxAttempts) { Start-Sleep -Milliseconds $IntervalMs }
+    }
+    return $final
+}
+
+function Write-Ch9102DetectionLog {
+    param([hashtable]$Resolution)
+    Write-Output ("PORT_DETECTION_HOST=" + [string]$env:COMPUTERNAME)
+    Write-Output ("PORT_DETECTION_OS=" + [System.Environment]::OSVersion.VersionString)
+    Write-Output ("PORT_DETECTION_PROJECT_ROOT=" + $CanonicalRoot)
+    Write-Output ("PNP_MATCH_COUNT=" + $Resolution.PnpCount)
+    Write-Output ("PNP_MATCH_INSTANCE_IDS=" + (@($Resolution.PnpInstanceIds) -join ';'))
+    Write-Output ("SERIALPORT_MATCH_COUNT=" + $Resolution.SerialPortCount)
+    Write-Output ("SERIALPORT_MATCH_DEVICE_IDS=" + (@($Resolution.SerialPortDeviceIds) -join ';'))
+    Write-Output ("PYSERIAL_AVAILABLE=" + $Resolution.PySerialAvailable)
+    Write-Output ("PYSERIAL_MATCH_COUNT=" + $Resolution.PySerialCount)
+    Write-Output ("RESOLVED_PORT_COUNT=" + @($Resolution.Ports).Count)
+    Write-Output ("RESOLVED_UPLOAD_PORT=" + $(if ($Resolution.Port) { $Resolution.Port } else { '' }))
+    Write-Output ("PORT_DETECTION_RESULT=" + $Resolution.Result)
+}
+
+function Get-UploadFailureClass {
+    # Classify the uploader's REAL output. "Access denied" is a busy/held
+    # port -- it must NEVER be reported as device-not-found.
+    param([string]$OutputText)
+    if ([string]::IsNullOrWhiteSpace($OutputText)) { return 'UPLOAD_WRITE_FAILED' }
+    $t = $OutputText.ToLowerInvariant()
+    if ($t -match 'access is denied|permissionerror|permission denied')      { return 'PORT_ACCESS_DENIED' }
+    if ($t -match 'resource busy|port is already open|semaphore timeout')    { return 'PORT_BUSY' }
+    if ($t -match 'could not open port|filenotfounderror|no such file or directory') { return 'PORT_OPEN_FAILED' }
+    if ($t -match 'failed to connect|timed out waiting for packet|invalid head of packet|wrong boot mode') { return 'BOOTLOADER_SYNC_FAILED' }
+    if ($t -match 'verify failed|digest mismatch|md5 of file does not match') { return 'UPLOAD_VERIFY_FAILED' }
+    return 'UPLOAD_WRITE_FAILED'
+}
+
+function Invoke-UploadPortScope {
+    # Process-scoped explicit upload port injection. Saves and restores the
+    # previous PLATFORMIO_UPLOAD_PORT so nothing leaks to later tasks and
+    # the user's machine-level environment is never modified.
+    param([string]$Port, [scriptblock]$Body)
+    $had  = Test-Path Env:\PLATFORMIO_UPLOAD_PORT
+    $prev = $env:PLATFORMIO_UPLOAD_PORT
+    try {
+        $env:PLATFORMIO_UPLOAD_PORT = $Port
+        & $Body
+    } finally {
+        if ($had) { $env:PLATFORMIO_UPLOAD_PORT = $prev }
+        else { Remove-Item Env:\PLATFORMIO_UPLOAD_PORT -ErrorAction SilentlyContinue }
+    }
+}
+
+# Back-compat wrappers (status display + existing self-tests).
 function Get-Ch9102Candidates {
     param([string[]]$SimulatedPorts = $null)
     if ($null -ne $SimulatedPorts) {
         Write-Verbose ("CH9102: simulated candidate list = " + ($SimulatedPorts -join ','))
-        Write-Output -NoEnumerate ([string[]]@($SimulatedPorts))
+        Write-Output -NoEnumerate ([string[]](Merge-Ch9102PortCandidates -RawPorts $SimulatedPorts))
         return
     }
-    $cands = @()
-    $wmi = Get-WmiObject Win32_PnPEntity -ErrorAction SilentlyContinue |
-        Where-Object { $_.DeviceID -like '*1A86*55D4*' }
-    $sysPorts = [System.IO.Ports.SerialPort]::GetPortNames()
-    foreach ($dev in $wmi) {
-        if ($dev.Name -match 'COM(\d+)') {
-            $port = "COM" + $matches[1]
-            if ($port -in $sysPorts) { $cands += $port }
-        }
-    }
-    Write-Verbose ("CH9102: candidate count = " + $cands.Count)
-    Write-Output -NoEnumerate $cands
+    $r = Resolve-Ch9102Port -MaxAttempts 1
+    Write-Output -NoEnumerate ([string[]]@($r.Ports))
 }
 
 function Find-Ch9102Port {
     [CmdletBinding()]
     param([string[]]$SimulatedPorts = $null)
-    $cands = Get-Ch9102Candidates -SimulatedPorts $SimulatedPorts
-    if ($cands.Count -eq 0) {
-        Write-Error ("CH9102 (VID:PID=1A86:55D4) not detected - connect the board or check the USB cable")
-        throw [System.InvalidOperationException]::new('CH9102_NOT_DETECTED')
+    if ($null -ne $SimulatedPorts) {
+        $ports = Merge-Ch9102PortCandidates -RawPorts $SimulatedPorts
+        if (@($ports).Count -eq 0) { throw [System.InvalidOperationException]::new('CH9102_NOT_DETECTED') }
+        if (@($ports).Count -gt 1) { throw [System.InvalidOperationException]::new('CH9102_MULTIPLE') }
+        return ([string]$ports[0])
     }
-    if ($cands.Count -gt 1) {
-        Write-Error ("Multiple CH9102 devices detected: " + ($cands -join ', ') + ". Refusing blind selection - unplug the extras.")
-        throw [System.InvalidOperationException]::new('CH9102_MULTIPLE')
+    $r = Resolve-Ch9102Port
+    # Detection log must NOT contaminate the return pipeline (callers expect a
+    # single pure port string). Route the log lines to the host stream.
+    foreach ($line in @(Write-Ch9102DetectionLog -Resolution $r)) { Write-Host $line }
+    switch ([string]$r.Result) {
+        'PORT_RESOLVED'            { return ([string]$r.Port) }
+        'WRONG_EXECUTION_HOST'     { throw [System.InvalidOperationException]::new('WRONG_EXECUTION_HOST') }
+        'MULTIPLE_MATCHING_PORTS'  { throw [System.InvalidOperationException]::new('CH9102_MULTIPLE') }
+        'DEVICE_ENUMERATED_NO_COM' { throw [System.InvalidOperationException]::new('DEVICE_ENUMERATED_NO_COM') }
+        default                    { throw [System.InvalidOperationException]::new('DEVICE_NOT_ENUMERATED') }
     }
-    $port = [string]$cands[0]
-    $port = $port.Trim()
-    Write-Verbose ("CH9102: resolved single port = " + $port)
-    return $port
 }
 
 # ============================================================
@@ -843,21 +1090,53 @@ function Invoke-Upload {
     Assert-WorkspacePolicy
     Assert-Pio
     Assert-FlashAllowed
+    $rel = Stop-ProjectMonitor
+    Write-Output ("MONITOR_RELEASED_BY_US killed=" + $rel.Killed)
+
+    # Single source of truth for port resolution (dual-channel + retry).
+    $res = Resolve-Ch9102Port
+    Write-Ch9102DetectionLog -Resolution $res
+    if ([string]$res.Result -ne 'PORT_RESOLVED') {
+        Write-Output ("UPLOAD_BLOCKED=" + [string]$res.Result)
+        exit 1
+    }
+    $com = [string]$res.Port
+
+    # Manifest gate BEFORE any uploader invocation; a manifest problem must
+    # surface as MANIFEST_*, never as a device problem.
     try {
-        $rel = Stop-ProjectMonitor
-        Write-Output ("MONITOR_RELEASED_BY_US killed=" + $rel.Killed)
-        $com = Find-Ch9102Port
-        $pc = Test-PortFree -Port $com
-        if (-not $pc.Free) {
-            Write-Error $pc.Diagnosis
-            exit 1
-        }
-        Write-Output "UPLOAD [$Profile] -> $com $(Get-Date -Format 'HH:mm:ss')"
         Assert-LastBuildManifestMatches
-        & $PyExePhys -m platformio run -e nodemcuv2 -j 1 -t upload --upload-port $com --project-dir $FirmwarePhys 2>&1
-        $rc = $LASTEXITCODE
-        if ($rc -eq 0) { Write-Output "UPLOAD_DONE rc=0 port=$com" } else { Write-Output "UPLOAD_FAIL rc=$rc port=$com"; exit $rc }
-    } finally {
+    } catch {
+        $m = $_.Exception.Message
+        if     ($m -match 'BUILD_MANIFEST_MISSING') { Write-Output "UPLOAD_BLOCKED=MANIFEST_MISSING" }
+        elseif ($m -match 'BIN_MISSING')            { Write-Output "UPLOAD_BLOCKED=BIN_MISSING" }
+        elseif ($m -match 'BIN_SHA_MISMATCH')       { Write-Output "UPLOAD_BLOCKED=BIN_HASH_MISMATCH" }
+        else                                        { Write-Output "UPLOAD_BLOCKED=MANIFEST_MISMATCH" }
+        Write-Output ("UPLOAD_BLOCKED_DETAIL=" + $m)
+        exit 1
+    }
+
+    # NOTE: intentionally NO serial pre-open probe here. The uploader needs
+    # exclusive port access; probing can reset the board or race with it.
+    # Failures are classified from the uploader's real output instead.
+    Write-Output "UPLOAD [$Profile] -> $com $(Get-Date -Format 'HH:mm:ss')"
+    Write-Output ("UPLOAD_PORT_EXPLICIT_INJECTION=" + $com)
+    $script:UploadRc = 1
+    $out = Invoke-UploadPortScope -Port $com -Body {
+        $prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+        & $PyExePhys -m platformio run -e nodemcuv2 -j 1 -t upload --upload-port $env:PLATFORMIO_UPLOAD_PORT --project-dir $FirmwarePhys 2>&1
+        $script:UploadRc = $LASTEXITCODE
+        $ErrorActionPreference = $prevEAP
+    }
+    $rc = $script:UploadRc
+    $out | ForEach-Object { Write-Output ([string]$_) }
+    if ($rc -eq 0) {
+        Write-Output "UPLOAD_RESULT_CLASS=UPLOAD_PASS"
+        Write-Output "UPLOAD_DONE rc=0 port=$com"
+    } else {
+        Write-Output ("UPLOAD_RESULT_CLASS=" + (Get-UploadFailureClass -OutputText (($out | Out-String))))
+        Write-Output "UPLOAD_FAIL rc=$rc port=$com"
+        exit $rc
     }
 }
 
@@ -1159,7 +1438,202 @@ function Invoke-Test {
     try { Resolve-CanonicalPath ('remote-ac' + '\Firmware') } catch { $dupRejected = $true }
     $results[$F_NODUP] = ($dupExists -eq $false) -and ($dupRejected -eq $true)
 
+    # ============================================================
+    # Resolve-Ch9102Port scenario suite (simulated TestInput only;
+    # never calls the real uploader, never opens a serial port).
+    # ============================================================
+    $F_R01 = 'DEV_PS1_RESOLVE_DUAL_CHANNEL_AGREE_TEST'
+    $F_R02 = 'DEV_PS1_RESOLVE_CHANNEL_CONFLICT_AMBIGUOUS_TEST'
+    $F_R03 = 'DEV_PS1_RESOLVE_CJK_FRIENDLYNAME_TEST'
+    $F_R04 = 'DEV_PS1_RESOLVE_REGISTRY_FALLBACK_TEST'
+    $F_R05 = 'DEV_PS1_RESOLVE_PYSERIAL_NUMERIC_MATCH_TEST'
+    $F_R06 = 'DEV_PS1_RESOLVE_CASE_INSENSITIVE_VIDPID_TEST'
+    $F_R07 = 'DEV_PS1_RESOLVE_DEDUP_TEST'
+    $F_R08 = 'DEV_PS1_RESOLVE_MULTI_DEVICE_AMBIGUOUS_TEST'
+    $F_R09 = 'DEV_PS1_RESOLVE_ENUMERATED_NO_COM_TEST'
+    $F_R10 = 'DEV_PS1_RESOLVE_NOT_ENUMERATED_TEST'
+    $F_R11 = 'DEV_PS1_RESOLVE_INVALID_COM_FORMAT_REJECTED_TEST'
+    $F_R12 = 'DEV_PS1_RESOLVE_GHOST_DEVICE_EXCLUDED_TEST'
+    $F_R13 = 'DEV_PS1_UPLOAD_FAILURE_CLASSIFICATION_TEST'
+    $F_R14 = 'DEV_PS1_UPLOAD_PORT_ENV_RESTORE_TEST'
+    $F_R15 = 'DEV_PS1_WRONG_EXECUTION_HOST_TEST'
+    $F_R16 = 'DEV_PS1_MANIFEST_MISSING_BLOCK_TEST'
+    $rFields = @($F_R01,$F_R02,$F_R03,$F_R04,$F_R05,$F_R06,$F_R07,$F_R08,$F_R09,$F_R10,$F_R11,$F_R12,$F_R13,$F_R14,$F_R15,$F_R16)
+    foreach ($k in $rFields) { $results[$k] = $false }
+
+    $idA  = 'USB\VID_1A86&PID_55D4\TEST&A'
+    $idB  = 'USB\VID_1A86&PID_55D4\TEST&B'
+    $idLc = 'usb\vid_1a86&pid_55d4\test&lc'
+    $c12  = 'COM' + '12'
+    $c7x  = $c7
+    $vidNum = 0x1A86; $pidNum = 0x55D4
+
+    # R01: both channels agree on one port -> PORT_RESOLVED, attempts=1
+    try {
+        $r = Resolve-Ch9102Port -TestInput @{
+            Pnp = @(@{ InstanceId = $idA; FriendlyName = ('USB-Enhanced-SERIAL CH9102 (' + $c6 + ')') })
+            SerialPorts = @(@{ PNPDeviceID = $idA; DeviceID = $c6 })
+            RegistryMap = @{ $idA = $c6 }
+            PySerial = @{ Available = $true; Ports = @(@{ device = $c6; vid = $vidNum; pid = $pidNum }) }
+        }
+        $results[$F_R01] = ([string]$r.Result -eq 'PORT_RESOLVED') -and ([string]$r.Port -eq $c6) -and ([int]$r.Attempts -eq 1)
+    } catch {}
+
+    # R02: registry and Win32_SerialPort disagree on the port -> ambiguous, no silent pick
+    try {
+        $r = Resolve-Ch9102Port -TestInput @{
+            Pnp = @(@{ InstanceId = $idA; FriendlyName = 'USB-Enhanced-SERIAL CH9102' })
+            SerialPorts = @(@{ PNPDeviceID = $idA; DeviceID = $c12 })
+            RegistryMap = @{ $idA = $c6 }
+        }
+        $results[$F_R02] = ([string]$r.Result -eq 'MULTIPLE_MATCHING_PORTS') -and (@($r.Ports) -contains $c6) -and (@($r.Ports) -contains $c12)
+    } catch {}
+
+    # R03: CJK localized FriendlyName still yields the port (last-resort path)
+    try {
+        $r = Resolve-Ch9102Port -TestInput @{
+            Pnp = @(@{ InstanceId = $idA; FriendlyName = ('USB-增强串行 CH9102 (' + $c6 + ')') })
+        }
+        $results[$F_R03] = ([string]$r.Result -eq 'PORT_RESOLVED') -and ([string]$r.Port -eq $c6)
+    } catch {}
+
+    # R04: FriendlyName has NO COM token; registry PortName must win
+    try {
+        $r = Resolve-Ch9102Port -TestInput @{
+            Pnp = @(@{ InstanceId = $idA; FriendlyName = 'USB-Enhanced-SERIAL CH9102' })
+            RegistryMap = @{ $idA = $c6 }
+        }
+        $results[$F_R04] = ([string]$r.Result -eq 'PORT_RESOLVED') -and ([string]$r.Port -eq $c6)
+    } catch {}
+
+    # R05: pySerial numeric vid/pid match; foreign device (0x10C4) filtered out
+    try {
+        $r = Resolve-Ch9102Port -TestInput @{
+            PySerial = @{ Available = $true; Ports = @(
+                @{ device = $c6;  vid = $vidNum; pid = $pidNum },
+                @{ device = $c7x; vid = 0x10C4;  pid = 0xEA60 }
+            ) }
+        }
+        $results[$F_R05] = ([string]$r.Result -eq 'PORT_RESOLVED') -and ([string]$r.Port -eq $c6) -and ([int]$r.PySerialCount -eq 1)
+    } catch {}
+
+    # R06: lower-case vid/pid in InstanceId still matches (case-insensitive)
+    try {
+        $r = Resolve-Ch9102Port -TestInput @{
+            Pnp = @(@{ InstanceId = $idLc; FriendlyName = 'ch9102' })
+            RegistryMap = @{ $idLc = $c6 }
+        }
+        $results[$F_R06] = ([string]$r.Result -eq 'PORT_RESOLVED') -and ([string]$r.Port -eq $c6)
+    } catch {}
+
+    # R07: same port from all channels (mixed case / whitespace) -> deduped to ONE
+    try {
+        $r = Resolve-Ch9102Port -TestInput @{
+            Pnp = @(@{ InstanceId = $idA; FriendlyName = ('CH9102 (' + $c6 + ')') })
+            SerialPorts = @(@{ PNPDeviceID = $idA; DeviceID = $c6 })
+            RegistryMap = @{ $idA = $c6 }
+            PySerial = @{ Available = $true; Ports = @(@{ device = (' ' + $c6.ToLower() + ' '); vid = $vidNum; pid = $pidNum }) }
+        }
+        $results[$F_R07] = ([string]$r.Result -eq 'PORT_RESOLVED') -and (@($r.Ports).Count -eq 1)
+    } catch {}
+
+    # R08: two physical CH9102 devices -> MULTIPLE_MATCHING_PORTS (never guess)
+    try {
+        $r = Resolve-Ch9102Port -TestInput @{
+            Pnp = @(
+                @{ InstanceId = $idA; FriendlyName = ('CH9102 (' + $c6 + ')') },
+                @{ InstanceId = $idB; FriendlyName = ('CH9102 (' + $c7x + ')') }
+            )
+            RegistryMap = @{ $idA = $c6; $idB = $c7x }
+        }
+        $results[$F_R08] = ([string]$r.Result -eq 'MULTIPLE_MATCHING_PORTS') -and (@($r.Ports).Count -eq 2)
+    } catch {}
+
+    # R09: device enumerated but no COM anywhere -> DEVICE_ENUMERATED_NO_COM
+    try {
+        $r = Resolve-Ch9102Port -TestInput @{
+            Pnp = @(@{ InstanceId = $idA; FriendlyName = 'USB-Enhanced-SERIAL CH9102' })
+        }
+        $results[$F_R09] = ([string]$r.Result -eq 'DEVICE_ENUMERATED_NO_COM')
+    } catch {}
+
+    # R10: nothing on any channel -> DEVICE_NOT_ENUMERATED (single attempt in test mode)
+    try {
+        $r = Resolve-Ch9102Port -TestInput @{ Pnp = @(); SerialPorts = @(); PySerial = @{ Available = $true; Ports = @() } }
+        $results[$F_R10] = ([string]$r.Result -eq 'DEVICE_NOT_ENUMERATED') -and ([int]$r.Attempts -eq 1)
+    } catch {}
+
+    # R11: malformed port strings rejected by ^COM[0-9]+$ validation
+    try {
+        $r = Resolve-Ch9102Port -TestInput @{
+            Pnp = @(@{ InstanceId = $idA; FriendlyName = 'CH9102' })
+            SerialPorts = @(@{ PNPDeviceID = $idA; DeviceID = 'COM' })
+            RegistryMap = @{ $idA = ($c6 + 'X') }
+            PySerial = @{ Available = $true; Ports = @(@{ device = '6'; vid = $vidNum; pid = $pidNum }) }
+        }
+        $results[$F_R11] = ([string]$r.Result -eq 'DEVICE_ENUMERATED_NO_COM') -and (@($r.Ports).Count -eq 0)
+    } catch {}
+
+    # R12: ghost (non-present) device must be excluded entirely
+    try {
+        $r = Resolve-Ch9102Port -TestInput @{
+            Pnp = @(@{ InstanceId = $idA; FriendlyName = ('CH9102 (' + $c6 + ')'); Present = $false })
+        }
+        $results[$F_R12] = ([string]$r.Result -eq 'DEVICE_NOT_ENUMERATED')
+    } catch {}
+
+    # R13: uploader failure classification -- access denied is NOT device-missing
+    try {
+        $cls1 = Get-UploadFailureClass -OutputText ('could not open port ' + $c6 + ': PermissionError(13, ''Access is denied.'')')
+        $cls2 = Get-UploadFailureClass -OutputText 'Failed to connect to ESP8266: Timed out waiting for packet header'
+        $cls3 = Get-UploadFailureClass -OutputText ('could not open port ' + $c12 + ': FileNotFoundError(2)')
+        $results[$F_R13] = ($cls1 -eq 'PORT_ACCESS_DENIED') -and ($cls2 -eq 'BOOTLOADER_SYNC_FAILED') -and ($cls3 -eq 'PORT_OPEN_FAILED')
+    } catch {}
+
+    # R14: PLATFORMIO_UPLOAD_PORT is process-scoped and fully restored
+    try {
+        $envName = 'PLATFORMIO_UPLOAD_PORT'
+        $sentinel = 'COM' + '99'
+        [System.Environment]::SetEnvironmentVariable($envName, $sentinel, 'Process')
+        $inside1 = $null
+        Invoke-UploadPortScope -Port $c6 -Body { $script:__t14a = $env:PLATFORMIO_UPLOAD_PORT } | Out-Null
+        $inside1 = $script:__t14a
+        $restored = ($env:PLATFORMIO_UPLOAD_PORT -eq $sentinel)
+        Remove-Item Env:\PLATFORMIO_UPLOAD_PORT -ErrorAction SilentlyContinue
+        Invoke-UploadPortScope -Port $c6 -Body { $script:__t14b = $env:PLATFORMIO_UPLOAD_PORT } | Out-Null
+        $inside2 = $script:__t14b
+        $removed = -not (Test-Path Env:\PLATFORMIO_UPLOAD_PORT)
+        $results[$F_R14] = ($inside1 -eq $c6) -and $restored -and ($inside2 -eq $c6) -and $removed
+    } catch {}
+
+    # R15: non-Windows execution host -> WRONG_EXECUTION_HOST, never "not connected"
+    try {
+        $r = Resolve-Ch9102Port -TestInput @{ IsWindows = $false }
+        $results[$F_R15] = ([string]$r.Result -eq 'WRONG_EXECUTION_HOST') -and ([int]$r.Attempts -eq 0)
+    } catch {}
+
+    # R16: missing build manifest blocks BEFORE any uploader call.
+    # ($Profile has a ValidateSet attribute, so redirect the manifest root to
+    # an empty temp dir instead of assigning an out-of-set profile value.)
+    try {
+        $savedLogs = $script:LogsPhys
+        $tmpLogs = Join-Path $env:TEMP ('devps1_selftest_' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path (Join-Path $tmpLogs 'manifests') -Force | Out-Null
+        try {
+            $script:LogsPhys = $tmpLogs
+            $blocked = $false
+            try { Assert-LastBuildManifestMatches | Out-Null } catch { $blocked = ($_.Exception.Message -match 'BUILD_MANIFEST_MISSING') }
+            $results[$F_R16] = $blocked
+        } finally {
+            $script:LogsPhys = $savedLogs
+            Remove-Item -Path $tmpLogs -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    } catch {}
+
     foreach ($k in @($F_SINGLE,$F_PORTDETECT,$F_ZERO,$F_MULTI,$F_BUSY,$F_RELEASE,$F_NOCONT,$F_NODRIVE,$F_REALF,$F_CJK,$F_NOPSEUDO,$F_NODUP)) {
+        Write-Output ($k + '=' + $results[$k].ToString().ToUpper())
+    }
+    foreach ($k in $rFields) {
         Write-Output ($k + '=' + $results[$k].ToString().ToUpper())
     }
     $allPass = ($results.Values -notcontains $false)
