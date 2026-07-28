@@ -1,8 +1,7 @@
-// Task §二/§五/§八 — integration tests proving that every real-IR DENY path
-// produces ZERO side effects: no ir_action command row is created, no MQTT publish
-// happens, and REAL_IR_TRANSMIT_COUNT stays at 0. This is the regression guard for
-// the spurious-guest-403 incident: a guest (or bad-CSRF / bad-origin / kill-switch-off
-// caller) must be refused with a structured envelope and must NEVER cause an IR transmit.
+// Integration tests proving that every real-IR DENY path produces zero side
+// effects: no ir_action command row is created, no MQTT publish happens, and
+// the persisted transmit count stays at 0. This guards the owner/guest, origin,
+// CSRF, and production-control deny paths.
 import { describe, it, expect, beforeEach } from 'vitest';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
@@ -16,7 +15,6 @@ const IR_CODE = 'hisense_cool_24_quiet_swing_v_on_swing_h_on_power_on_v1';
 const VALID_ORIGIN = (config.ALLOWED_ORIGINS || 'https://ac.example.com').split(',')[0].trim();
 
 function irActionRowCount(): number {
-  // REAL_IR_TRANSMIT_COUNT proxy: number of persisted ir_action command rows.
   return getRecentCommands(200).filter((c: any) => c.action === 'ir_action').length;
 }
 
@@ -39,13 +37,13 @@ const irBody = (idem: string) => JSON.stringify({ ir_code_id: IR_CODE, idempoten
 
 beforeEach(async () => {
   await initDb();
-  // Safe defaults: kill switch OFF, no owner password.
+  (config as any).REAL_IR_PRODUCTION_CONTROL_ENABLED = false;
   (config as any).WEB_REAL_IR_ENABLED = false;
   (config as any).IR_OWNER_PASSWORD = '';
 });
 
-describe('Task §二/§五 — guest 403 has zero side effects', () => {
-  it('guest POST /api/ac/ir-action → 403 OWNER_REQUIRED; no ir_action row; REAL_IR_TRANSMIT_COUNT=0', async () => {
+describe('guest 403 has zero side effects', () => {
+  it('guest POST /api/ac/ir-action → 403 OWNER_REQUIRED; no ir_action row', async () => {
     const app = await buildApp();
     const before = irActionRowCount();
     const { sid, csrf } = await guestSession(app);
@@ -59,21 +57,19 @@ describe('Task §二/§五 — guest 403 has zero side effects', () => {
     const body = res.json();
     expect(res.statusCode).toBe(403);
     expect(body.errorCode).toBe('OWNER_REQUIRED');
-    // Structured envelope must assert NOTHING happened downstream.
     expect(body.commandCreated).toBe(false);
     expect(body.mqttPublished).toBe(false);
     expect(body.deviceReceived).toBe(false);
     expect(body.irTransmitted).toBe(false);
     expect(body.ir_control).toBe('disabled');
-    // DB: no IR command row created; transmit count unchanged (and is zero).
     expect(irActionRowCount()).toBe(before);
     expect(irActionRowCount()).toBe(0);
     await app.close();
   });
 
-  it('even with kill switch ON + owner password set, a GUEST is still denied (role gate first) and no row is created', async () => {
+  it('even with production control on, a GUEST is still denied and no row is created', async () => {
     const app = await buildApp();
-    (config as any).WEB_REAL_IR_ENABLED = true;
+    (config as any).REAL_IR_PRODUCTION_CONTROL_ENABLED = true;
     (config as any).IR_OWNER_PASSWORD = 'test-owner-pass';
     const before = irActionRowCount();
     const { sid, csrf } = await guestSession(app);
@@ -92,9 +88,10 @@ describe('Task §二/§五 — guest 403 has zero side effects', () => {
   });
 });
 
-describe('Task §八 — structured deny envelope for all IR-deny paths', () => {
-  it('owner + kill switch OFF → 403 REAL_IR_DISABLED; no row; irTransmitted=false', async () => {
+describe('structured deny envelope for all production IR deny paths', () => {
+  it('owner + production control OFF → 403 REAL_IR_DISABLED; no row', async () => {
     const app = await buildApp();
+    (config as any).IR_OWNER_PASSWORD = 'enabled';
     const { sessionId, csrf } = await createSession('owner');
     const before = irActionRowCount();
     const res = await app.inject({
@@ -115,6 +112,7 @@ describe('Task §八 — structured deny envelope for all IR-deny paths', () => 
 
   it('owner + wrong CSRF → 403 CSRF_INVALID; no row', async () => {
     const app = await buildApp();
+    (config as any).IR_OWNER_PASSWORD = 'enabled';
     const { sessionId } = await createSession('owner');
     const before = irActionRowCount();
     const res = await app.inject({
@@ -132,6 +130,8 @@ describe('Task §八 — structured deny envelope for all IR-deny paths', () => 
 
   it('owner + bad origin → 403 ORIGIN_DENIED; no row', async () => {
     const app = await buildApp();
+    (config as any).IR_OWNER_PASSWORD = 'enabled';
+    (config as any).REAL_IR_PRODUCTION_CONTROL_ENABLED = true;
     const { sessionId, csrf } = await createSession('owner');
     const before = irActionRowCount();
     const res = await app.inject({

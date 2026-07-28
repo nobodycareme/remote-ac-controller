@@ -1,6 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { config } from './config';
-import { getSession, createSession, validateCsrf } from './auth';
+import { getSession, createSession, sessionCookieMaxAgeSeconds, validateCsrf } from './auth';
 import { deny } from './reply_utils';
 
 const ALLOWED_ORIGIN_SET = new Set(
@@ -33,13 +33,13 @@ async function ensureSession(req: FastifyRequest, reply: FastifyReply): Promise<
     return session;
   }
   if (config.ACCESS_MODE === 'public_guest') {
-    const { sessionId, csrf } = await createSession();
+    const { sessionId, expiresAt } = await createSession();
     reply.setCookie('sid', sessionId, {
       httpOnly: true,
       sameSite: 'strict',
       path: '/',
       secure: process.env.NODE_ENV === 'production',
-      maxAge: 60 * config.SESSION_TTL_MIN * 60,
+      maxAge: sessionCookieMaxAgeSeconds(expiresAt),
     });
     session = getSession(sessionId);
     if (session) {
@@ -94,7 +94,7 @@ export async function requireOwnerCsrf(req: FastifyRequest, reply: FastifyReply)
     await deny(reply, 401, 'SESSION_EXPIRED', '所有者会话缺失或已失效，请重新登录', { ir_control: 'disabled' });
     return;
   }
-  if (session.role !== 'owner') {
+  if (session.role !== 'owner' || !session.trusted) {
     await deny(reply, 403, 'OWNER_REQUIRED', '真实红外操作需要所有者登录', { ir_control: 'disabled' });
     return;
   }

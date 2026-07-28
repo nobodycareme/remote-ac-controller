@@ -1,13 +1,59 @@
-import { FastifyInstance } from 'fastify';
-import { createSession, getSession, loginOwner } from '../auth';
-import { requireAuthCsrf, requireOrigin } from '../guards';
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import {
+  createSession,
+  destroySession,
+  destroyTrustedOwnerSessions,
+  getSession,
+  loginOwner,
+  sessionCookieMaxAgeSeconds,
+  type Session,
+} from '../auth';
+import { requireAuthCsrf, requireOrigin, requireOwnerCsrf } from '../guards';
 import { config } from '../config';
-import { log } from '../logger';
+import { productionIrControlEnabled } from '../mqtt_bridge';
+
+function setSessionCookie(reply: FastifyReply, sessionId: string, expiresAt: number): void {
+  reply.setCookie('sid', sessionId, {
+    httpOnly: true,
+    sameSite: 'strict',
+    path: '/',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: sessionCookieMaxAgeSeconds(expiresAt),
+  });
+}
+
+function trustedLabelFromRequest(req: FastifyRequest): string {
+  const ua = req.headers['user-agent'];
+  const value = Array.isArray(ua) ? ua[0] : ua;
+  return String(value || 'trusted device').slice(0, 120);
+}
+
+function irControlForSession(session: Session | null): 'armed' | 'disabled' {
+  return session?.role === 'owner' && session.trusted && productionIrControlEnabled()
+    ? 'armed'
+    : 'disabled';
+}
+
+function sessionPayload(session: Session) {
+  return {
+    authenticated: true,
+    user: session.user,
+    role: session.role,
+    trusted: session.trusted,
+    trusted_expires_at: session.trusted ? session.expiresAt : null,
+    trusted_label: session.trustedLabel || null,
+    csrf: session.csrf,
+    ir_control: irControlForSession(session),
+  };
+}
+
+async function createGuestSession(reply: FastifyReply) {
+  const created = await createSession();
+  setSessionCookie(reply, created.sessionId, created.expiresAt);
+  return getSession(created.sessionId);
+}
 
 export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void> {
-  // Owner login — mints an 'owner' session used for privileged real-IR actions.
-  // Available whenever an owner password is configured (IR_OWNER_PASSWORD non-empty),
-  // even in public_guest mode. If no owner password is set, login is disabled.
   fastify.post('/api/auth/login', { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (req, reply) => {
     if (!config.IR_OWNER_PASSWORD) {
       reply.code(410).send({ error: 'login_disabled', detail: 'Owner login not configured' });
@@ -15,53 +61,68 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     }
     const body = (req.body ?? {}) as { username?: string; password?: string };
     const password = typeof body.password === 'string' ? body.password : '';
-    const result = await loginOwner(password);
+    const result = await loginOwner(password, { trustedLabel: trustedLabelFromRequest(req) });
     if (!result) {
       reply.code(401).send({ error: 'invalid_credentials' });
       return;
     }
-    reply.setCookie('sid', result.sessionId, {
-      httpOnly: true, sameSite: 'strict', path: '/',
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 60 * config.SESSION_TTL_MIN * 60,
+    setSessionCookie(reply, result.sessionId, result.expiresAt);
+    reply.send({
+      ok: true,
+      authenticated: true,
+      user: result.user,
+      role: 'owner',
+      trusted: true,
+      trusted_expires_at: result.expiresAt,
+      trusted_label: result.trustedLabel || null,
+      csrf: result.csrf,
+      ir_control: productionIrControlEnabled() ? 'armed' : 'disabled',
     });
-    reply.send({ ok: true, authenticated: true, user: result.user, role: 'owner', csrf: result.csrf, ir_control: config.WEB_REAL_IR_ENABLED ? 'armed' : 'disabled' });
   });
 
-  // Logout — CSRF protected.
   fastify.post('/api/auth/logout', { preHandler: [requireOrigin, requireAuthCsrf] }, async (req, reply) => {
+    const sid = req.cookies?.sid;
+    destroySession(sid);
     reply.clearCookie('sid', { path: '/' });
-    // Auto-create a fresh guest session immediately (public mode)
     if (config.ACCESS_MODE === 'public_guest') {
-      const { sessionId } = await createSession();
-      reply.setCookie('sid', sessionId, {
-        httpOnly: true, sameSite: 'strict', path: '/',
-        secure: process.env.NODE_ENV === 'production',
-        maxAge: 60 * config.SESSION_TTL_MIN * 60,
-      });
+      await createGuestSession(reply);
     }
     reply.send({ ok: true });
   });
 
-  // Session probe — auto-creates guest session if public mode
+  fastify.post('/api/auth/trusted-device/revoke', { preHandler: [requireOrigin, requireOwnerCsrf] }, async (req, reply) => {
+    const sid = req.cookies?.sid;
+    destroySession(sid);
+    reply.clearCookie('sid', { path: '/' });
+    if (config.ACCESS_MODE === 'public_guest') {
+      await createGuestSession(reply);
+    }
+    reply.send({ ok: true, revoked: 1 });
+  });
+
+  fastify.post('/api/auth/trusted-devices/revoke-all', { preHandler: [requireOrigin, requireOwnerCsrf] }, async (_req, reply) => {
+    const revoked = destroyTrustedOwnerSessions();
+    reply.clearCookie('sid', { path: '/' });
+    if (config.ACCESS_MODE === 'public_guest') {
+      await createGuestSession(reply);
+    }
+    reply.send({ ok: true, revoked });
+  });
+
   fastify.get('/api/auth/session', async (req, reply) => {
     const sid = req.cookies?.sid;
     const session = sid ? getSession(sid) : null;
     if (session) {
-      reply.send({ authenticated: true, user: session.user, role: session.role, csrf: session.csrf, ir_control: config.WEB_REAL_IR_ENABLED ? 'armed' : 'disabled' });
+      reply.send(sessionPayload(session));
       return;
     }
-    // Public guest: auto-create
     if (config.ACCESS_MODE === 'public_guest') {
-      const { sessionId, csrf } = await createSession();
-      reply.setCookie('sid', sessionId, {
-        httpOnly: true, sameSite: 'strict', path: '/',
-        secure: process.env.NODE_ENV === 'production',
-        maxAge: 60 * config.SESSION_TTL_MIN * 60,
-      });
-      reply.send({ authenticated: true, user: 'guest', role: 'guest', csrf });
-      return;
+      const guest = await createGuestSession(reply);
+      if (guest) {
+        reply.send(sessionPayload(guest));
+        return;
+      }
     }
-    reply.send({ authenticated: false });
+    reply.send({ authenticated: false, trusted: false, ir_control: 'disabled' });
   });
 }

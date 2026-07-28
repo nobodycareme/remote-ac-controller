@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
-import { getDeviceState, getLatestTelemetry, getRecentCommands } from '../db';
+import { getDeviceState, getLatestTelemetry, getRecentCommands, getAcStateRows } from '../db';
 import { weatherService } from '../weather';
-import { mqttConnected, irControlEnabled } from '../mqtt_bridge';
+import { mqttConnected, productionIrControlEnabled } from '../mqtt_bridge';
 import { evaluateDeviceLiveness } from '../device_liveness';
 import { requireAuth } from '../guards';
 import { config } from '../config';
@@ -66,13 +66,14 @@ export async function registerDashboardRoutes(fastify: FastifyInstance): Promise
           }
         : null,
       weather_error,
-      ir_control: irControlEnabled() ? 'armed' : 'disabled',
+      ir_control: productionIrControlEnabled() ? 'armed' : 'disabled',
       // The real-IR button is armed ONLY when the kill switch is on AND the current
       // session is an OWNER. A guest (or unauthenticated) session must never see the
       // armed button — this was the root cause of the spurious 403 (Task §二/§五).
-      ir_armed: irControlEnabled() && (req as any).session?.role === 'owner',
-      ir_available_codes: irControlEnabled() && (req as any).session?.role === 'owner'
-        ? ['hisense_cool_24_quiet_swing_v_on_swing_h_on_power_on_v1']
+      ir_armed: productionIrControlEnabled() && (req as any).session?.role === 'owner' && (req as any).session?.trusted,
+      // 2026-07-28 集成轮：可用编码来自 ac_states 目录（仅 enabled=1 的状态）。
+      ir_available_codes: productionIrControlEnabled() && (req as any).session?.role === 'owner' && (req as any).session?.trusted
+        ? getAcStateRows().filter((r: any) => r.enabled).map((r: any) => r.state_id)
         : [],
       settings: {
         device_publish_interval_ms: config.DEVICE_PUBLISH_INTERVAL_MS,

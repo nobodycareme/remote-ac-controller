@@ -12,6 +12,7 @@ import {
   markCommandPublished,
   tryInsertCommand,
   tryInsertIrCommand,
+  insertIrDebugCommand,
   getDeviceState,
 } from './db';
 import { evaluateDeviceLiveness } from './device_liveness';
@@ -49,6 +50,10 @@ function handleMessage(suffix: string, json: string, retained = false): void {
         mqtt_initial_connect_count: Number(d.mqtt_initial_connect_count ?? 0),
         mqtt_reconnect_attempt_count: Number(d.mqtt_reconnect_attempt_count ?? 0),
         mqtt_reconnect_success_count: Number(d.mqtt_reconnect_success_count ?? 0),
+        ir_ready: d.ir_ready === true || d.ir_ready === 1 ? 1 : 0,
+        ir_code_id: typeof d.ir_code_id === 'string' ? d.ir_code_id : '',
+        ir_code_length: Number(d.ir_code_length ?? 0),
+        ir_code_sha256: typeof d.ir_code_sha256 === 'string' ? d.ir_code_sha256 : '',
         firmware_version: String(d.firmware_version ?? ''),
         simulated,
       });
@@ -217,12 +222,16 @@ export function isDeviceOnline(): boolean {
 // ── Real-IR actions (Section 七/八/九) ──────────────────────────────────────
 // These publish a vendor 22H-frame reference (ir_code_id) for the device to emit.
 // Safety invariants:
-//   - WEB_REAL_IR_ENABLED=false  → dispatchIrAction refuses (real IR disabled).
+//   - Production control and temporary debug control are separate switches.
 //   - retain:false ALWAYS (no broker persistence / replay at reconnect).
 //   - One-shot: identical idempotency_key → at most ONE publish (tryInsertIrCommand).
 //   - Short TTL (IR_COMMAND_TTL_MS, ~25s) → stale commands rejected by firmware.
-export function irControlEnabled(): boolean {
+export function debugIrControlEnabled(): boolean {
   return !!config.WEB_REAL_IR_ENABLED;
+}
+
+export function productionIrControlEnabled(): boolean {
+  return !!config.REAL_IR_PRODUCTION_CONTROL_ENABLED;
 }
 
 export interface OutboundIrCommand {
@@ -238,13 +247,15 @@ export function publishIrAction(cmd: OutboundIrCommand): boolean {
   }
   // NOTE: retain:false is mandatory — a retained IR command would be replayed by the
   // broker on every device reconnect, violating the "no replay after reconnect" rule.
+  // QoS 1 (2026-07-28 集成轮): at-least-once delivery to the broker; duplicate delivery
+  // at the device is absorbed by the firmware command_id exec-cache + expires_at TTL.
   const payload = JSON.stringify({
     command_id: cmd.command_id,
     type: 'ir_action',
     action: cmd.ir_code_id,
     expires_at: cmd.expires_at,
   });
-  client.publish(topic('commands/set'), payload, { qos: 0, retain: false }, (err) => {
+  client.publish(topic('commands/set'), payload, { qos: 1, retain: false }, (err) => {
     if (err) {
       log.error('publish ir action failed', { command_id: cmd.command_id, ir_code_id: cmd.ir_code_id, err: err.message });
       return;
@@ -258,7 +269,19 @@ export function publishIrAction(cmd: OutboundIrCommand): boolean {
 // contract but for ir_action. Returns the command record / denial reason.
 export function dispatchIrAction(
   irCodeId: string,
-  opts: { requested_by?: string; idempotency_key?: string },
+  opts: {
+    requested_by?: string;
+    idempotency_key?: string;
+    command_id?: string;
+    ttl_ms?: number;
+    control_mode?: 'production' | 'debug';
+    debug?: {
+      request_id: string;
+      idempotency_key_hash: string;
+      debug_session_hash: string;
+      debug_window_key: string;
+    };
+  },
 ): {
   command_id: string;
   status: string;
@@ -266,9 +289,14 @@ export function dispatchIrAction(
   idempotency_replay?: boolean;
   offline_rejected?: boolean;
   ir_disabled?: boolean;
+  mqtt_published?: boolean;
 } {
-  if (!config.WEB_REAL_IR_ENABLED) {
-    log.warn('ir action refused: WEB_REAL_IR_ENABLED=false');
+  const controlMode = opts.control_mode ?? 'production';
+  const controlEnabled = controlMode === 'debug'
+    ? debugIrControlEnabled()
+    : productionIrControlEnabled();
+  if (!controlEnabled) {
+    log.warn('ir action refused: control disabled', { control_mode: controlMode, ir_code_id: irCodeId });
     return { command_id: '', status: 'ir_disabled', ir_code_id: irCodeId, ir_disabled: true };
   }
   if (!isDeviceOnline()) {
@@ -276,15 +304,17 @@ export function dispatchIrAction(
     return { command_id: '', status: 'offline_rejected', ir_code_id: irCodeId, offline_rejected: true };
   }
 
-  const command_id = uuid();
-  const expires_at = Date.now() + config.IR_COMMAND_TTL_MS;
+  const command_id = opts.command_id ?? uuid();
+  const ttlMs = Math.max(1, Math.min(opts.ttl_ms ?? config.IR_COMMAND_TTL_MS, 30_000));
+  const createdAt = Date.now();
+  const expires_at = createdAt + ttlMs;
   const res = tryInsertIrCommand({
     command_id,
     device_id: config.DEVICE_ID,
     action: 'ir_action',
     ir_code_id: irCodeId,
     status: 'pending',
-    created_at: Date.now(),
+    created_at: createdAt,
     expires_at,
     requested_by: opts.requested_by,
     idempotency_key: opts.idempotency_key ?? null,
@@ -300,8 +330,22 @@ export function dispatchIrAction(
     return { command_id: existing?.command_id ?? '', status: existing?.status ?? 'pending', ir_code_id: irCodeId, idempotency_replay: true };
   }
 
+  if (opts.debug) {
+    insertIrDebugCommand({
+      request_id: opts.debug.request_id,
+      command_id,
+      idempotency_key_hash: opts.debug.idempotency_key_hash,
+      debug_session_hash: opts.debug.debug_session_hash,
+      debug_window_key: opts.debug.debug_window_key,
+      created_at: createdAt,
+      expires_at,
+      code_id: irCodeId,
+      status: 'pending',
+    });
+  }
+
   const ok = publishIrAction({ command_id, ir_code_id: irCodeId, expires_at });
-  return { command_id, status: ok ? 'pending' : 'failed_to_publish', ir_code_id: irCodeId, idempotency_replay: false };
+  return { command_id, status: ok ? 'pending' : 'failed_to_publish', ir_code_id: irCodeId, idempotency_replay: false, mqtt_published: ok };
 }
 
 // Helper: build + persist + publish a command. Returns the command record.

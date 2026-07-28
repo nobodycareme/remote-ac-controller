@@ -8,7 +8,9 @@ import path from 'path';
 
 import { config } from './config';
 import { log } from './logger';
-import { initDb, retentionCleanup, getDb } from './db';
+import { initDb, retentionCleanup, getDb, syncAcStates } from './db';
+import { AC_STATES } from './ac_states';
+import { startAutomationWorker } from './automation';
 import { getSession, startSessionCleanup } from './auth';
 import { startMqttBridge } from './mqtt_bridge';
 import { weatherService, confirmGeocoding } from './weather';
@@ -21,6 +23,7 @@ import { registerDeviceRoutes } from './routes/device';
 import { registerTelemetryRoutes } from './routes/telemetry';
 import { registerWeatherRoutes } from './routes/weather';
 import { registerAcRoutes } from './routes/ac';
+import { registerIrDebugRoutes } from './routes/ir_debug';
 import { registerEventsRoutes } from './routes/events';
 
 // Allowed CORS origins (for browser fetches if served separately). Empty => same-origin only.
@@ -29,6 +32,32 @@ const ALLOWED_ORIGINS = (config.ALLOWED_ORIGINS || '')
   .map((s) => s.trim())
   .filter(Boolean);
 const ALLOWED_ORIGIN_SET = new Set(ALLOWED_ORIGINS);
+
+function setNoStoreHeaders(res: { setHeader: (name: string, value: string) => void }): void {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+}
+
+function setStaticCacheHeaders(res: { setHeader: (name: string, value: string) => void }, filePath: string): void {
+  const normalized = String(filePath || '').replace(/\\/g, '/').toLowerCase();
+  if (normalized.endsWith('/index.html') || normalized.endsWith('/sw.js')) {
+    setNoStoreHeaders(res);
+    return;
+  }
+
+  if (normalized.includes('/assets/') && (normalized.endsWith('.js') || normalized.endsWith('.css'))) {
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    return;
+  }
+
+  if (normalized.endsWith('.webmanifest')) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    return;
+  }
+
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+}
 
 async function buildServer() {
   // Only trust reverse proxy from loopback (cloudflared runs on localhost)
@@ -60,7 +89,7 @@ async function buildServer() {
     try { getDb().prepare('SELECT 1').get(); return { status: 'ready', db: 'ok' }; }
     catch { return { status: 'not_ready', db: 'error' }; }
   });
-  fastify.get('/api/version', async () => ({ version: '0.4.0', node: process.version }));
+  fastify.get('/api/version', async () => ({ version: '0.5.0', node: process.version }));
 
   // Routes (registered before static so /api wins).
   await registerAuthRoutes(fastify);
@@ -69,6 +98,7 @@ async function buildServer() {
   await registerTelemetryRoutes(fastify);
   await registerWeatherRoutes(fastify);
   await registerAcRoutes(fastify);
+  await registerIrDebugRoutes(fastify);
   await registerEventsRoutes(fastify);
 
   // WebSocket: authenticated live updates with Origin validation.
@@ -114,12 +144,22 @@ async function buildServer() {
   // Serve frontend (if built). Non-/api unknown paths fall back to index.html (SPA).
   const distDir = path.resolve(__dirname, '../../frontend/dist');
   if (fs.existsSync(distDir)) {
-    await fastify.register(staticPlugin, { root: distDir, prefix: '/', wildcard: true, index: ['index.html'] });
+    await fastify.register(staticPlugin, {
+      root: distDir,
+      prefix: '/',
+      wildcard: true,
+      index: ['index.html'],
+      cacheControl: false,
+      setHeaders: setStaticCacheHeaders,
+    });
     fastify.setNotFoundHandler((req, reply) => {
       if (req.url.startsWith('/api/')) {
         reply.code(404).send({ error: 'not_found' });
         return;
       }
+      reply.header('Cache-Control', 'no-store, no-cache, must-revalidate');
+      reply.header('Pragma', 'no-cache');
+      reply.header('Expires', '0');
       reply.sendFile('index.html');
     });
   } else {
@@ -137,10 +177,14 @@ async function buildServer() {
 
 async function main() {
   initDb();
+  // 2026-07-28 集成轮：将 11 个状态目录同步入 ac_states 表（enabled 保留 DB 现值）。
+  syncAcStates(AC_STATES.map((s) => ({ ...s })));
 
   startSessionCleanup();
 
   startMqttBridge();
+  // 定时任务 + 温控自动化统一扫描器（10s）。所有下发经 dispatchIrAction 统一门禁。
+  startAutomationWorker();
   weatherService.start();
   confirmGeocoding().catch(() => {});
 
