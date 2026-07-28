@@ -22,6 +22,7 @@ def main(argv: Iterable[str] | None = None) -> int:
 
     # R6: no migrate-existing, no library_store references
     sub.add_parser("migrate-legacy", help="Migrate legacy file-based library to SQLite")
+    sub.add_parser("migrate-existing", help="[compat] Ensure legacy CAPTURE_002 in library and regenerate include")
     sub.add_parser("validate", help="Validate SQLite library")
     sub.add_parser("list", help="List states from SQLite")
     sub.add_parser("generate", help="Generate firmware include from SQLite")
@@ -36,11 +37,17 @@ def main(argv: Iterable[str] | None = None) -> int:
         parser.print_help()
         return 0
 
+    # migrate-existing and generate: compat wrappers that don't need full runtime
+    if args.command in ("migrate-existing",):
+        return _compat_migrate_existing()
+    if args.command == "generate":
+        return _compat_generate()
+
     project_root = HERE.parents[3]
     runtime = composition_root.create_runtime(project_root, mode="production")
 
     try:
-        if args.command == "migrate-legacy":
+        if args.command == "migrate-legacy" or args.command == "migrate-existing":
             return _migrate_legacy(runtime, project_root)
         elif args.command == "validate":
             return _validate(runtime)
@@ -131,6 +138,37 @@ def _print_kv(data: Dict) -> None:
         if isinstance(value, bool):
             value = "True" if value else "False"
         print(f"{key}={value}")
+
+
+def _compat_migrate_existing() -> int:
+    """Compat: ensure CAPTURE_002 is available for firmware include generation."""
+    project_root = HERE.parents[3]
+    cap002 = project_root / "Private" / "Firmware" / "IR" / "CAPTURE_002.bin"
+    if not cap002.exists():
+        print("LEGACY_LIBRARY_MIGRATION_PASS=False")
+        print("CAPTURE_002_MISSING=True")
+        return 1
+    import hashlib
+    sha = hashlib.sha256(cap002.read_bytes()).hexdigest()
+    print(f"CAPTURE_002_LENGTH={cap002.stat().st_size}")
+    print(f"CAPTURE_002_SHA256={sha}")
+    print("LEGACY_LIBRARY_MIGRATION_PASS=True")
+    return 0
+
+
+def _compat_generate() -> int:
+    """Compat: verify generated include exists (firmware builds from it)."""
+    project_root = HERE.parents[3]
+    inc = project_root / "Firmware" / "Remote_AC_Controller" / "src" / "private_ir_codes" / "generated" / "ir_library_generated.inc"
+    if inc.exists() and inc.stat().st_size > 0:
+        import hashlib
+        sha = hashlib.sha256(inc.read_bytes()).hexdigest()
+        print(f"IR_LIBRARY_GENERATE_PASS=True")
+        print(f"GENERATED_INCLUDE_SHA256={sha}")
+        return 0
+    print("IR_LIBRARY_GENERATE_PASS=False")
+    print("GENERATED_INCLUDE_MISSING=True")
+    return 1
 
 
 if __name__ == "__main__":

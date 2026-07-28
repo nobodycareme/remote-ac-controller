@@ -63,3 +63,11 @@ logs/
 *.dmp
 *.core
 
+
+# Local working artifacts (not firmware sources)
+archive/
+reports/
+review/
+setup-report.md
+tools/ir_simple_learner/dist/
+tools/ir_simple_learner/IR_Simple_Learner.spec

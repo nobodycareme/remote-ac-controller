@@ -131,13 +131,6 @@ struct ModuleCommandResult {
   bool     ok = false;
   uint8_t  errorCode = 0;  // 0=OK, 1=rejected, 2=timeout, 3=bad_ack
 };
-  bool    ok       = false;
-  uint8_t afn      = 0;
-  uint8_t status   = 0;
-  uint8_t data[IR_RESULT_DATA_MAX];
-  uint8_t dataLen  = 0;
-  uint32_t elapsedMs = 0;
-};
 
 // ---------------------------------------------------------------------------
 // §二: Result of sendExternalFrameOnce() — layered, unambiguous.
@@ -280,6 +273,7 @@ public:
   // ---- External-code learn capture (directive §五/§六 preparation) ----
   // Enters AFN=20H learn; captures the AFN=22H streamed frame. NO replay.
   bool enterExtLearn();
+  ModuleCommandResult enterExtLearnConfirmed();
   IrResult exitExtLearn(uint32_t timeoutMs = IR_DEFAULT_TIMEOUT_MS);
   void tickExtLearn();         // call every loop() iteration while active
   bool extLearnActive() const { return m_extLearnActive; }

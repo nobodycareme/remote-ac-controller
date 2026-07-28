@@ -3,6 +3,37 @@ import hashlib, json, os, tempfile
 from pathlib import Path
 
 LEARNED_ROOT = Path("C:/example/remote-ac/Private/Firmware/IR/Learned")
+DEFAULT_ROOT = Path("C:/example/remote-ac/Private/Firmware/IR/Learned")
+CONFIG_PATH = Path(os.path.expanduser("~/.ir_simple_learner.json"))
+
+
+def set_learned_root(path):
+    """Update both LEARNED_ROOT and persist choice."""
+    global LEARNED_ROOT
+    LEARNED_ROOT = Path(path)
+    LEARNED_ROOT.mkdir(parents=True, exist_ok=True)
+    try:
+        CONFIG_PATH.write_text(json.dumps({"learned_root": str(LEARNED_ROOT)}), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def load_learned_root():
+    """Load saved choice from config, fall back to default."""
+    try:
+        if CONFIG_PATH.exists():
+            cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+            if cfg.get("learned_root"):
+                p = Path(cfg["learned_root"])
+                if p.exists() or p.parent.exists():
+                    return p
+    except Exception:
+        pass
+    return DEFAULT_ROOT
+
+
+# Load saved root at import time (do NOT auto-create directory)
+LEARNED_ROOT = load_learned_root()
 
 
 def safe_filename(state_id: str) -> str:

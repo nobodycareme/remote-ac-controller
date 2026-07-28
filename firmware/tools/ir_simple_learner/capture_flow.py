@@ -28,6 +28,11 @@ class CaptureContext:
         self.captured_sha256 = ""
         self.pending_frame = None
         self.started_at = 0.0
+        self.assembler = None
+        self.exit_confirmed = False
+        self.error = ""
+        self.export_sent = False
+        self.cancel_resent = False
         self.export_deadline = 0.0
         self.exit_deadline = 0.0
         self.state = State.IDLE
@@ -41,14 +46,16 @@ class CaptureContext:
 class CaptureFlow:
     """Orchestrates one capture cycle. GUI feeds events; flow manages state."""
 
-    TIMEOUT_WAITING_REMOTE = 40.0
+    TIMEOUT_WAITING_REMOTE = 120.0
     TIMEOUT_EXPORT = 10.0
     TIMEOUT_EXIT = 3.0
 
     def __init__(self):
         self.active: CaptureContext = None
+        self._write_fn = None
 
     def start(self, capture_index, write_fn):
+        self._write_fn = write_fn
         if self.active and self.active.state not in (State.IDLE, State.COMPLETED,
             State.CANCELLED, State.ERROR, State.EXIT_UNCONFIRMED):
             return None, "busy"
@@ -105,6 +112,16 @@ class CaptureFlow:
             if name.startswith("ir.learn.export"):
                 self._handle_export(evt, ctx, write_fn)
 
+        # ---- Cancelled in any state -> clear flow ----
+        if name == "ir.learn.cancelled":
+            if ctx.state in (State.EXITING,):
+                pass  # handled below
+            else:
+                # ERROR, WAITING_ENTER_ACK, WAITING_REMOTE etc. — just clear
+                ctx.state = State.CANCELLED
+                ctx.error = evt.get("reason", "user_cancelled")
+                self.active = None
+
         # ---- Exiting ----
         elif ctx.state == State.EXITING:
             if name == "ir.learn.cancelled" or name == "IR_EXTLEARN_EXIT_ACK":
@@ -129,8 +146,8 @@ class CaptureFlow:
             return None
         now = time.monotonic()
         if ctx.state == State.WAITING_ENTER_ACK:
-            # Allow up to 3 seconds for enter ACK; then assume legacy firmware and move on
-            if now - ctx.started_at > 3.0:
+            # Allow up to 10 seconds for enter ACK; firmware may be waiting for module
+            if now - ctx.started_at > 10.0:
                 ctx.state = State.WAITING_REMOTE
                 ctx.started_at = time.monotonic()
                 return "auto_progressed_to_waiting"
@@ -143,9 +160,21 @@ class CaptureFlow:
                 ctx.state = State.ERROR; ctx.error = "export_timeout"
                 return "timeout_export"
         elif ctx.state == State.EXITING:
-            if now - ctx.started_at > self.TIMEOUT_WAITING_REMOTE + self.TIMEOUT_EXPORT + self.TIMEOUT_EXIT:
-                ctx.state = State.EXIT_UNCONFIRMED; ctx.error = "exit_timeout"
+            # EXITING timeout: prefer COMPLETED if we have pending_frame (capture succeeded),
+            # otherwise EXIT_UNCONFIRMED
+            exiting_elapsed = now - ctx.started_at
+            if exiting_elapsed > self.TIMEOUT_EXIT:
+                if ctx.pending_frame:
+                    ctx.state = State.COMPLETED
+                else:
+                    ctx.state = State.EXIT_UNCONFIRMED
+                ctx.error = "exit_timeout"
                 return "timeout_exit"
+            # If no cancelled event arrived yet, send cancel again
+            if exiting_elapsed > 2.0 and not ctx.cancel_resent:
+                ctx.cancel_resent = True
+                if self._write_fn:
+                    self._write_fn(f"ir_learn_cancel {ctx.request_id} {ctx.session_id}")
         return None
 
     def _request_export(self, ctx, write_fn):
@@ -170,6 +199,8 @@ class CaptureFlow:
             # Export done successfully — now request cancel/exit
             ctx.pending_frame = result
             ctx.state = State.EXITING
+            ctx.started_at = time.monotonic()  # reset for EXITING phase
+            ctx.cancel_resent = False
             write_fn(f"ir_learn_cancel {ctx.request_id} {ctx.session_id}")
 
     def cancel(self, write_fn):

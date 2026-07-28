@@ -11,6 +11,14 @@ struct PrivateIrCode {
   uint16_t     len;          // total frame length
   const char*  sha256;       // source SHA256 (audit)
   const char*  description;  // human-readable
+  // v0.5.0 AC state metadata (2026-07-28 integration round)
+  const char*  mode;         // cool / dry / heat / off / unknown
+  int16_t      temperature;  // target temperature (0 = n/a)
+  const char*  fan;          // auto / turbo / quiet / silent / unknown
+  bool         swingVertical;
+  bool         swingHorizontal;
+  bool         powerOn;
+  bool         enabled;      // per-state kill switch (compile-time default true)
 };
 
 #if ENABLE_IR_MUTATING_COMMANDS

@@ -91,26 +91,39 @@ class SerialWorker:
                 pass
 
     def _run(self):
-        """Background reader loop."""
+        """Background reader loop. Detects device unplug."""
+        import os
         buf = ""
+        retry_count = 0
         while self.running:
             try:
-                if self.ser and self.ser.is_open and self.ser.in_waiting > 0:
-                    chunk = self.ser.read(self.ser.in_waiting).decode("utf-8", errors="replace")
-                    buf += chunk
-                    while "\n" in buf:
-                        line, buf = buf.split("\n", 1)
-                        line = line.strip()
-                        if line.startswith("{"):
-                            try:
-                                evt = json.loads(line)
-                                self.queue.put(evt)
-                            except Exception:
-                                self.queue.put({"type": "RAW", "text": line})
-            except Exception:
-                time.sleep(0.05)
-            else:
-                time.sleep(0.02)
+                if self.ser and self.ser.is_open:
+                    if self.ser.in_waiting > 0:
+                        chunk = self.ser.read(self.ser.in_waiting).decode("utf-8", errors="replace")
+                        buf += chunk
+                        retry_count = 0
+                        while "\n" in buf:
+                            line, buf = buf.split("\n", 1)
+                            line = line.strip()
+                            if line.startswith("{"):
+                                try:
+                                    evt = json.loads(line)
+                                    self.queue.put(evt)
+                                except Exception:
+                                    self.queue.put({"type": "RAW", "text": line})
+                else:
+                    retry_count += 1
+                    if retry_count > 5:
+                        # Serial was closed externally (device unplug)
+                        self.queue.put({"type": "SERIAL_ERROR", "message": "device_unplugged"})
+                        self.running = False
+                        break
+            except (OSError, Exception) as e:
+                # Connection lost / device unplugged
+                self.queue.put({"type": "SERIAL_ERROR", "message": f"read_error: {e}"})
+                self.running = False
+                break
+            time.sleep(0.05)
 
     def is_alive(self) -> bool:
         return self.thread is not None and self.thread.is_alive()

@@ -92,6 +92,12 @@ bool CommandService::parseCommand(const String& json, CloudCommand& cmd) {
     if (cmd.type == "ir_action") {
         cmd.action = CommandAction::IR_ACTION;
         cmd.ir_action_id = action_str;                 // codeId lives in "action"
+    } else if (cmd.type == "set_ac_state" || action_str == "set_ac_state") {
+        // v0.5.0 unified AC state command: {"type":"set_ac_state","stateId":"..."}
+        cmd.action = CommandAction::IR_ACTION;
+        cmd.ir_action_id = jsonGetStr(json, "stateId");
+        if (cmd.ir_action_id.length() == 0) cmd.ir_action_id = jsonGetStr(json, "state_id");
+        if (cmd.ir_action_id.length() == 0) return false;  // stateId required
     } else if (action_str == "ir_action") {
         cmd.action = CommandAction::IR_ACTION;
         cmd.ir_action_id = jsonGetStr(json, "ir_action_id");
@@ -121,8 +127,10 @@ CommandStatus CommandService::validateCommand(const CloudCommand& cmd) {
     // proceed to emit"). No emit happens here (§五: never emit during validation).
     if (cmd.action == CommandAction::IR_ACTION) {
         #if ENABLE_IR_MUTATING_COMMANDS
-            if (!findPrivateIrCode(cmd.ir_action_id.c_str())) {
-                return CommandStatus::IR_UNKNOWN_CODE;
+            {
+                const PrivateIrCode* c = findPrivateIrCode(cmd.ir_action_id.c_str());
+                if (!c) return CommandStatus::IR_UNKNOWN_CODE;
+                if (!c->enabled) return CommandStatus::IR_STATE_DISABLED;  // v0.5.0 per-state switch
             }
             return CommandStatus::ACCEPTED_MOCK;  // proceed to one-shot emit
         #else
@@ -234,6 +242,7 @@ void CommandService::sendAck(const CloudCommand& cmd, CommandStatus status, cons
         case CommandStatus::IR_UNKNOWN_CODE:        statusStr = "ir_unknown_code"; break;
         case CommandStatus::IR_MODULE_BUSY:         statusStr = "ir_module_busy"; break;
         case CommandStatus::IR_EXECUTE_FAILED:      statusStr = "ir_execute_failed"; break;
+        case CommandStatus::IR_STATE_DISABLED:      statusStr = "ir_state_disabled"; break;
         case CommandStatus::REJECTED_INVALID:
         case CommandStatus::REJECTED_OUT_OF_RANGE:
         default:                                    statusStr = "rejected"; break;
@@ -276,6 +285,11 @@ void CommandService::dispatchIrAction(const CloudCommand& cmd, CommandStatus val
     if (validation == CommandStatus::IR_UNKNOWN_CODE) {
         _rejected++; recordCommandId(cmd.command_id);
         sendAck(cmd, CommandStatus::IR_UNKNOWN_CODE, "unknown_ir_code");
+        return;
+    }
+    if (validation == CommandStatus::IR_STATE_DISABLED) {
+        _blocked++; recordCommandId(cmd.command_id);
+        sendAck(cmd, CommandStatus::IR_STATE_DISABLED, "state_disabled");
         return;
     }
     if (validation == CommandStatus::REJECTED_EXPIRED) {

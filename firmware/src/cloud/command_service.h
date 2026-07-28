@@ -32,7 +32,8 @@ enum class CommandStatus : uint8_t {
     IR_EXECUTED,         // §六: full 22H frame written to module (asked to emit once)
     IR_UNKNOWN_CODE,     // ir_action_id not found in registry
     IR_MODULE_BUSY,      // module busy / commandId recently executed
-    IR_EXECUTE_FAILED    // UART write short / other failure
+    IR_EXECUTE_FAILED,   // UART write short / other failure
+    IR_STATE_DISABLED    // v0.5.0: state registered but disabled (per-state kill switch)
 };
 
 // Incoming command structure (parsed from JSON)
