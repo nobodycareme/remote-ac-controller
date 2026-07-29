@@ -17,7 +17,19 @@ export interface Session {
   csrf: string;
   createdAt: number;
   lastAccess: number;
+  /**
+   * 到期时间（ms epoch）。
+   * 0 = 长期有效（persistent trust）：不因固定日期失效，仅由服务端撤销
+   *（删行 / revoke 接口 / 密码指纹变化）终止。>0 = 临时信任，到点即失效。
+   */
   expiresAt: number;
+  /** true 表示该会话为长期有效受信任会话（expiresAt=0 的语义化标志）。 */
+  persistent: boolean;
+}
+
+/** 长期信任的浏览器 Cookie 滚动续期窗口（每次合法访问刷新一次）。 */
+export function trustedCookieRollingMaxAgeSeconds(): number {
+  return Math.max(1, Number(config.TRUSTED_OWNER_SESSION_TTL_DAYS || 0)) * 86_400;
 }
 
 function guestSessionTtlMs(): number {
@@ -33,6 +45,9 @@ function sessionTtlMs(role: SessionRole): number {
 }
 
 export function sessionCookieMaxAgeSeconds(expiresAt: number, now = Date.now()): number {
+  // expiresAt=0 → 长期有效会话：Cookie 采用滚动续期窗口（TTL 天），
+  // 每次 /api/auth/session 命中后由路由层重设 Cookie 实现续期。
+  if (expiresAt === 0) return trustedCookieRollingMaxAgeSeconds();
   return Math.max(1, Math.floor((expiresAt - now) / 1000));
 }
 
@@ -197,6 +212,7 @@ export async function createSession(
   trusted: boolean;
   trustedLabel: string;
   expiresAt: number;
+  persistent: boolean;
 }> {
   await initPassword();
   const sessionId = uuid();
@@ -204,7 +220,10 @@ export async function createSession(
   const hash = sessionHash(sessionId);
   const now = Date.now();
   const user = role === 'owner' ? config.IR_OWNER_USER : 'guest';
-  const expiresAt = now + sessionTtlMs(role);
+  // Owner 受信任会话 = 长期有效（expiresAt=0 哨兵）：不因固定日期自动失效。
+  // 撤销途径：移除本机/全部信任（删行）、密码指纹变化（getSession/cleanup 删行）。
+  // Guest 仍为短期会话（SESSION_TTL_MIN）。
+  const expiresAt = role === 'owner' ? 0 : now + sessionTtlMs(role);
   const trustedLabel = role === 'owner' ? normalizeLabel(opts.trustedLabel) : '';
   const ownerPasswordFingerprint = role === 'owner' ? ownerCredentialFingerprint() : '';
   const session: Session = {
@@ -219,6 +238,7 @@ export async function createSession(
     createdAt: now,
     lastAccess: now,
     expiresAt,
+    persistent: role === 'owner',
   };
 
   const sdb = dbSessions();
@@ -228,21 +248,21 @@ export async function createSession(
     memoryFallback.set(sessionId, session);
   }
 
-  return { sessionId, csrf, role, user, trusted: role === 'owner', trustedLabel, expiresAt };
+  return { sessionId, csrf, role, user, trusted: role === 'owner', trustedLabel, expiresAt, persistent: role === 'owner' };
 }
 
 export async function loginOwner(
   password: string,
   opts: { trustedLabel?: string } = {},
-): Promise<{ sessionId: string; csrf: string; user: string; trusted: boolean; trustedLabel: string; expiresAt: number } | null> {
+): Promise<{ sessionId: string; csrf: string; user: string; trusted: boolean; trustedLabel: string; expiresAt: number; persistent: boolean } | null> {
   await initPassword();
   if (!config.IR_OWNER_PASSWORD) {
     return null;
   }
   const ok = await verifyPassword(password);
   if (!ok) return null;
-  const { sessionId, csrf, trustedLabel, expiresAt, trusted } = await createSession('owner', opts);
-  return { sessionId, csrf, user: config.IR_OWNER_USER, trusted, trustedLabel, expiresAt };
+  const { sessionId, csrf, trustedLabel, expiresAt, trusted, persistent } = await createSession('owner', opts);
+  return { sessionId, csrf, user: config.IR_OWNER_USER, trusted, trustedLabel, expiresAt, persistent };
 }
 
 export function getSession(sessionId?: string): Session | null {
@@ -253,10 +273,16 @@ export function getSession(sessionId?: string): Session | null {
     const row = sdb.get(sessionHash(sessionId));
     if (!row) return null;
     const now = Date.now();
-    const expiresAt = Number(row.expires_at || 0) > 0
-      ? Number(row.expires_at)
-      : Number(row.created_at || 0) + sessionTtlMs(row.role === 'owner' ? 'owner' : 'guest');
-    if (expiresAt <= now) {
+    const rawExpires = Number(row.expires_at || 0);
+    // owner + expires_at=0 → 长期有效（persistent）：不做固定日期判定。
+    // guest + expires_at=0 → 兼容旧行：按 created_at + guest TTL 推算。
+    const persistent = row.role === 'owner' && rawExpires === 0;
+    const expiresAt = persistent
+      ? 0
+      : rawExpires > 0
+        ? rawExpires
+        : Number(row.created_at || 0) + sessionTtlMs(row.role === 'owner' ? 'owner' : 'guest');
+    if (!persistent && expiresAt <= now) {
       sdb.delete(row.sid_hash);
       return null;
     }
@@ -294,14 +320,16 @@ export function getSession(sessionId?: string): Session | null {
       createdAt: row.created_at,
       lastAccess: now,
       expiresAt,
+      persistent,
     };
   }
 
   const s = memoryFallback.get(sessionId);
   if (!s) return null;
   const now = Date.now();
-  const expiresAt = s.expiresAt || (s.createdAt + sessionTtlMs(s.role));
-  if (expiresAt <= now) {
+  const persistent = s.role === 'owner' && s.expiresAt === 0;
+  const expiresAt = persistent ? 0 : (s.expiresAt || (s.createdAt + sessionTtlMs(s.role)));
+  if (!persistent && expiresAt <= now) {
     memoryFallback.delete(sessionId);
     return null;
   }
@@ -312,9 +340,12 @@ export function getSession(sessionId?: string): Session | null {
 export function startSessionCleanup(intervalMs = 10 * 60_000): void {
   setInterval(() => {
     try {
+      // 注意：expires_at=0 对 owner 表示"长期有效"，绝不能按 guest TTL 误删；
+      // 只有非 owner 的 expires_at=0 旧行才按 guest TTL 清理。
+      // owner 行的唯一自动失效途径是密码指纹变化（第三分支）。
       sessionDb().prepare(`DELETE FROM sessions
         WHERE (expires_at > 0 AND expires_at <= ?)
-           OR (expires_at = 0 AND created_at < ?)
+           OR (expires_at = 0 AND role <> 'owner' AND created_at < ?)
            OR (role='owner' AND owner_password_fingerprint <> ? AND owner_password_fingerprint <> '')`)
         .run(Date.now(), Date.now() - guestSessionTtlMs(), ownerCredentialFingerprint());
     } catch {

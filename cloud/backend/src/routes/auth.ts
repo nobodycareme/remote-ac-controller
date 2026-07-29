@@ -40,7 +40,10 @@ function sessionPayload(session: Session) {
     user: session.user,
     role: session.role,
     trusted: session.trusted,
-    trusted_expires_at: session.trusted ? session.expiresAt : null,
+    // 长期有效信任：trusted_persistent=true 且 trusted_expires_at=null。
+    // 仅临时信任（expiresAt>0）才返回具体到期时间。
+    trusted_persistent: session.trusted ? session.persistent : false,
+    trusted_expires_at: session.trusted && !session.persistent && session.expiresAt > 0 ? session.expiresAt : null,
     trusted_label: session.trustedLabel || null,
     csrf: session.csrf,
     ir_control: irControlForSession(session),
@@ -73,7 +76,8 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
       user: result.user,
       role: 'owner',
       trusted: true,
-      trusted_expires_at: result.expiresAt,
+      trusted_persistent: result.persistent,
+      trusted_expires_at: !result.persistent && result.expiresAt > 0 ? result.expiresAt : null,
       trusted_label: result.trustedLabel || null,
       csrf: result.csrf,
       ir_control: productionIrControlEnabled() ? 'armed' : 'disabled',
@@ -113,6 +117,12 @@ export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void
     const sid = req.cookies?.sid;
     const session = sid ? getSession(sid) : null;
     if (session) {
+      // 长期有效受信任会话：滚动续期浏览器 Cookie（同一 sid 重设 maxAge，
+      // 不创建新会话记录，不产生重复设备行）。服务端记录本身无固定到期，
+      // 撤销权始终在服务端（revoke 接口 / 密码指纹变化）。
+      if (session.persistent && sid) {
+        setSessionCookie(reply, sid, 0);
+      }
       reply.send(sessionPayload(session));
       return;
     }
