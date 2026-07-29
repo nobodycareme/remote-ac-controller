@@ -98,7 +98,7 @@ async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const res = await fetch(BASE + path, { ...opts, headers, credentials: 'include' });
   if (res.status === 401) {
     csrfToken = null;
-    throw new Error('unauthorized');
+    throw new ApiError('未登录或登录已过期', 401, 'unauthorized');
   }
   if (!res.ok) {
     // Read the body ONCE, then extract the structured envelope fields. Calling

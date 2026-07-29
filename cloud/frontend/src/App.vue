@@ -521,7 +521,21 @@ async function submitLogin() {
     toast('已为当前设备建立受信任会话。');
   } catch (e: any) {
     const ae = e as ApiError;
-    loginMessage.value = `绑定失败：${ae?.errorCode ? '[' + ae.errorCode + '] ' : ''}${ae?.message || e?.message || ''}`;
+    // 中文友好提示映射（不再暴露 errorCode / 英文原文）
+    const msg = String(ae?.message || e?.message || '');
+    let friendly = '登录失败，请稍后重试';
+    if (/unauthorized/i.test(msg) || ae?.errorCode === 'invalid_credentials') {
+      friendly = '密码不正确，请重试';
+    } else if (ae?.errorCode === 'csrf_invalid') {
+      friendly = '会话已过期，请刷新页面后重试';
+    } else if (ae?.errorCode === 'origin_denied') {
+      friendly = '请求来源不被允许';
+    } else if (ae?.errorCode === 'session_expired') {
+      friendly = '会话已过期，请重新登录';
+    } else if (ae?.errorCode === 'too_many_requests' || ae?.status === 429) {
+      friendly = '尝试次数过多，请稍后再试';
+    }
+    loginMessage.value = friendly;
   } finally {
     loginBusy.value = false;
   }
