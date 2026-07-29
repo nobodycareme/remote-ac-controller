@@ -216,8 +216,7 @@ describe('computeCanFireRealIr', () => {
   it('T31 全条件满足 → true', () => {
     expect(computeCanFireRealIr(base)).toBe(true);
   });
-  it('T32 任一条件不满足 → false（逐项验证）', () => {
-    expect(computeCanFireRealIr({ ...base, irArmed: false })).toBe(false);
+  it('T32 任一条件不满足 → false（逐项验证，irArmed 已永久开启不再是不满足条件）', () => {
     expect(computeCanFireRealIr({ ...base, online: false })).toBe(false);
     expect(computeCanFireRealIr({ ...base, mqttConnected: false })).toBe(false);
     expect(computeCanFireRealIr({ ...base, trustedOwner: false })).toBe(false);
