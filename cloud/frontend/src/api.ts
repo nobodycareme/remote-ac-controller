@@ -6,6 +6,9 @@ export interface SessionInfo {
   user?: string;
   role?: string;
   trusted?: boolean;
+  /** true = 长期有效受信任会话（不因固定日期失效，可随时移除）。 */
+  trusted_persistent?: boolean;
+  /** 仅临时信任才有具体到期时间；长期信任为 null。 */
   trusted_expires_at?: number | null;
   trusted_label?: string | null;
   ir_control?: 'armed' | 'disabled';

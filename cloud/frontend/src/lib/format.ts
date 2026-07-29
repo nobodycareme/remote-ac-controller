@@ -39,6 +39,64 @@ export function relativeTime(ts: number | null | undefined, now: number = Date.n
   return `${Math.floor(s / 86400)} 天前`;
 }
 
+// ===== 受信任设备：User-Agent → 中文人类可读设备信息 =====
+
+export interface DeviceInfo {
+  /** 设备类型中文名：Windows 电脑 / Mac 电脑 / iPhone / iPad / Android 手机 / Android 平板 / Linux 电脑 / 未知设备 */
+  device: string;
+  /** 浏览器中文名：Microsoft Edge / Opera / Google Chrome / Mozilla Firefox / Safari / 微信 / 浏览器 */
+  browser: string;
+}
+
+/**
+ * 从 User-Agent 提取人类可读设备信息。
+ * 浏览器识别顺序（规格第八节，Edg 必须先于 Chrome）：
+ *   微信内置 → Edg/ → OPR/ → Chrome/ → Firefox/ → Version/+Safari/ → 浏览器
+ * 设备识别顺序：iPhone → iPad → Android(Mobile/平板) → Windows NT → Macintosh → Linux → 未知设备
+ * 注意：Windows NT 10.0 无法可靠区分 Win10/Win11，统一显示"Windows 电脑"。
+ */
+export function parseUserAgent(ua: string | null | undefined): DeviceInfo {
+  const s = String(ua ?? '');
+
+  let browser = '浏览器';
+  if (/MicroMesse/i.test(s)) browser = '微信'; // 微信内置浏览器（含 120 字符截断后的 MicroMesse）
+  else if (/Edg\//.test(s)) browser = 'Microsoft Edge';
+  else if (/OPR\//.test(s)) browser = 'Opera';
+  else if (/Chrome\//.test(s)) browser = 'Google Chrome';
+  else if (/Firefox\//.test(s)) browser = 'Mozilla Firefox';
+  else if (/Version\//.test(s) && /Safari\//.test(s)) browser = 'Safari';
+
+  let device = '未知设备';
+  if (/iPhone/.test(s)) device = 'iPhone';
+  else if (/iPad/.test(s)) device = 'iPad';
+  else if (/Android/.test(s)) device = /Mobile/.test(s) ? 'Android 手机' : 'Android 平板';
+  else if (/Windows NT/.test(s)) device = 'Windows 电脑';
+  else if (/Macintosh/.test(s)) device = 'Mac 电脑';
+  else if (/Linux/.test(s)) device = 'Linux 电脑';
+
+  return { device, browser };
+}
+
+export interface TrustStatusInput {
+  revoked?: boolean;
+  persistent?: boolean;
+  expiresAt?: number | null;
+}
+
+/**
+ * 信任状态显示规则（规格第十节，顺序固定）：
+ * revoked → 已撤销；persistent → 长期有效；expiresAt>0 → 有效至 YYYY-MM-DD HH:mm；否则 → 状态未知。
+ * createdAt / trustedAt / lastLoginAt 一律不得传入 expiresAt。
+ */
+export function trustStatusText(input: TrustStatusInput): string {
+  if (input.revoked) return '已撤销';
+  if (input.persistent) return '长期有效';
+  if (input.expiresAt !== null && input.expiresAt !== undefined && Number(input.expiresAt) > 0) {
+    return `有效至 ${formatTimestamp(input.expiresAt)}`;
+  }
+  return '状态未知';
+}
+
 /** days_mask（bit0=周一 … bit6=周日）→ 人类可读。 */
 export function daysMaskText(mask: number): string {
   if (mask === 127) return '每天';

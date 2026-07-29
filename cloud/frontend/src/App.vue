@@ -48,6 +48,8 @@ import {
   stateChipText,
   groupStatesByMode,
   computeCanFireRealIr,
+  parseUserAgent,
+  trustStatusText,
 } from './lib/format';
 
 declare const __APP_BUILD_ID__: string;
@@ -387,9 +389,18 @@ const humNow = computed(() => dashboard.value?.latest_telemetry?.humidity_pct ??
 const rssiNow = computed(() => dashboard.value?.latest_telemetry?.wifi_rssi_dbm ?? null);
 const fwVer = computed(() => dashboard.value?.firmware_version ?? '--');
 const mqttBack = computed(() => dashboard.value?.mqtt_backend_connected ?? false);
-const trustedLabel = computed(() => sessionInfo.value?.trusted_label || '当前设备');
+// 受信任设备：原始 UA 仅用于折叠诊断区；主卡片显示中文解析结果。
+// trusted_label 为空时回退到本机 navigator.userAgent（当前设备场景等价）。
+const trustedRawLabel = computed(() => sessionInfo.value?.trusted_label || '');
+const trustedDevice = computed(() => parseUserAgent(trustedRawLabel.value || navigator.userAgent));
 const trustedExpiresAt = computed(() => sessionInfo.value?.trusted_expires_at ?? null);
-const ownerControlState = computed(() => (dashboard.value?.ir_armed ? '可发送指令' : '只读'));
+const trustedPersistent = computed(() => sessionInfo.value?.trusted_persistent === true);
+// 显示规则（规格第十节）：revoked→已撤销 / persistent→长期有效 / expiresAt→有效至 / 否则→状态未知。
+const trustedStatusText = computed(() =>
+  trustStatusText({ persistent: trustedPersistent.value, expiresAt: trustedExpiresAt.value }),
+);
+const trustedStatusHint = computed(() => (trustedPersistent.value ? '可随时移除' : '到期后需重新登录'));
+const ownerControlState = computed(() => (dashboard.value?.ir_armed ? '已开放' : '未开放'));
 const lastSeenTs = computed(() => dashboard.value?.last_seen_at ?? null);
 
 // 首页 Hero「最近发送」：最近一条指令映射到状态目录（只描述发送行为，不声称空调实际状态）
@@ -912,12 +923,33 @@ onBeforeUnmount(() => {
 
           <div class="card" v-if="isTrustedOwner">
             <h3><span class="card-title-icon"><AppIcon name="shield" :size="16" /></span>受信任设备</h3>
-            <div class="kv-grid">
-              <div><span>当前设备</span><strong>{{ trustedLabel }}</strong></div>
-              <div><span>信任到期</span><strong>{{ formatTimestamp(trustedExpiresAt) }}</strong></div>
-              <div><span>控制状态</span><strong :class="dashboard?.ir_armed ? 'gate-ok' : 'gate-bad'">{{ ownerControlState }}</strong></div>
-              <div><span>可用状态</span><strong>{{ enabledStates.length }} / {{ acStates.length }}</strong></div>
+            <!-- 主卡只显示中文解析结果，完整 UA 仅在下方折叠诊断区（规格第七/九节） -->
+            <div class="kv-grid trust-grid">
+              <div>
+                <span>这台设备</span>
+                <strong class="trust-device-name">{{ trustedDevice.device }}</strong>
+                <em class="kv-sub">{{ trustedDevice.browser }}</em>
+              </div>
+              <div>
+                <span>信任状态</span>
+                <strong class="gate-ok">{{ trustedStatusText }}</strong>
+                <em class="kv-sub">{{ trustedStatusHint }}</em>
+              </div>
+              <div>
+                <span>控制权限</span>
+                <strong :class="dashboard?.ir_armed ? 'gate-ok' : 'gate-bad'">{{ ownerControlState }}</strong>
+                <em class="kv-sub">{{ dashboard?.ir_armed ? '可以控制空调' : '生产开关未开启' }}</em>
+              </div>
+              <div>
+                <span>可用控制</span>
+                <strong>{{ enabledStates.length }} 种空调状态</strong>
+                <em class="kv-sub">制冷 · 制热 · 除湿 · 电源</em>
+              </div>
             </div>
+            <details class="diag ua-diag" v-if="trustedRawLabel">
+              <summary>诊断信息（原始浏览器标识）</summary>
+              <code class="ua-raw">{{ trustedRawLabel }}</code>
+            </details>
           </div>
 
           <div class="card" v-else>
