@@ -1,4 +1,4 @@
-# Infrastructure
+﻿# Infrastructure
 .env
 .env.*
 *.local
@@ -23,7 +23,7 @@ node_modules/
 dist/
 .cache/
 
-# Frontend tools — keep scripts in repo, ignore local validation artifacts
+# Frontend tools 鈥?keep scripts in repo, ignore local validation artifacts
 frontend/tools/screenshots/
 frontend/dist/
 
@@ -39,3 +39,6 @@ Thumbs.db
 *.secret
 private/
 deploy/secrets.env
+
+# Tool scripts with credentials
+tools/mqtt_verify.js
