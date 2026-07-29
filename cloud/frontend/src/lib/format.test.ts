@@ -16,6 +16,8 @@ import {
   availabilityHuman,
   computeCanFireRealIr,
   rssiHuman,
+  parseUserAgent,
+  trustStatusText,
 } from './format';
 
 // ---------- formatTimestamp（防"整页空白"回归：observed_at 是 number，禁 .slice）----------
@@ -220,5 +222,79 @@ describe('computeCanFireRealIr', () => {
     expect(computeCanFireRealIr({ ...base, mqttConnected: false })).toBe(false);
     expect(computeCanFireRealIr({ ...base, trustedOwner: false })).toBe(false);
     expect(computeCanFireRealIr({ ...base, busy: true })).toBe(false);
+  });
+});
+
+// ---------- 受信任设备：UA 解析（规格第八节，Edg 必须先于 Chrome） ----------
+describe('parseUserAgent', () => {
+  const WIN_EDGE =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 Edg/126.0.2592.87';
+  const WIN_CHROME =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+  const MAC_SAFARI =
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15';
+  const IPHONE_SAFARI =
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
+  const IPAD_SAFARI =
+    'Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
+  const ANDROID_PHONE =
+    'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36';
+  const ANDROID_TABLET =
+    'Mozilla/5.0 (Linux; Android 14; SM-X910) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+  const LINUX_FIREFOX = 'Mozilla/5.0 (X11; Linux x86_64; rv:127.0) Gecko/20100101 Firefox/127.0';
+  const WIN_OPERA =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 OPR/111.0.0.0';
+
+  it('T33 Windows + Edge：Edg/ 优先于 Chrome/，设备为 Windows 电脑（不得声称 Win11）', () => {
+    expect(parseUserAgent(WIN_EDGE)).toEqual({ device: 'Windows 电脑', browser: 'Microsoft Edge' });
+  });
+  it('T34 Windows + Chrome', () => {
+    expect(parseUserAgent(WIN_CHROME)).toEqual({ device: 'Windows 电脑', browser: 'Google Chrome' });
+  });
+  it('T35 Windows + Opera：OPR/ 优先于 Chrome/', () => {
+    expect(parseUserAgent(WIN_OPERA)).toEqual({ device: 'Windows 电脑', browser: 'Opera' });
+  });
+  it('T36 Mac + Safari：Version/+Safari/ 组合', () => {
+    expect(parseUserAgent(MAC_SAFARI)).toEqual({ device: 'Mac 电脑', browser: 'Safari' });
+  });
+  it('T37 iPhone / iPad Safari', () => {
+    expect(parseUserAgent(IPHONE_SAFARI)).toEqual({ device: 'iPhone', browser: 'Safari' });
+    expect(parseUserAgent(IPAD_SAFARI)).toEqual({ device: 'iPad', browser: 'Safari' });
+  });
+  it('T38 Android 手机（Mobile）/ Android 平板（无 Mobile）', () => {
+    expect(parseUserAgent(ANDROID_PHONE)).toEqual({ device: 'Android 手机', browser: 'Google Chrome' });
+    expect(parseUserAgent(ANDROID_TABLET)).toEqual({ device: 'Android 平板', browser: 'Google Chrome' });
+  });
+  it('T39 Linux + Firefox', () => {
+    expect(parseUserAgent(LINUX_FIREFOX)).toEqual({ device: 'Linux 电脑', browser: 'Mozilla Firefox' });
+  });
+  it('T40 空 / null / 无法识别 → 未知设备 + 浏览器，不抛异常', () => {
+    expect(parseUserAgent('')).toEqual({ device: '未知设备', browser: '浏览器' });
+    expect(parseUserAgent(null)).toEqual({ device: '未知设备', browser: '浏览器' });
+    expect(parseUserAgent(undefined)).toEqual({ device: '未知设备', browser: '浏览器' });
+    expect(parseUserAgent('curl/8.4.0')).toEqual({ device: '未知设备', browser: '浏览器' });
+  });
+});
+
+// ---------- 受信任设备：信任状态文案（规格第十节，顺序固定） ----------
+describe('trustStatusText', () => {
+  it('T41 revoked → 已撤销（优先级最高，即使 persistent 同时为 true）', () => {
+    expect(trustStatusText({ revoked: true })).toBe('已撤销');
+    expect(trustStatusText({ revoked: true, persistent: true })).toBe('已撤销');
+    expect(trustStatusText({ revoked: true, expiresAt: Date.now() + 86400000 })).toBe('已撤销');
+  });
+  it('T42 persistent → 长期有效（不显示任何日期）', () => {
+    expect(trustStatusText({ persistent: true })).toBe('长期有效');
+    expect(trustStatusText({ persistent: true, expiresAt: 0 })).toBe('长期有效');
+  });
+  it('T43 expiresAt>0 → 有效至 YYYY-MM-DD HH:mm', () => {
+    const ts = new Date(2027, 6, 29, 15, 30).getTime();
+    expect(trustStatusText({ expiresAt: ts })).toBe('有效至 2027-07-29 15:30');
+  });
+  it('T44 无任何有效字段 → 状态未知（不得用 createdAt 猜测）', () => {
+    expect(trustStatusText({})).toBe('状态未知');
+    expect(trustStatusText({ expiresAt: 0 })).toBe('状态未知');
+    expect(trustStatusText({ expiresAt: null })).toBe('状态未知');
+    expect(trustStatusText({ persistent: false, expiresAt: -1 })).toBe('状态未知');
   });
 });
