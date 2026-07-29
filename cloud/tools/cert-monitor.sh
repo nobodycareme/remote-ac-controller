@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # cert-monitor.sh — checks expiry of the two public TLS certs and warns if < N days.
 #   - ac.example.com:443      (Let's Encrypt YE1 web cert, DNS-01)
-#   - mqtt.example.com:8883   (local-CA broker leaf cert)
+#   - mqtt.example.com:443    (local-CA broker leaf cert via nginx stream SNI passthrough)
 # Exit code 0 = all OK; 2 = at least one cert within WARNING window; 3 = expired.
 # Intended to run from a systemd timer / cron daily. Low-risk, read-only (no server changes).
 set -u
@@ -28,7 +28,8 @@ check() {
 
 rc=0
 check ac.example.com 443 ac.example.com WEB;   r1=$?
-check mqtt.example.com 8883 mqtt.example.com MQTT; r2=$?
+# 2026-07-29: public 8883 closed (security hardening 2026-07-20); probe production path 443 (nginx stream SNI passthrough)
+check mqtt.example.com 443 mqtt.example.com MQTT; r2=$?
 
 for r in "$r1" "$r2"; do
   if [ "$r" -gt "$rc" ]; then rc="$r"; fi
