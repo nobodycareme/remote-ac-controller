@@ -30,6 +30,25 @@ import {
   type AutomationExecution,
 } from './api';
 import TrendChart from './components/TrendChart.vue';
+import AppIcon from './components/AppIcon.vue';
+import ClimateHero from './components/ClimateHero.vue';
+import WeatherCard from './components/WeatherCard.vue';
+import ThermostatBar from './components/ThermostatBar.vue';
+import ActivityTimeline from './components/ActivityTimeline.vue';
+import EmptyState from './components/EmptyState.vue';
+import {
+  DAY_LABELS,
+  MODE_LABELS,
+  formatTimestamp,
+  relativeTime,
+  daysMaskText,
+  buildDaysMask,
+  validateScheduleForm,
+  validateRuleThresholds,
+  stateChipText,
+  groupStatesByMode,
+  computeCanFireRealIr,
+} from './lib/format';
 
 declare const __APP_BUILD_ID__: string;
 declare const __APP_GIT_COMMIT__: string;
@@ -47,6 +66,25 @@ onErrorCaptured((err: any) => {
   return false;
 });
 
+// ===== 视图导航（轻量状态切换，无路由库） =====
+type ViewName = 'home' | 'control' | 'schedule' | 'automation' | 'data' | 'settings' | 'more';
+const currentView = ref<ViewName>('home');
+function go(v: ViewName) {
+  currentView.value = v;
+  try { window.scrollTo({ top: 0 }); } catch { /* ignore */ }
+}
+const NAV_ITEMS: { view: ViewName; label: string; icon: string }[] = [
+  { view: 'home', label: '首页', icon: 'home' },
+  { view: 'control', label: '控制', icon: 'remote' },
+  { view: 'schedule', label: '定时', icon: 'schedule' },
+  { view: 'automation', label: '自动化', icon: 'automation' },
+];
+const DESKTOP_EXTRA: { view: ViewName; label: string; icon: string }[] = [
+  { view: 'data', label: '数据', icon: 'chart' },
+  { view: 'settings', label: '设置', icon: 'settings' },
+];
+
+// ===== 核心数据 =====
 const sessionInfo = ref<SessionInfo | null>(null);
 const dashboard = ref<Dashboard | null>(null);
 const history = ref<{ t: number; temperature_c: number; humidity_pct: number }[]>([]);
@@ -60,20 +98,30 @@ const loginPassword = ref('');
 const loginBusy = ref(false);
 const ownerBusy = ref(false);
 const loginMessage = ref('');
-const ownerMessage = ref('');
 const showLoginModal = ref(false);
 const showFireConfirm = ref(false);
 const showRevokeCurrentConfirm = ref(false);
 const showRevokeAllConfirm = ref(false);
 
-// ===== v0.5.0 全状态控制 / 定时 / 温控 =====
+// Toast（aria-live 通知）
+const toastMsg = ref('');
+let toastTimer: any = null;
+function toast(msg: string) {
+  toastMsg.value = msg;
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toastMsg.value = ''; }, 6000);
+}
+
+// ===== 全状态控制 / 定时 / 温控 =====
 const acStates = ref<AcStateInfo[]>([]);
-const pendingState = ref<AcStateInfo | null>(null); // 待确认发射的状态
+const pendingState = ref<AcStateInfo | null>(null);
 const showStateManager = ref(false);
+const controlModeFilter = ref<'all' | 'off' | 'cool' | 'dry' | 'heat'>('all');
 const schedules = ref<AcSchedule[]>([]);
 const tempRule = ref<TemperatureRule | null>(null);
 const executions = ref<AutomationExecution[]>([]);
 const showScheduleForm = ref(false);
+const editingScheduleId = ref<number | null>(null);
 const scheduleForm = ref({ name: '', state_id: '', time_hhmm: '07:30', days: [true, true, true, true, true, true, true], one_shot: false });
 const scheduleBusy = ref(false);
 const scheduleMessage = ref('');
@@ -82,43 +130,53 @@ const ruleForm = ref({ enabled: false, on_threshold_c: 28, off_threshold_c: 26, 
 const ruleBusy = ref(false);
 const ruleMessage = ref('');
 
-const DAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
-const MODE_LABELS: Record<string, string> = { cool: '制冷', dry: '除湿', heat: '制热', off: '电源' };
-const MODE_ICONS: Record<string, string> = { cool: '❄️', dry: '💧', heat: '☀️', off: '⏻' };
-const FAN_LABELS: Record<string, string> = { auto: '自动风', turbo: '超强风', quiet: '静音风' };
+const MODE_ICON_NAMES: Record<string, string> = { cool: 'snow', dry: 'drop', heat: 'sun', off: 'power' };
 
 const isOwner = computed(() => sessionInfo.value?.role === 'owner');
 const stateGroups = computed(() => {
-  const order = ['off', 'cool', 'dry', 'heat'];
-  const groups: { mode: string; label: string; icon: string; states: AcStateInfo[] }[] = [];
-  for (const m of order) {
-    const list = acStates.value.filter((s) => s.mode === m);
-    if (list.length) groups.push({ mode: m, label: MODE_LABELS[m] ?? m, icon: MODE_ICONS[m] ?? '', states: list });
-  }
-  return groups;
+  const filtered = controlModeFilter.value === 'all'
+    ? acStates.value
+    : acStates.value.filter((s) => s.mode === controlModeFilter.value);
+  return groupStatesByMode(filtered).map((g) => ({ ...g, icon: MODE_ICON_NAMES[g.mode] ?? 'info' }));
 });
 const enabledStates = computed(() => acStates.value.filter((s) => s.enabled));
+const availableModeFilters = computed(() => {
+  const modes = new Set(acStates.value.map((s) => s.mode));
+  const out: { key: 'all' | 'off' | 'cool' | 'dry' | 'heat'; label: string; icon: string }[] = [{ key: 'all', label: '全部', icon: 'control' }];
+  for (const m of ['cool', 'dry', 'heat', 'off'] as const) {
+    if (modes.has(m)) out.push({ key: m, label: MODE_LABELS[m] ?? m, icon: MODE_ICON_NAMES[m] });
+  }
+  return out;
+});
+
+// 快捷控制（首页 ≤4）：关机 + 常用制冷 + 强冷 + 除湿，缺位则顺位补齐
+const quickControls = computed(() => {
+  const enabled = enabledStates.value;
+  const picks: AcStateInfo[] = [];
+  const off = enabled.find((s) => s.mode === 'off');
+  const coolCommon = enabled.find((s) => s.mode === 'cool' && s.temperature === 26 && s.fan === 'auto') ?? enabled.find((s) => s.mode === 'cool' && s.fan === 'auto') ?? enabled.find((s) => s.mode === 'cool');
+  const coolTurbo = enabled.find((s) => s.mode === 'cool' && s.fan === 'turbo');
+  const dry = enabled.find((s) => s.mode === 'dry');
+  for (const c of [coolCommon, coolTurbo, dry, off]) if (c && !picks.includes(c)) picks.push(c);
+  for (const s of enabled) {
+    if (picks.length >= 4) break;
+    if (!picks.includes(s)) picks.push(s);
+  }
+  return picks.slice(0, 4);
+});
 
 function stateName(id: string): string {
   return acStates.value.find((s) => s.stateId === id)?.displayName ?? id;
 }
 
-function stateChip(s: AcStateInfo): string {
-  const parts: string[] = [];
-  if (s.fan) parts.push(FAN_LABELS[s.fan] ?? s.fan);
-  if (s.swingVertical && s.swingHorizontal) parts.push('双向扫风');
-  else if (s.swingVertical) parts.push('上下扫风');
-  else if (s.swingHorizontal) parts.push('左右扫风');
-  return parts.join(' · ');
+function quickSub(s: AcStateInfo): string {
+  if (s.mode === 'off') return '发送关机指令';
+  return stateChipText(s) || (MODE_LABELS[s.mode] ?? s.mode);
 }
 
-function daysMaskText(mask: number): string {
-  if (mask === 127) return '每天';
-  if (mask === 31) return '工作日';
-  if (mask === 96) return '周末';
-  const out: string[] = [];
-  for (let i = 0; i < 7; i++) if (mask & (1 << i)) out.push('周' + DAY_LABELS[i]);
-  return out.join(' ');
+function quickName(s: AcStateInfo): string {
+  if (s.mode === 'off') return '关机';
+  return `${MODE_LABELS[s.mode] ?? s.mode} ${s.temperature}℃`;
 }
 
 async function loadAcStates() {
@@ -142,7 +200,7 @@ async function loadTempRule() {
 
 async function loadExecutions() {
   try {
-    executions.value = (await fetchAutomationExecutions(20)).executions;
+    executions.value = (await fetchAutomationExecutions(30)).executions;
   } catch { /* ignore */ }
 }
 
@@ -163,41 +221,69 @@ async function toggleStateEnabled(s: AcStateInfo) {
     const idx = acStates.value.findIndex((x) => x.stateId === s.stateId);
     if (idx >= 0) acStates.value[idx] = r.state;
   } catch (e: any) {
-    ownerMessage.value = `状态开关失败：${e?.message || ''}`;
+    toast(`状态开关保存失败：${e?.message || ''}`);
   }
 }
 
-function openScheduleForm() {
+// ===== 定时任务表单（新建 / 编辑复用同一抽屉） =====
+function daysFromMask(mask: number): boolean[] {
+  return Array.from({ length: 7 }, (_, i) => !!(mask & (1 << i)));
+}
+
+function openScheduleForm(edit?: AcSchedule) {
   scheduleMessage.value = '';
-  scheduleForm.value = {
-    name: '',
-    state_id: enabledStates.value.find((s) => s.powerOn)?.stateId ?? '',
-    time_hhmm: '07:30',
-    days: [true, true, true, true, true, true, true],
-    one_shot: false,
-  };
+  if (edit) {
+    editingScheduleId.value = edit.id;
+    scheduleForm.value = {
+      name: edit.name || '',
+      state_id: edit.state_id,
+      time_hhmm: edit.time_hhmm,
+      days: daysFromMask(edit.days_mask),
+      one_shot: !!edit.one_shot,
+    };
+  } else {
+    editingScheduleId.value = null;
+    scheduleForm.value = {
+      name: '',
+      state_id: enabledStates.value.find((s) => s.powerOn)?.stateId ?? '',
+      time_hhmm: '07:30',
+      days: [true, true, true, true, true, true, true],
+      one_shot: false,
+    };
+  }
   showScheduleForm.value = true;
 }
 
 async function submitSchedule() {
   const f = scheduleForm.value;
-  let mask = 0;
-  f.days.forEach((d, i) => { if (d) mask |= 1 << i; });
-  if (!f.state_id || !mask || !/^([01]\d|2[0-3]):[0-5]\d$/.test(f.time_hhmm)) {
-    scheduleMessage.value = '请完整填写时间（HH:MM）、状态与星期。';
+  const err = validateScheduleForm(f);
+  if (err) {
+    scheduleMessage.value = err;
     return;
   }
+  const mask = buildDaysMask(f.days);
   scheduleBusy.value = true;
   scheduleMessage.value = '';
   try {
-    await createSchedule({
-      name: f.name || `${f.time_hhmm} ${stateName(f.state_id)}`,
-      state_id: f.state_id,
-      time_hhmm: f.time_hhmm,
-      days_mask: mask,
-      one_shot: f.one_shot,
-    });
+    if (editingScheduleId.value !== null) {
+      await updateSchedule(editingScheduleId.value, {
+        name: f.name || `${f.time_hhmm} ${stateName(f.state_id)}`,
+        state_id: f.state_id,
+        time_hhmm: f.time_hhmm,
+        days_mask: mask,
+        one_shot: f.one_shot,
+      });
+    } else {
+      await createSchedule({
+        name: f.name || `${f.time_hhmm} ${stateName(f.state_id)}`,
+        state_id: f.state_id,
+        time_hhmm: f.time_hhmm,
+        days_mask: mask,
+        one_shot: f.one_shot,
+      });
+    }
     showScheduleForm.value = false;
+    editingScheduleId.value = null;
     await loadSchedules();
   } catch (e: any) {
     scheduleMessage.value = `保存失败：${e?.message || ''}`;
@@ -212,7 +298,7 @@ async function toggleSchedule(s: AcSchedule) {
     await updateSchedule(s.id, { enabled: !s.enabled });
     await loadSchedules();
   } catch (e: any) {
-    scheduleMessage.value = `更新失败：${e?.message || ''}`;
+    toast(`更新失败：${e?.message || ''}`);
   }
 }
 
@@ -222,10 +308,11 @@ async function removeSchedule(s: AcSchedule) {
     await deleteSchedule(s.id);
     await loadSchedules();
   } catch (e: any) {
-    scheduleMessage.value = `删除失败：${e?.message || ''}`;
+    toast(`删除失败：${e?.message || ''}`);
   }
 }
 
+// ===== 温控规则 =====
 function openRuleEditor() {
   const r = tempRule.value;
   ruleForm.value = {
@@ -241,8 +328,9 @@ function openRuleEditor() {
 
 async function submitRule() {
   const f = ruleForm.value;
-  if (!(f.on_threshold_c > f.off_threshold_c)) {
-    ruleMessage.value = '开启阈值必须高于关闭阈值（滞回区间）。';
+  const err = validateRuleThresholds(f.on_threshold_c, f.off_threshold_c);
+  if (err) {
+    ruleMessage.value = err;
     return;
   }
   ruleBusy.value = true;
@@ -264,13 +352,13 @@ async function submitRule() {
   }
 }
 
+// ===== 派生状态 =====
 const availabilityClass = computed(() => {
   const a = dashboard.value?.availability;
   if (a === 'online') return 'pill online';
   if (a === 'offline') return 'pill offline';
   return 'pill warn';
 });
-
 const availabilityText = computed(() => {
   const a = dashboard.value?.availability;
   if (a === 'online') return '在线';
@@ -280,11 +368,13 @@ const availabilityText = computed(() => {
 
 const isTrustedOwner = computed(() => sessionInfo.value?.role === 'owner' && sessionInfo.value?.trusted === true);
 const canFireRealIr = computed(() =>
-  !!dashboard.value?.ir_armed &&
-  !!dashboard.value?.online &&
-  !!dashboard.value?.mqtt_backend_connected &&
-  isTrustedOwner.value &&
-  !ownerBusy.value
+  computeCanFireRealIr({
+    irArmed: !!dashboard.value?.ir_armed,
+    online: !!(dashboard.value as any)?.online,
+    mqttConnected: !!dashboard.value?.mqtt_backend_connected,
+    trustedOwner: isTrustedOwner.value,
+    busy: ownerBusy.value,
+  })
 );
 
 const settings = computed(() => (dashboard.value as any)?.settings ?? null);
@@ -294,38 +384,23 @@ const staleThresholdS = computed(() => (settings.value?.stale_threshold_ms ?? 0)
 const offlineThresholdS = computed(() => (settings.value?.offline_threshold_ms ?? 0) / 1000);
 const tempNow = computed(() => dashboard.value?.latest_telemetry?.temperature_c ?? null);
 const humNow = computed(() => dashboard.value?.latest_telemetry?.humidity_pct ?? null);
+const rssiNow = computed(() => dashboard.value?.latest_telemetry?.wifi_rssi_dbm ?? null);
 const fwVer = computed(() => dashboard.value?.firmware_version ?? '--');
 const mqttBack = computed(() => dashboard.value?.mqtt_backend_connected ?? false);
 const trustedLabel = computed(() => sessionInfo.value?.trusted_label || '当前设备');
 const trustedExpiresAt = computed(() => sessionInfo.value?.trusted_expires_at ?? null);
-const ownerControlState = computed(() => dashboard.value?.ir_armed ? '可发射' : '只读');
-const lastSeen = computed(() => {
-  const t = dashboard.value?.last_seen_at;
-  if (!t) return '--';
-  const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
-  if (s < 60) return `${s}s ago`;
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  return `${Math.floor(s / 3600)}h ago`;
+const ownerControlState = computed(() => (dashboard.value?.ir_armed ? '可发送指令' : '只读'));
+const lastSeenTs = computed(() => dashboard.value?.last_seen_at ?? null);
+
+// 首页 Hero 底部提示：温控自动化 / 定时任务概况（人类可读）
+const heroHint = computed(() => {
+  const bits: string[] = [];
+  if (tempRule.value?.enabled) bits.push(`温控自动化运行中（≥${tempRule.value.on_threshold_c}℃ 自动开机）`);
+  const activeSchedules = schedules.value.filter((s) => s.enabled).length;
+  if (activeSchedules > 0) bits.push(`${activeSchedules} 个定时任务已启用`);
+  if (!bits.length) bits.push('暂无启用的自动化');
+  return bits.join(' · ');
 });
-
-function formatTimestamp(ts: number | string | null | undefined): string {
-  if (ts === null || ts === undefined || ts === '') return '--';
-  const n = typeof ts === 'string' ? Number(ts) : ts;
-  if (!Number.isFinite(n) || n <= 0) return '--';
-  const d = new Date(n);
-  if (Number.isNaN(d.getTime())) return '--';
-  const p = (x: number) => String(x).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
-}
-
-function weatherText(code: number): string {
-  const m: Record<number, string> = {
-    0: '晴', 1: '大致晴朗', 2: '局部多云', 3: '阴', 45: '雾', 48: '雾凇',
-    51: '小雨', 53: '小雨', 55: '中雨', 61: '小雨', 63: '中雨', 65: '大雨',
-    71: '小雪', 73: '中雪', 75: '大雪', 80: '阵雨', 95: '雷阵雨',
-  };
-  return m[code] ?? '未知';
-}
 
 function applyTheme() {
   document.documentElement.setAttribute('data-theme', theme.value);
@@ -338,6 +413,7 @@ function toggleTheme() {
   applyTheme();
 }
 
+// ===== 数据加载 =====
 async function loadSession() {
   try {
     sessionInfo.value = await fetchSession();
@@ -349,9 +425,7 @@ async function loadSession() {
 async function loadDashboard() {
   try {
     dashboard.value = await fetchDashboard();
-  } catch {
-    /* ignore */
-  }
+  } catch { /* ignore */ }
 }
 
 async function loadWeather() {
@@ -367,18 +441,14 @@ async function loadHistory() {
   try {
     const r = await fetchTelemetryHistory(historyRange.value);
     history.value = r.points;
-  } catch {
-    /* ignore */
-  }
+  } catch { /* ignore */ }
 }
 
 async function loadEvents() {
   try {
     const r = await fetchEvents();
     events.value = r.events;
-  } catch {
-    /* ignore */
-  }
+  } catch { /* ignore */ }
 }
 
 async function refreshAll() {
@@ -413,6 +483,7 @@ function onWs(type: string, payload: any) {
   }
 }
 
+// ===== 登录 / 信任 / 发射 =====
 async function openLoginModal() {
   loginMessage.value = '';
   loginPassword.value = '';
@@ -427,7 +498,7 @@ async function submitLogin() {
     showLoginModal.value = false;
     loginPassword.value = '';
     await loadDashboard();
-    loginMessage.value = '已为当前手机建立受信任会话。';
+    toast('已为当前设备建立受信任会话。');
   } catch (e: any) {
     const ae = e as ApiError;
     loginMessage.value = `绑定失败：${ae?.errorCode ? '[' + ae.errorCode + '] ' : ''}${ae?.message || e?.message || ''}`;
@@ -439,19 +510,18 @@ async function submitLogin() {
 async function confirmFireIr() {
   const target = pendingState.value;
   if (!target || !canFireRealIr.value) {
-    ownerMessage.value = '当前不可发射。';
+    toast('当前不可发送红外指令。');
     showFireConfirm.value = false;
     return;
   }
   showFireConfirm.value = false;
   ownerBusy.value = true;
-  ownerMessage.value = '';
   try {
     const r = await sendIrAction(target.stateId);
-    ownerMessage.value = `已下发「${target.displayName}」命令 ${String(r.command_id).slice(0, 8)}，等待设备回执。`;
+    toast(`已发送「${target.displayName}」红外指令（${String(r.command_id).slice(0, 8)}），请留意空调动作。`);
   } catch (e: any) {
     const ae = e as ApiError;
-    ownerMessage.value = `未发射：${ae?.errorCode ? '[' + ae.errorCode + '] ' : ''}${ae?.message || e?.message || ''}`;
+    toast(`指令未发送：${ae?.errorCode ? '[' + ae.errorCode + '] ' : ''}${ae?.message || e?.message || ''}`);
   } finally {
     ownerBusy.value = false;
     pendingState.value = null;
@@ -463,13 +533,12 @@ async function confirmFireIr() {
 async function confirmRevokeCurrent() {
   showRevokeCurrentConfirm.value = false;
   ownerBusy.value = true;
-  ownerMessage.value = '';
   try {
     await revokeTrustedDevice();
     await refreshAll();
-    ownerMessage.value = '当前设备信任已移除。';
+    toast('当前设备信任已移除。');
   } catch (e: any) {
-    ownerMessage.value = `撤销失败：${e?.message || ''}`;
+    toast(`撤销失败：${e?.message || ''}`);
   } finally {
     ownerBusy.value = false;
   }
@@ -478,13 +547,25 @@ async function confirmRevokeCurrent() {
 async function confirmRevokeAll() {
   showRevokeAllConfirm.value = false;
   ownerBusy.value = true;
-  ownerMessage.value = '';
   try {
     const r = await revokeAllTrustedDevices();
     await refreshAll();
-    ownerMessage.value = `已撤销 ${r.revoked} 个受信任会话。`;
+    toast(`已撤销 ${r.revoked} 个受信任会话。`);
   } catch (e: any) {
-    ownerMessage.value = `撤销失败：${e?.message || ''}`;
+    toast(`撤销失败：${e?.message || ''}`);
+  } finally {
+    ownerBusy.value = false;
+  }
+}
+
+async function doLogout() {
+  ownerBusy.value = true;
+  try {
+    await logout();
+    await refreshAll();
+    toast('已退出 Owner 登录。');
+  } catch (e: any) {
+    toast(`退出失败：${e?.message || ''}`);
   } finally {
     ownerBusy.value = false;
   }
@@ -513,6 +594,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (pollTimer) clearInterval(pollTimer);
   if (weatherTimer) clearInterval(weatherTimer);
+  if (toastTimer) clearTimeout(toastTimer);
   ws.value?.close();
 });
 </script>
@@ -521,7 +603,7 @@ onBeforeUnmount(() => {
   <div>
     <div v-if="fatalError" class="error-fallback">
       <div class="error-card">
-        <h2>Page render error</h2>
+        <h2>页面渲染出错</h2>
         <p class="error-msg">{{ fatalError.message }}</p>
         <p class="error-meta">
           Error id: {{ fatalError.id }}<br />
@@ -530,246 +612,406 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div v-else>
-      <div class="topbar">
-        <div class="title">云端空调管家</div>
+    <div v-else class="app-shell">
+      <!-- ===== 顶栏 ===== -->
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-logo"><AppIcon name="snow" :size="22" /></span>
+          <div>
+            <div class="brand-name">云端空调管家</div>
+            <div class="brand-sub">卧室 · 海信空调</div>
+          </div>
+        </div>
+        <nav class="desktop-nav" aria-label="主导航">
+          <button
+            v-for="n in [...NAV_ITEMS, ...DESKTOP_EXTRA]"
+            :key="n.view"
+            :class="{ active: currentView === n.view }"
+            :aria-current="currentView === n.view ? 'page' : undefined"
+            @click="go(n.view)"
+          >
+            <AppIcon :name="n.icon" :size="16" />{{ n.label }}
+          </button>
+        </nav>
         <div class="topbar-actions">
-          <span v-if="isTrustedOwner" class="session-chip">受信任设备</span>
-          <button v-if="!isTrustedOwner" class="icon-btn" @click="openLoginModal">绑定当前手机</button>
-          <button class="icon-btn" @click="toggleTheme">{{ theme === 'dark' ? 'Light' : 'Dark' }}</button>
+          <span v-if="isTrustedOwner" class="session-chip"><AppIcon name="shield" :size="13" />受信任</span>
+          <button v-else class="mini-link" style="margin-left: 0" @click="openLoginModal">Owner 登录</button>
+          <button class="icon-btn" :aria-label="theme === 'dark' ? '切换为浅色主题' : '切换为深色主题'" @click="toggleTheme">
+            <AppIcon :name="theme === 'dark' ? 'sun' : 'moon'" :size="18" />
+          </button>
         </div>
-      </div>
+      </header>
 
-      <div class="card">
-        <div class="row">
-          <span :class="availabilityClass">{{ availabilityText }}</span>
-          <span class="sub">最后活动：{{ lastSeen }}</span>
-          <span class="sub">后端 MQTT：{{ mqttBack ? 'ON' : 'OFF' }}</span>
-        </div>
-        <div class="row" style="margin-top: 8px">
-          <span class="sub">固件：{{ fwVer }}</span>
-          <span class="sub">构建：{{ BUILD_ID }}</span>
-        </div>
-      </div>
+      <!-- ============ 首页 ============ -->
+      <main v-if="currentView === 'home'" class="view" aria-label="首页">
+        <ClimateHero
+          :temperature="tempNow"
+          :humidity="humNow"
+          :availability="dashboard?.availability"
+          :last-seen-at="lastSeenTs"
+          :rssi="rssiNow"
+        >
+          <template #foot>{{ heroHint }}</template>
+        </ClimateHero>
 
-      <div class="dashboard-grid">
-        <div class="card">
-          <h3>室内状态</h3>
-          <div class="grid2">
-            <div>
-              <div class="sub">温度</div>
-              <div class="big">{{ tempNow !== null ? tempNow.toFixed(1) : '--' }}<span style="font-size: 18px">℃</span></div>
+        <div class="home-grid">
+          <div class="span-2">
+            <div class="section-title"><AppIcon name="remote" :size="18" />快捷控制</div>
+            <div v-if="!isTrustedOwner" class="readonly-note">
+              <AppIcon name="lock" :size="16" />当前为只读模式，空调控制仅对受信任的 Owner 设备开放。<a class="inline-link" @click="openLoginModal">去登录</a>
             </div>
-            <div>
-              <div class="sub">湿度</div>
-              <div class="big">{{ humNow !== null ? humNow.toFixed(0) : '--' }}<span style="font-size: 18px">%</span></div>
-            </div>
-          </div>
-          <div class="sub" style="margin-top: 8px">RSSI {{ dashboard?.latest_telemetry?.wifi_rssi_dbm ?? '--' }} dBm</div>
-        </div>
-
-        <div class="card" v-if="weatherCurrent?.current">
-          <h3>室外天气</h3>
-          <div class="row">
-            <div>
-              <div class="big">{{ weatherCurrent.current.temperatureC.toFixed(1) }}<span style="font-size: 18px">℃</span></div>
-              <div class="sub">{{ weatherText(weatherCurrent.current.weatherCode) }}</div>
-            </div>
-            <div style="text-align: right">
-              <div class="sub">湿度 {{ weatherCurrent.current.relativeHumidity }}%</div>
-              <div class="sub">风速 {{ weatherCurrent.current.windSpeed }} km/h</div>
-              <div class="sub">观测 {{ formatTimestamp(weatherCurrent.observedAt) }}</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card" v-else-if="weatherError">
-          <h3>室外天气</h3>
-          <div class="sub">{{ weatherError }}</div>
-        </div>
-
-        <div class="card card-full">
-          <h3>
-            空调控制面板
-            <span v-if="isTrustedOwner" class="panel-chip ok">受信任 · {{ ownerControlState }}</span>
-            <span v-else class="panel-chip">只读模式</span>
-            <button v-if="isOwner" class="mini-link" @click="showStateManager = !showStateManager">{{ showStateManager ? '完成' : '管理' }}</button>
-          </h3>
-
-          <div v-if="!isTrustedOwner" class="badge-ir">当前为只读模式，真实红外只对受信任手机开放。<a class="inline-link" @click="openLoginModal">绑定当前手机</a></div>
-
-          <div v-for="g in stateGroups" :key="g.mode" class="mode-group">
-            <div class="mode-title">{{ g.icon }} {{ g.label }}</div>
-            <div class="state-grid">
+            <div class="quick-grid" v-if="quickControls.length">
               <button
-                v-for="s in g.states"
+                v-for="s in quickControls"
                 :key="s.stateId"
-                class="state-btn"
-                :class="{ 'state-off': s.mode === 'off', 'state-disabled': !s.enabled }"
-                :disabled="!s.enabled || (isTrustedOwner && (!canFireRealIr || ownerBusy))"
+                class="quick-btn"
+                :class="'q-' + s.mode"
+                :disabled="isTrustedOwner && (!canFireRealIr || ownerBusy)"
+                :aria-label="'发送' + s.displayName + '红外指令'"
                 @click="requestFire(s)"
               >
-                <span class="state-temp" v-if="s.temperature > 0">{{ s.temperature }}<small>℃</small></span>
-                <span class="state-temp" v-else>关机</span>
-                <span class="state-sub">{{ stateChip(s) || (s.mode === 'off' ? '一键关闭' : '') }}</span>
-                <span v-if="showStateManager && isOwner" class="state-switch" @click.stop="toggleStateEnabled(s)">
-                  {{ s.enabled ? '已启用' : '已停用' }}
-                </span>
+                <span class="q-icon"><AppIcon :name="MODE_ICON_NAMES[s.mode] ?? 'info'" :size="18" /></span>
+                <span class="q-name">{{ quickName(s) }}</span>
+                <span class="q-sub">{{ quickSub(s) }}</span>
               </button>
             </div>
+            <div v-else class="sub">状态目录加载中…</div>
           </div>
 
-          <div v-if="isTrustedOwner" class="owner-grid" style="margin-top: 14px">
-            <div><span>当前设备</span><strong>{{ trustedLabel }}</strong></div>
-            <div><span>信任到期</span><strong>{{ formatTimestamp(trustedExpiresAt) }}</strong></div>
-            <div><span>控制状态</span><strong :class="dashboard?.ir_armed ? 'gate-ok' : 'gate-bad'">{{ ownerControlState }}</strong></div>
-            <div><span>可用状态</span><strong>{{ enabledStates.length }} / {{ acStates.length }}</strong></div>
+          <WeatherCard :weather="weatherCurrent" :error="weatherError" />
+
+          <div class="card">
+            <h3><span class="card-title-icon"><AppIcon name="timeline" :size="16" /></span>最近活动</h3>
+            <ActivityTimeline :executions="executions" :state-name="stateName" :limit="4" />
+            <button class="ghost" style="width: 100%; margin-top: 8px" @click="go('data')">查看全部活动与趋势</button>
           </div>
-          <div class="btn-row owner-actions" v-if="isTrustedOwner">
-            <button class="ghost" :disabled="ownerBusy" @click="showRevokeCurrentConfirm = true">移除本机信任</button>
-            <button class="ghost" :disabled="ownerBusy" @click="showRevokeAllConfirm = true">移除全部信任</button>
+
+          <div class="card span-2">
+            <h3><span class="card-title-icon"><AppIcon name="chart" :size="16" /></span>温湿度趋势（近 1 小时）</h3>
+            <TrendChart :points="history" :height="190" />
           </div>
-          <div v-if="ownerMessage" class="sub owner-message">{{ ownerMessage }}</div>
+        </div>
+      </main>
+
+      <!-- ============ 控制页 ============ -->
+      <main v-else-if="currentView === 'control'" class="view" aria-label="空调控制">
+        <div class="section-title">
+          <AppIcon name="remote" :size="18" />空调控制
+          <span v-if="isTrustedOwner" class="panel-chip ok">{{ ownerControlState }}</span>
+          <span v-else class="panel-chip">只读</span>
+          <button v-if="isOwner" class="mini-link" @click="showStateManager = !showStateManager">{{ showStateManager ? '完成' : '管理' }}</button>
         </div>
 
-        <div class="card card-full">
-          <h3>
-            定时任务
-            <button v-if="isOwner" class="mini-link" @click="openScheduleForm">+ 新增</button>
-          </h3>
-          <div v-if="schedules.length === 0" class="sub">暂无定时任务{{ isOwner ? '，点击右上角新增。' : '。' }}</div>
-          <div v-for="s in schedules" :key="s.id" class="schedule-row" :class="{ 'row-disabled': !s.enabled }">
-            <div class="schedule-main">
-              <span class="schedule-time">{{ s.time_hhmm }}</span>
-              <span class="schedule-name">{{ stateName(s.state_id) }}</span>
-              <span class="schedule-days">{{ daysMaskText(s.days_mask) }}{{ s.one_shot ? ' · 单次' : '' }}</span>
-            </div>
-            <div class="schedule-actions" v-if="isOwner">
-              <button class="mini-toggle" :class="{ on: !!s.enabled }" @click="toggleSchedule(s)">{{ s.enabled ? '开' : '关' }}</button>
-              <button class="mini-del" @click="removeSchedule(s)">删除</button>
-            </div>
-            <div class="schedule-actions" v-else>
-              <span class="sub">{{ s.enabled ? '启用' : '停用' }}</span>
-            </div>
-          </div>
-          <div v-if="scheduleMessage" class="err">{{ scheduleMessage }}</div>
+        <div v-if="!isTrustedOwner" class="readonly-note">
+          <AppIcon name="lock" :size="16" />只读模式：可查看全部状态，发送指令需要 Owner 在受信任设备上操作。<a class="inline-link" @click="openLoginModal">去登录</a>
+        </div>
+        <div v-else-if="!canFireRealIr" class="readonly-note">
+          <AppIcon name="warning" :size="16" />
+          <span>
+            当前不可发送：<template v-if="!dashboard?.ir_armed">红外发射未开启（服务器安全开关）。</template>
+            <template v-else-if="!dashboard?.online">设备离线。</template>
+            <template v-else-if="!mqttBack">云端与设备的通道未连接。</template>
+            <template v-else>请稍候。</template>
+          </span>
         </div>
 
-        <div class="card card-full">
-          <h3>
-            温度自动化
-            <span class="panel-chip" :class="tempRule?.enabled ? 'ok' : ''">{{ tempRule?.enabled ? '运行中' : '已停用' }}</span>
-            <button v-if="isOwner" class="mini-link" @click="openRuleEditor">设置</button>
-          </h3>
-          <div v-if="tempRule" class="rule-summary">
+        <div class="segmented" role="tablist" aria-label="按模式筛选">
+          <button
+            v-for="f in availableModeFilters"
+            :key="f.key"
+            role="tab"
+            :aria-selected="controlModeFilter === f.key"
+            :class="{ active: controlModeFilter === f.key }"
+            @click="controlModeFilter = f.key"
+          >
+            <AppIcon :name="f.icon" :size="15" />{{ f.label }}
+          </button>
+        </div>
+
+        <div v-for="g in stateGroups" :key="g.mode" class="mode-group">
+          <div class="mode-title" :class="'m-' + g.mode"><AppIcon :name="g.icon" :size="15" />{{ g.label }}</div>
+          <div class="state-grid">
+            <button
+              v-for="s in g.states"
+              :key="s.stateId"
+              class="state-btn"
+              :class="{ 'state-off': s.mode === 'off', 'state-disabled': !s.enabled, ['tile-' + s.mode]: true }"
+              :disabled="!s.enabled || (isTrustedOwner && (!canFireRealIr || ownerBusy))"
+              :aria-label="'发送' + s.displayName + '红外指令'"
+              @click="requestFire(s)"
+            >
+              <span class="state-mode-icon"><AppIcon :name="MODE_ICON_NAMES[s.mode] ?? 'info'" :size="16" /></span>
+              <span class="state-temp" v-if="s.temperature > 0">{{ s.temperature }}<small>℃</small></span>
+              <span class="state-temp" v-else>关机</span>
+              <span class="state-sub">{{ stateChipText(s) || (s.mode === 'off' ? '发送关机指令' : '') }}</span>
+              <span v-if="showStateManager && isOwner" class="state-switch" role="switch" :aria-checked="s.enabled" @click.stop="toggleStateEnabled(s)">
+                {{ s.enabled ? '已启用' : '已停用' }}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <p class="faint" style="margin-top: 16px; line-height: 1.6">
+          说明：点击后系统会通过云端向设备发送一次真实红外指令。红外为单向发送，网页无法确认空调是否实际响应，请留意空调动作。
+        </p>
+      </main>
+
+      <!-- ============ 定时页 ============ -->
+      <main v-else-if="currentView === 'schedule'" class="view" aria-label="定时任务">
+        <div class="section-title">
+          <AppIcon name="schedule" :size="18" />定时任务
+          <button v-if="isOwner" class="mini-link" @click="openScheduleForm()"><AppIcon name="plus" :size="13" /> 新增</button>
+        </div>
+
+        <div class="card">
+          <EmptyState
+            v-if="schedules.length === 0"
+            icon="schedule"
+            title="还没有定时任务"
+            :desc="isOwner ? '例如：工作日早上 7:30 自动制冷，晚上 23:00 自动关机。' : '设备主人尚未设置定时任务。'"
+            :action-text="isOwner ? '创建第一个定时任务' : undefined"
+            @action="openScheduleForm()"
+          />
+          <template v-else>
+            <div v-for="s in schedules" :key="s.id" class="schedule-row" :class="{ 'row-disabled': !s.enabled }">
+              <div class="schedule-main" @click="isOwner ? openScheduleForm(s) : undefined">
+                <div class="schedule-line1">
+                  <span class="schedule-time">{{ s.time_hhmm }}</span>
+                  <span class="schedule-name">{{ stateName(s.state_id) }}</span>
+                </div>
+                <span class="schedule-days">
+                  {{ daysMaskText(s.days_mask) }}{{ s.one_shot ? ' · 只执行一次' : '' }}
+                  <template v-if="s.last_fired_at"> · 上次执行 {{ relativeTime(s.last_fired_at) }}</template>
+                </span>
+              </div>
+              <div class="schedule-actions" v-if="isOwner">
+                <button class="mini-toggle" :class="{ on: !!s.enabled }" :aria-label="(s.enabled ? '停用' : '启用') + '定时任务 ' + s.time_hhmm" @click="toggleSchedule(s)">{{ s.enabled ? '开' : '关' }}</button>
+                <button class="mini-del" :aria-label="'删除定时任务 ' + s.time_hhmm" @click="removeSchedule(s)"><AppIcon name="trash" :size="14" /></button>
+              </div>
+              <div class="schedule-actions" v-else>
+                <span class="sub">{{ s.enabled ? '已启用' : '已停用' }}</span>
+              </div>
+            </div>
+          </template>
+        </div>
+        <p class="faint" style="line-height: 1.6">定时到点后由云端向设备发送红外指令；若设备离线则该次不执行并记录原因。</p>
+      </main>
+
+      <!-- ============ 自动化页 ============ -->
+      <main v-else-if="currentView === 'automation'" class="view" aria-label="温度自动化">
+        <div class="section-title">
+          <AppIcon name="automation" :size="18" />温度自动化
+          <span class="panel-chip" :class="tempRule?.enabled ? 'ok' : ''">{{ tempRule?.enabled ? '运行中' : '已停用' }}</span>
+          <button v-if="isOwner" class="mini-link" @click="openRuleEditor">设置</button>
+        </div>
+
+        <div class="card" v-if="tempRule">
+          <div class="rule-summary">
             <div class="rule-line">
               室温 ≥ <strong>{{ tempRule.on_threshold_c }}℃</strong> 自动开机（{{ stateName(tempRule.on_state_id) }}）；
               ≤ <strong>{{ tempRule.off_threshold_c }}℃</strong> 自动关机。
             </div>
-            <div class="sub" style="margin-top: 6px">
-              最短间隔 {{ Math.round(tempRule.min_interval_s / 60) }} 分钟 · 手动操作后暂停 {{ Math.round(tempRule.manual_suppress_s / 60) }} 分钟
-              <template v-if="tempRule.last_action">· 上次动作 {{ tempRule.last_action === 'on' ? '开机' : '关机' }} {{ formatTimestamp(tempRule.last_action_at) }}</template>
+          </div>
+          <ThermostatBar
+            :on-threshold="tempRule.on_threshold_c"
+            :off-threshold="tempRule.off_threshold_c"
+            :current-temp="tempNow"
+          />
+          <div class="sub" style="margin-top: 12px; line-height: 1.7">
+            安全机制：两次自动动作至少间隔 {{ Math.round(tempRule.min_interval_s / 60) }} 分钟；手动操作后 {{ Math.round(tempRule.manual_suppress_s / 60) }} 分钟内自动化暂停；室温取最近采样中位数并需连续确认。
+            <template v-if="tempRule.last_action">
+              <br />上次自动动作：{{ tempRule.last_action === 'on' ? '开机' : '关机' }}（{{ formatTimestamp(tempRule.last_action_at) }}）。
+            </template>
+          </div>
+        </div>
+        <div class="card" v-else><div class="sub">规则加载中…</div></div>
+
+        <div class="card">
+          <h3><span class="card-title-icon"><AppIcon name="timeline" :size="16" /></span>自动化执行记录</h3>
+          <ActivityTimeline :executions="executions" :state-name="stateName" :limit="10" show-absolute />
+        </div>
+      </main>
+
+      <!-- ============ 数据页 ============ -->
+      <main v-else-if="currentView === 'data'" class="view" aria-label="数据">
+        <div class="section-title"><AppIcon name="chart" :size="18" />数据</div>
+        <div class="card">
+          <h3><span class="card-title-icon"><AppIcon name="chart" :size="16" /></span>温湿度趋势</h3>
+          <div class="range-tabs" role="tablist" aria-label="时间范围">
+            <button v-for="r in ['1h', '6h', '24h', '7d']" :key="r" role="tab" :aria-selected="historyRange === r" :class="{ active: historyRange === r }" @click=";(historyRange = r), loadHistory()">{{ r }}</button>
+          </div>
+          <TrendChart :points="history" :height="260" />
+        </div>
+        <div class="card">
+          <h3><span class="card-title-icon"><AppIcon name="timeline" :size="16" /></span>全部自动化活动</h3>
+          <ActivityTimeline :executions="executions" :state-name="stateName" :limit="30" show-absolute />
+        </div>
+      </main>
+
+      <!-- ============ 更多页（移动端入口） ============ -->
+      <main v-else-if="currentView === 'more'" class="view" aria-label="更多">
+        <div class="section-title"><AppIcon name="info" :size="18" />更多</div>
+        <div class="more-list">
+          <button class="more-item" @click="go('data')">
+            <span class="mi-icon"><AppIcon name="chart" :size="20" /></span>数据与趋势
+            <span class="mi-chev"><AppIcon name="chevron" :size="16" /></span>
+          </button>
+          <button class="more-item" @click="go('settings')">
+            <span class="mi-icon"><AppIcon name="settings" :size="20" /></span>设置与诊断
+            <span class="mi-chev"><AppIcon name="chevron" :size="16" /></span>
+          </button>
+          <button class="more-item" @click="toggleTheme">
+            <span class="mi-icon"><AppIcon :name="theme === 'dark' ? 'sun' : 'moon'" :size="20" /></span>
+            切换为{{ theme === 'dark' ? '浅色' : '深色' }}主题
+          </button>
+        </div>
+      </main>
+
+      <!-- ============ 设置 / 诊断页 ============ -->
+      <main v-else class="view" aria-label="设置">
+        <div class="section-title"><AppIcon name="settings" :size="18" />设置与诊断</div>
+        <div class="settings-grid">
+          <div class="card">
+            <h3><span class="card-title-icon"><AppIcon name="device" :size="16" /></span>设备</h3>
+            <div class="kv-grid">
+              <div><span>设备状态</span><strong :class="dashboard?.availability === 'online' ? 'gate-ok' : 'gate-bad'">{{ availabilityText }}</strong></div>
+              <div><span>最后上报</span><strong>{{ relativeTime(lastSeenTs) }}</strong></div>
+              <div><span>固件版本</span><strong>{{ fwVer }}</strong></div>
+              <div><span>Wi-Fi 信号</span><strong>{{ rssiNow !== null ? rssiNow + ' dBm' : '--' }}</strong></div>
+              <div><span>云端通道</span><strong :class="mqttBack ? 'gate-ok' : 'gate-bad'">{{ mqttBack ? '已连接' : '未连接' }}</strong></div>
+              <div><span>红外控制</span><strong :class="dashboard?.ir_armed ? 'gate-ok' : 'gate-bad'">{{ dashboard?.ir_armed ? '已开启' : '已关闭' }}</strong></div>
+            </div>
+            <div class="sub" style="margin-top: 10px" v-if="settings">
+              采样 {{ samplePeriodS }}s · 上传 {{ publishPeriodS }}s · 陈旧阈值 {{ staleThresholdS }}s · 离线阈值 {{ offlineThresholdS }}s
             </div>
           </div>
-          <div v-else class="sub">规则加载中…</div>
-        </div>
 
-        <div class="card card-full" v-if="executions.length > 0">
-          <h3>自动化记录</h3>
-          <div v-for="e in executions.slice(0, 8)" :key="e.id" class="event">
-            <span class="t">{{ formatTimestamp(e.created_at) }}</span>
-            | {{ e.source === 'schedule' ? '定时' : '温控' }}
-            | {{ stateName(e.state_id) }}
-            | <span :class="e.status === 'dispatched' ? 'gate-ok' : 'gate-bad'">{{ e.status }}</span>
-            <template v-if="e.detail"> | {{ e.detail }}</template>
+          <div class="card" v-if="isTrustedOwner">
+            <h3><span class="card-title-icon"><AppIcon name="shield" :size="16" /></span>受信任设备</h3>
+            <div class="kv-grid">
+              <div><span>当前设备</span><strong>{{ trustedLabel }}</strong></div>
+              <div><span>信任到期</span><strong>{{ formatTimestamp(trustedExpiresAt) }}</strong></div>
+              <div><span>控制状态</span><strong :class="dashboard?.ir_armed ? 'gate-ok' : 'gate-bad'">{{ ownerControlState }}</strong></div>
+              <div><span>可用状态</span><strong>{{ enabledStates.length }} / {{ acStates.length }}</strong></div>
+            </div>
+          </div>
+
+          <div class="card" v-else>
+            <h3><span class="card-title-icon"><AppIcon name="lock" :size="16" /></span>访问权限</h3>
+            <p class="sub" style="line-height: 1.6">当前为只读访客模式。Owner 登录后本设备可被标记为受信任，用于发送空调控制指令。</p>
+            <button style="width: 100%" @click="openLoginModal">Owner 登录</button>
+          </div>
+
+          <div class="card grid-full" v-if="isOwner">
+            <details class="diag">
+              <summary>诊断信息（原始事件与回执）</summary>
+              <div class="sub" style="margin: 8px 0">构建 {{ BUILD_ID }} · 提交 {{ GIT_COMMIT.slice(0, 12) }}</div>
+              <div v-if="events.length === 0" class="sub">暂无事件</div>
+              <div v-for="e in events.slice(0, 12)" :key="e.id" class="event">
+                <span class="t">{{ new Date(e.created_at).toLocaleTimeString() }}</span> | {{ e.event_type }} | {{ e.message }}
+              </div>
+            </details>
+          </div>
+
+          <div class="card danger-zone grid-full" v-if="isTrustedOwner">
+            <h3><span class="card-title-icon"><AppIcon name="warning" :size="16" /></span>危险操作</h3>
+            <p class="sub" style="margin: 0 0 12px; line-height: 1.6">以下操作会立即影响设备的控制权限，请谨慎使用。</p>
+            <div class="btn-row">
+              <button class="ghost" :disabled="ownerBusy" @click="showRevokeCurrentConfirm = true">移除本机信任</button>
+              <button class="ghost" :disabled="ownerBusy" @click="showRevokeAllConfirm = true">移除全部信任</button>
+              <button class="danger" :disabled="ownerBusy" @click="doLogout">退出 Owner 登录</button>
+            </div>
           </div>
         </div>
-
-        <div class="card" v-if="settings">
-          <h3>运行参数</h3>
-          <div class="sub">采样 {{ samplePeriodS }}s | 上传 {{ publishPeriodS }}s</div>
-          <div class="sub">陈旧阈值 {{ staleThresholdS }}s | 离线阈值 {{ offlineThresholdS }}s</div>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>温湿度趋势</h3>
-        <div class="btn-row" style="margin-bottom: 10px">
-          <button class="ghost" v-for="r in ['1h', '6h', '24h', '7d']" :key="r" :style="historyRange === r ? 'border-color: var(--accent); color: var(--accent)' : ''" @click=";(historyRange = r), loadHistory()">{{ r }}</button>
-        </div>
-        <TrendChart :points="history" />
-      </div>
-
-      <div class="card">
-        <h3>事件 / 回执</h3>
-        <div v-if="events.length === 0" class="sub">暂无事件</div>
-        <div v-for="e in events.slice(0, 12)" :key="e.id" class="event">
-          <span class="t">{{ new Date(e.created_at).toLocaleTimeString() }}</span> | {{ e.event_type }} | {{ e.message }}
-        </div>
-      </div>
+      </main>
 
       <div class="footer-build">Build {{ BUILD_ID }} | Commit {{ GIT_COMMIT.slice(0, 12) }} | {{ BUILD_TS }}</div>
 
-      <div v-if="showLoginModal" class="modal-mask" @click.self="showLoginModal = false">
-        <div class="modal login-modal">
-          <h2>绑定当前手机</h2>
+      <!-- ===== 移动端底部导航 ===== -->
+      <nav class="bottom-nav" aria-label="底部导航">
+        <button
+          v-for="n in NAV_ITEMS"
+          :key="n.view"
+          :class="{ active: currentView === n.view }"
+          :aria-current="currentView === n.view ? 'page' : undefined"
+          @click="go(n.view)"
+        >
+          <AppIcon :name="n.icon" :size="21" />{{ n.label }}
+        </button>
+        <button :class="{ active: currentView === 'more' || currentView === 'data' || currentView === 'settings' }" @click="go('more')">
+          <AppIcon name="info" :size="21" />更多
+        </button>
+      </nav>
+
+      <!-- ===== Toast（aria-live 状态通知） ===== -->
+      <div class="toast-region" aria-live="polite" role="status">
+        <div v-if="toastMsg" class="toast">{{ toastMsg }}</div>
+      </div>
+
+      <!-- ===== 登录 ===== -->
+      <div v-if="showLoginModal" class="modal-mask drawer-mask" @click.self="showLoginModal = false">
+        <div class="modal login-modal" role="dialog" aria-modal="true" aria-label="Owner 登录">
+          <h2>Owner 登录</h2>
           <form @submit.prevent="submitLogin">
-            <label>Owner 密码</label>
-            <input v-model="loginPassword" type="password" autocomplete="current-password" />
-            <div class="sub login-help">验证后这台设备会保持受信任状态。</div>
-            <div v-if="loginMessage" class="err">{{ loginMessage }}</div>
+            <label for="owner-pass">Owner 密码</label>
+            <input id="owner-pass" v-model="loginPassword" type="password" autocomplete="current-password" />
+            <div class="sub login-help">验证后这台设备会保持受信任状态，可用于发送空调控制指令。</div>
+            <div v-if="loginMessage" class="err" aria-live="polite">{{ loginMessage }}</div>
             <div class="btn-row confirm-actions" style="margin-top: 14px">
               <button class="ghost" type="button" :disabled="loginBusy" @click="showLoginModal = false">取消</button>
-              <button class="ir" type="submit" :disabled="loginBusy || !loginPassword">绑定并信任</button>
+              <button type="submit" :disabled="loginBusy || !loginPassword">登录并信任本机</button>
             </div>
           </form>
         </div>
       </div>
 
-      <div v-if="showFireConfirm" class="modal-mask" @click.self="showFireConfirm = false; pendingState = null">
-        <div class="modal ir-confirm-modal">
-          <h2>确认发射</h2>
-          <p class="confirm-lead">即将发射：<strong>{{ pendingState?.displayName }}</strong></p>
+      <!-- ===== 发射确认 ===== -->
+      <div v-if="showFireConfirm" class="modal-mask drawer-mask" @click.self="showFireConfirm = false; pendingState = null">
+        <div class="modal ir-confirm-modal" role="dialog" aria-modal="true" aria-label="确认发送红外指令">
+          <h2>确认发送</h2>
+          <p class="confirm-lead">即将发送：<strong>{{ pendingState?.displayName }}</strong></p>
           <div class="confirm-copy">
             <ol>
-              <li>确认红外头正对空调接收窗。</li>
-              <li>本次会发射一次真实红外，系统不会自动重试。</li>
+              <li>系统会向设备发送一次真实红外指令，不会自动重试。</li>
+              <li>红外为单向发送，网页无法确认空调是否实际响应，请留意空调动作。</li>
             </ol>
           </div>
           <div class="btn-row confirm-actions">
             <button class="ghost" :disabled="ownerBusy" @click="showFireConfirm = false; pendingState = null">取消</button>
-            <button class="ir" :disabled="ownerBusy" @click="confirmFireIr">确认发射</button>
+            <button class="ir" :disabled="ownerBusy" @click="confirmFireIr">确认发送</button>
           </div>
         </div>
       </div>
 
-      <div v-if="showScheduleForm" class="modal-mask" @click.self="showScheduleForm = false">
-        <div class="modal ir-confirm-modal">
-          <h2>新增定时任务</h2>
+      <!-- ===== 定时任务编辑（抽屉） ===== -->
+      <div v-if="showScheduleForm" class="modal-mask drawer-mask" @click.self="showScheduleForm = false">
+        <div class="modal ir-confirm-modal" role="dialog" aria-modal="true" :aria-label="editingScheduleId !== null ? '编辑定时任务' : '新增定时任务'">
+          <h2>{{ editingScheduleId !== null ? '编辑定时任务' : '新增定时任务' }}</h2>
           <form @submit.prevent="submitSchedule">
-            <label>执行时间（每天 24 小时制）</label>
-            <input v-model="scheduleForm.time_hhmm" type="time" required />
-            <label>执行状态</label>
-            <select v-model="scheduleForm.state_id" class="modal-select" required>
+            <label for="sch-time">执行时间（24 小时制）</label>
+            <input id="sch-time" v-model="scheduleForm.time_hhmm" type="time" required />
+            <label for="sch-state">执行动作</label>
+            <select id="sch-state" v-model="scheduleForm.state_id" class="modal-select" required>
               <option v-for="s in enabledStates" :key="s.stateId" :value="s.stateId">{{ s.displayName }}</option>
             </select>
             <label>重复星期</label>
-            <div class="day-picker">
+            <div class="day-picker" role="group" aria-label="选择重复的星期">
               <button
                 v-for="(d, i) in DAY_LABELS"
                 :key="i"
                 type="button"
                 class="day-btn"
                 :class="{ on: scheduleForm.days[i] }"
+                :aria-pressed="scheduleForm.days[i]"
                 @click="scheduleForm.days[i] = !scheduleForm.days[i]"
               >{{ d }}</button>
             </div>
             <label class="check-line">
-              <input v-model="scheduleForm.one_shot" type="checkbox" style="width: auto" /> 只执行一次（触发后自动停用）
+              <input v-model="scheduleForm.one_shot" type="checkbox" /> 只执行一次（触发后自动停用）
             </label>
-            <label>备注（可选）</label>
-            <input v-model="scheduleForm.name" type="text" placeholder="如：早晨预冷" />
-            <div v-if="scheduleMessage" class="err">{{ scheduleMessage }}</div>
+            <label for="sch-name">备注（可选）</label>
+            <input id="sch-name" v-model="scheduleForm.name" type="text" placeholder="如：早晨预冷" />
+            <div v-if="scheduleMessage" class="err" aria-live="polite">{{ scheduleMessage }}</div>
             <div class="btn-row confirm-actions" style="margin-top: 14px">
               <button class="ghost" type="button" :disabled="scheduleBusy" @click="showScheduleForm = false">取消</button>
               <button class="ok" type="submit" :disabled="scheduleBusy">保存</button>
@@ -778,25 +1020,27 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <div v-if="showRuleEditor" class="modal-mask" @click.self="showRuleEditor = false">
-        <div class="modal ir-confirm-modal">
+      <!-- ===== 温控设置（抽屉） ===== -->
+      <div v-if="showRuleEditor" class="modal-mask drawer-mask" @click.self="showRuleEditor = false">
+        <div class="modal ir-confirm-modal" role="dialog" aria-modal="true" aria-label="温度自动化设置">
           <h2>温度自动化设置</h2>
           <form @submit.prevent="submitRule">
             <label class="check-line">
-              <input v-model="ruleForm.enabled" type="checkbox" style="width: auto" /> 启用温度自动化
+              <input v-model="ruleForm.enabled" type="checkbox" /> 启用温度自动化
             </label>
-            <label>开机阈值（室温 ≥ 此值自动开机）：{{ ruleForm.on_threshold_c }}℃</label>
-            <input v-model.number="ruleForm.on_threshold_c" type="range" min="24" max="34" step="0.5" />
-            <label>关机阈值（室温 ≤ 此值自动关机）：{{ ruleForm.off_threshold_c }}℃</label>
-            <input v-model.number="ruleForm.off_threshold_c" type="range" min="20" max="30" step="0.5" />
-            <label>自动开机状态</label>
-            <select v-model="ruleForm.on_state_id" class="modal-select">
+            <label for="rule-on">开机阈值（室温 ≥ 此值自动开机）：{{ ruleForm.on_threshold_c }}℃</label>
+            <input id="rule-on" v-model.number="ruleForm.on_threshold_c" type="range" min="24" max="34" step="0.5" aria-valuetext="开机阈值" />
+            <label for="rule-off">关机阈值（室温 ≤ 此值自动关机）：{{ ruleForm.off_threshold_c }}℃</label>
+            <input id="rule-off" v-model.number="ruleForm.off_threshold_c" type="range" min="20" max="30" step="0.5" aria-valuetext="关机阈值" />
+            <ThermostatBar :on-threshold="ruleForm.on_threshold_c" :off-threshold="ruleForm.off_threshold_c" :current-temp="tempNow" />
+            <label for="rule-state">自动开机执行的动作</label>
+            <select id="rule-state" v-model="ruleForm.on_state_id" class="modal-select">
               <option v-for="s in enabledStates.filter((x) => x.powerOn)" :key="s.stateId" :value="s.stateId">{{ s.displayName }}</option>
             </select>
             <div class="sub" style="margin-top: 8px; line-height: 1.6">
-              安全机制：两次自动动作至少间隔 10 分钟；你手动操作后 30 分钟内自动化暂停；温度取最近 3 次采样中位数并需连续两轮确认。
+              安全机制：两次自动动作至少间隔 10 分钟；你手动操作后 30 分钟内自动化暂停；室温取最近 3 次采样中位数并需连续两轮确认。
             </div>
-            <div v-if="ruleMessage" class="err">{{ ruleMessage }}</div>
+            <div v-if="ruleMessage" class="err" aria-live="polite">{{ ruleMessage }}</div>
             <div class="btn-row confirm-actions" style="margin-top: 14px">
               <button class="ghost" type="button" :disabled="ruleBusy" @click="showRuleEditor = false">取消</button>
               <button class="ok" type="submit" :disabled="ruleBusy">保存</button>
@@ -805,24 +1049,25 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
+      <!-- ===== 撤销信任确认 ===== -->
       <div v-if="showRevokeCurrentConfirm" class="modal-mask" @click.self="showRevokeCurrentConfirm = false">
-        <div class="modal ir-confirm-modal">
+        <div class="modal ir-confirm-modal" role="dialog" aria-modal="true" aria-label="撤销本机信任">
           <h2>撤销本机信任</h2>
-          <p class="confirm-lead">这台手机会回到只读状态。</p>
+          <p class="confirm-lead">这台设备会回到只读状态，不能再发送空调控制指令。</p>
           <div class="btn-row confirm-actions">
             <button class="ghost" :disabled="ownerBusy" @click="showRevokeCurrentConfirm = false">取消</button>
-            <button class="ir" :disabled="ownerBusy" @click="confirmRevokeCurrent">确认撤销</button>
+            <button class="danger" :disabled="ownerBusy" @click="confirmRevokeCurrent">确认撤销</button>
           </div>
         </div>
       </div>
 
       <div v-if="showRevokeAllConfirm" class="modal-mask" @click.self="showRevokeAllConfirm = false">
-        <div class="modal ir-confirm-modal">
+        <div class="modal ir-confirm-modal" role="dialog" aria-modal="true" aria-label="撤销全部信任">
           <h2>撤销全部信任</h2>
-          <p class="confirm-lead">所有受信任设备都会失效。</p>
+          <p class="confirm-lead">所有受信任设备都会失效，需要重新登录才能控制空调。</p>
           <div class="btn-row confirm-actions">
             <button class="ghost" :disabled="ownerBusy" @click="showRevokeAllConfirm = false">取消</button>
-            <button class="ir" :disabled="ownerBusy" @click="confirmRevokeAll">确认撤销</button>
+            <button class="danger" :disabled="ownerBusy" @click="confirmRevokeAll">确认撤销</button>
           </div>
         </div>
       </div>
