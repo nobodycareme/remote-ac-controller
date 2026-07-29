@@ -1,4 +1,4 @@
-# Private data — never track
+﻿# Private data 鈥?never track
 Private/
 Evidence/
 Deliverables/
@@ -32,6 +32,8 @@ venv/
 .env
 secrets.env
 secrets.h
+cloud_secrets.h
+secrets.env
 
 # SQLite databases
 *.sqlite3
