@@ -98,7 +98,13 @@ async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const res = await fetch(BASE + path, { ...opts, headers, credentials: 'include' });
   if (res.status === 401) {
     csrfToken = null;
-    throw new ApiError('未登录或登录已过期', 401, 'unauthorized');
+    // 401 也要读取 body 拿到真实的 error code（如 invalid_credentials），
+    // 否则所有 401 都会被折叠成统一的 "unauthorized"。
+    let body401: any = null;
+    try { body401 = await res.json(); } catch { /* ignore */ }
+    const code = (body401 && typeof body401 === 'object' && (body401.error || body401.errorCode)) || 'unauthorized';
+    const msg401 = (body401 && typeof body401 === 'object' && (body401.message || body401.error)) || '未登录或登录已过期';
+    throw new ApiError(String(msg401), 401, String(code));
   }
   if (!res.ok) {
     // Read the body ONCE, then extract the structured envelope fields. Calling
