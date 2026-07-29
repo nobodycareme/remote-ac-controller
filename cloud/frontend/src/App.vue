@@ -392,6 +392,15 @@ const trustedExpiresAt = computed(() => sessionInfo.value?.trusted_expires_at ??
 const ownerControlState = computed(() => (dashboard.value?.ir_armed ? '可发送指令' : '只读'));
 const lastSeenTs = computed(() => dashboard.value?.last_seen_at ?? null);
 
+// 首页 Hero「最近发送」：最近一条指令映射到状态目录（只描述发送行为，不声称空调实际状态）
+const lastSentText = computed(() => {
+  const cmd = dashboard.value?.recent_commands?.[0];
+  if (!cmd) return null;
+  const st = acStates.value.find((s) => s.stateId === cmd.action);
+  if (!st) return null;
+  return st.displayName;
+});
+
 // 首页 Hero 底部提示：温控自动化 / 定时任务概况（人类可读）
 const heroHint = computed(() => {
   const bits: string[] = [];
@@ -644,53 +653,64 @@ onBeforeUnmount(() => {
 
       <!-- ============ 首页 ============ -->
       <main v-if="currentView === 'home'" class="view" aria-label="首页">
-        <ClimateHero
-          :temperature="tempNow"
-          :humidity="humNow"
-          :availability="dashboard?.availability"
-          :last-seen-at="lastSeenTs"
-          :rssi="rssiNow"
-        >
-          <template #foot>{{ heroHint }}</template>
-        </ClimateHero>
-
-        <div class="home-grid">
-          <div class="span-2">
-            <div class="section-title"><AppIcon name="remote" :size="18" />快捷控制</div>
-            <div v-if="!isTrustedOwner" class="readonly-note">
-              <AppIcon name="lock" :size="16" />当前为只读模式，空调控制仅对受信任的 Owner 设备开放。<a class="inline-link" @click="openLoginModal">去登录</a>
-            </div>
-            <div class="quick-grid" v-if="quickControls.length">
-              <button
-                v-for="s in quickControls"
-                :key="s.stateId"
-                class="quick-btn"
-                :class="'q-' + s.mode"
-                :disabled="isTrustedOwner && (!canFireRealIr || ownerBusy)"
-                :aria-label="'发送' + s.displayName + '红外指令'"
-                @click="requestFire(s)"
-              >
-                <span class="q-icon"><AppIcon :name="MODE_ICON_NAMES[s.mode] ?? 'info'" :size="18" /></span>
-                <span class="q-name">{{ quickName(s) }}</span>
-                <span class="q-sub">{{ quickSub(s) }}</span>
-              </button>
-            </div>
-            <div v-else class="sub">状态目录加载中…</div>
-          </div>
-
+        <!-- 环境概览：气候卡与天气卡同级、同 Grid、等高 -->
+        <section class="overview-grid" aria-label="环境概览">
+          <ClimateHero
+            :temperature="tempNow"
+            :humidity="humNow"
+            :availability="dashboard?.availability"
+            :last-seen-at="lastSeenTs"
+            :rssi="rssiNow"
+            :last-sent="lastSentText"
+          >
+            <template #foot>{{ heroHint }}</template>
+          </ClimateHero>
           <WeatherCard :weather="weatherCurrent" :error="weatherError" />
+        </section>
 
-          <div class="card">
+        <!-- 快捷控制：独占整行 Section -->
+        <section class="quick-section" aria-label="快捷控制">
+          <div class="section-title"><AppIcon name="remote" :size="18" />快捷控制</div>
+          <div v-if="!isTrustedOwner" class="readonly-note">
+            <span class="rn-icon"><AppIcon name="lock" :size="16" /></span>
+            <span class="rn-text">当前为只读模式，空调控制仅对受信任的 Owner 设备开放。</span>
+            <a class="inline-link" @click="openLoginModal">去登录</a>
+          </div>
+          <div class="quick-grid" v-if="quickControls.length">
+            <button
+              v-for="s in quickControls"
+              :key="s.stateId"
+              class="quick-btn"
+              :class="'q-' + s.mode"
+              :disabled="isTrustedOwner && (!canFireRealIr || ownerBusy)"
+              :aria-label="'发送' + s.displayName + '红外指令'"
+              @click="requestFire(s)"
+            >
+              <span class="q-icon"><AppIcon :name="MODE_ICON_NAMES[s.mode] ?? 'info'" :size="18" /></span>
+              <span class="q-name">{{ quickName(s) }}</span>
+              <span class="q-sub">{{ quickSub(s) }}</span>
+            </button>
+          </div>
+          <div v-else class="sub">状态目录加载中…</div>
+        </section>
+
+        <!-- 洞察：活动卡与趋势卡同 Grid、等高 -->
+        <section class="insight-grid" aria-label="活动与趋势">
+          <div class="card activity-card">
             <h3><span class="card-title-icon"><AppIcon name="timeline" :size="16" /></span>最近活动</h3>
-            <ActivityTimeline :executions="executions" :state-name="stateName" :limit="4" />
-            <button class="ghost" style="width: 100%; margin-top: 8px" @click="go('data')">查看全部活动与趋势</button>
+            <div class="activity-scroll">
+              <ActivityTimeline :executions="executions" :state-name="stateName" :limit="4" />
+            </div>
+            <button class="ghost activity-foot" style="width: 100%" @click="go('data')">查看全部活动与趋势</button>
           </div>
 
-          <div class="card span-2">
+          <div class="card trend-card">
             <h3><span class="card-title-icon"><AppIcon name="chart" :size="16" /></span>温湿度趋势（近 1 小时）</h3>
-            <TrendChart :points="history" :height="190" />
+            <div class="chart-flex">
+              <TrendChart :points="history" fill />
+            </div>
           </div>
-        </div>
+        </section>
       </main>
 
       <!-- ============ 控制页 ============ -->
@@ -703,11 +723,13 @@ onBeforeUnmount(() => {
         </div>
 
         <div v-if="!isTrustedOwner" class="readonly-note">
-          <AppIcon name="lock" :size="16" />只读模式：可查看全部状态，发送指令需要 Owner 在受信任设备上操作。<a class="inline-link" @click="openLoginModal">去登录</a>
+          <span class="rn-icon"><AppIcon name="lock" :size="16" /></span>
+          <span class="rn-text">只读模式：可查看全部状态，发送指令需要 Owner 在受信任设备上操作。</span>
+          <a class="inline-link" @click="openLoginModal">去登录</a>
         </div>
         <div v-else-if="!canFireRealIr" class="readonly-note">
-          <AppIcon name="warning" :size="16" />
-          <span>
+          <span class="rn-icon"><AppIcon name="warning" :size="16" /></span>
+          <span class="rn-text">
             当前不可发送：<template v-if="!dashboard?.ir_armed">红外发射未开启（服务器安全开关）。</template>
             <template v-else-if="!dashboard?.online">设备离线。</template>
             <template v-else-if="!mqttBack">云端与设备的通道未连接。</template>
@@ -840,7 +862,9 @@ onBeforeUnmount(() => {
           <div class="range-tabs" role="tablist" aria-label="时间范围">
             <button v-for="r in ['1h', '6h', '24h', '7d']" :key="r" role="tab" :aria-selected="historyRange === r" :class="{ active: historyRange === r }" @click=";(historyRange = r), loadHistory()">{{ r }}</button>
           </div>
-          <TrendChart :points="history" :height="260" />
+          <div class="chart-area">
+            <TrendChart :points="history" fill />
+          </div>
         </div>
         <div class="card">
           <h3><span class="card-title-icon"><AppIcon name="timeline" :size="16" /></span>全部自动化活动</h3>
@@ -922,10 +946,9 @@ onBeforeUnmount(() => {
               <button class="danger" :disabled="ownerBusy" @click="doLogout">退出 Owner 登录</button>
             </div>
           </div>
+          <div class="build-note grid-full">云端空调管家 · 构建 {{ BUILD_ID }} · 提交 {{ GIT_COMMIT.slice(0, 12) }} · {{ BUILD_TS }}</div>
         </div>
       </main>
-
-      <div class="footer-build">Build {{ BUILD_ID }} | Commit {{ GIT_COMMIT.slice(0, 12) }} | {{ BUILD_TS }}</div>
 
       <!-- ===== 移动端底部导航 ===== -->
       <nav class="bottom-nav" aria-label="底部导航">

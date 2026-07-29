@@ -1,14 +1,24 @@
 <script setup lang="ts">
+/**
+ * 温湿度趋势图。
+ * - fill 模式：图表填满父容器剩余空间（父容器负责 min-height / height）；
+ * - 非 fill：使用固定 height（像素）；
+ * - 使用 ResizeObserver 监听容器实际尺寸变化（含主题切换、侧栏/分屏引发的容器变化），
+ *   不再依赖 window resize；卸载时解除监听并释放实例，防止重复初始化。
+ */
 import { ref, onMounted, onBeforeUnmount, watch, nextTick, computed } from 'vue';
 import * as echarts from 'echarts';
 
 const props = withDefaults(defineProps<{
   points: { t: number; temperature_c: number; humidity_pct: number }[];
   height?: number;
-}>(), { height: 240 });
+  fill?: boolean;
+}>(), { height: 240, fill: false });
 
 const el = ref<HTMLDivElement | null>(null);
 let chart: echarts.ECharts | null = null;
+let ro: ResizeObserver | null = null;
+let resizeRaf = 0;
 
 const hasData = computed(() => props.points.length > 0);
 
@@ -32,6 +42,7 @@ function render() {
     grid: { left: 40, right: 40, top: 30, bottom: 30 },
     tooltip: {
       trigger: 'axis',
+      confine: true,
       backgroundColor: c.tooltipBg,
       borderColor: c.axis,
       textStyle: { color: c.tooltipText, fontSize: 12 },
@@ -67,23 +78,31 @@ function render() {
   });
 }
 
-function resize() {
-  chart?.resize();
-  render();
+function scheduleResize() {
+  if (resizeRaf) cancelAnimationFrame(resizeRaf);
+  resizeRaf = requestAnimationFrame(() => {
+    resizeRaf = 0;
+    chart?.resize();
+    render();
+  });
 }
 
 onMounted(async () => {
   await nextTick();
-  if (el.value) {
+  if (el.value && !chart) {
     chart = echarts.init(el.value);
     render();
-    window.addEventListener('resize', resize);
+    ro = new ResizeObserver(scheduleResize);
+    ro.observe(el.value);
   }
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', resize);
+  if (resizeRaf) cancelAnimationFrame(resizeRaf);
+  ro?.disconnect();
+  ro = null;
   chart?.dispose();
+  chart = null;
 });
 
 watch(() => props.points, async () => {
@@ -94,8 +113,8 @@ defineExpose({ render });
 </script>
 
 <template>
-  <div>
-    <div v-show="hasData" ref="el" :style="{ width: '100%', height: height + 'px' }"></div>
+  <div :class="{ 'chart-fill': fill }" :style="fill ? undefined : { height: height + 'px' }">
+    <div v-show="hasData" ref="el" style="width: 100%; height: 100%"></div>
     <div v-if="!hasData" class="chart-empty">暂无温湿度数据，稍候会自动刷新。</div>
   </div>
 </template>

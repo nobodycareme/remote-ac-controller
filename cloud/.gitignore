@@ -23,6 +23,10 @@ node_modules/
 dist/
 .cache/
 
+# Frontend tools — keep scripts in repo, ignore local validation artifacts
+frontend/tools/screenshots/
+frontend/dist/
+
 # IDE
 .vscode/
 .idea/
