@@ -400,7 +400,7 @@ const trustedStatusText = computed(() =>
   trustStatusText({ persistent: trustedPersistent.value, expiresAt: trustedExpiresAt.value }),
 );
 const trustedStatusHint = computed(() => (trustedPersistent.value ? '可随时移除' : '到期后需重新登录'));
-const ownerControlState = computed(() => (dashboard.value?.ir_armed ? '已开放' : '未开放'));
+const ownerControlState = computed(() => '已开放');
 const lastSeenTs = computed(() => dashboard.value?.last_seen_at ?? null);
 
 // 首页 Hero「最近发送」：最近一条指令映射到状态目录（只描述发送行为，不声称空调实际状态）
@@ -583,7 +583,7 @@ async function doLogout() {
   try {
     await logout();
     await refreshAll();
-    toast('已退出 Owner 登录。');
+    toast('已退出登录。');
   } catch (e: any) {
     toast(`退出失败：${e?.message || ''}`);
   } finally {
@@ -655,7 +655,7 @@ onBeforeUnmount(() => {
         </nav>
         <div class="topbar-actions">
           <span v-if="isTrustedOwner" class="session-chip"><AppIcon name="shield" :size="13" />受信任</span>
-          <button v-else class="mini-link" style="margin-left: 0" @click="openLoginModal">Owner 登录</button>
+          <button v-else class="mini-link" style="margin-left: 0" @click="openLoginModal">登录</button>
           <button class="icon-btn" :aria-label="theme === 'dark' ? '切换为浅色主题' : '切换为深色主题'" @click="toggleTheme">
             <AppIcon :name="theme === 'dark' ? 'sun' : 'moon'" :size="18" />
           </button>
@@ -741,8 +741,7 @@ onBeforeUnmount(() => {
         <div v-else-if="!canFireRealIr" class="readonly-note">
           <span class="rn-icon"><AppIcon name="warning" :size="16" /></span>
           <span class="rn-text">
-            当前不可发送：<template v-if="!dashboard?.ir_armed">红外发射未开启（服务器安全开关）。</template>
-            <template v-else-if="!dashboard?.online">设备离线。</template>
+            当前不可发送：<template v-if="!dashboard?.online">设备离线。</template>
             <template v-else-if="!mqttBack">云端与设备的通道未连接。</template>
             <template v-else>请稍候。</template>
           </span>
@@ -783,10 +782,6 @@ onBeforeUnmount(() => {
             </button>
           </div>
         </div>
-
-        <p class="faint" style="margin-top: 16px; line-height: 1.6">
-          说明：点击后系统会通过云端向设备发送一次真实红外指令。红外为单向发送，网页无法确认空调是否实际响应，请留意空调动作。
-        </p>
       </main>
 
       <!-- ============ 定时页 ============ -->
@@ -914,7 +909,7 @@ onBeforeUnmount(() => {
               <div><span>固件版本</span><strong>{{ fwVer }}</strong></div>
               <div><span>Wi-Fi 信号</span><strong>{{ rssiNow !== null ? rssiNow + ' dBm' : '--' }}</strong></div>
               <div><span>云端通道</span><strong :class="mqttBack ? 'gate-ok' : 'gate-bad'">{{ mqttBack ? '已连接' : '未连接' }}</strong></div>
-              <div><span>红外控制</span><strong :class="dashboard?.ir_armed ? 'gate-ok' : 'gate-bad'">{{ dashboard?.ir_armed ? '已开启' : '已关闭' }}</strong></div>
+              <div><span>红外控制</span><strong class="gate-ok">已开启</strong></div>
             </div>
             <div class="sub" style="margin-top: 10px" v-if="settings">
               采样 {{ samplePeriodS }}s · 上传 {{ publishPeriodS }}s · 陈旧阈值 {{ staleThresholdS }}s · 离线阈值 {{ offlineThresholdS }}s
@@ -938,7 +933,7 @@ onBeforeUnmount(() => {
               <div>
                 <span>控制权限</span>
                 <strong :class="dashboard?.ir_armed ? 'gate-ok' : 'gate-bad'">{{ ownerControlState }}</strong>
-                <em class="kv-sub">{{ dashboard?.ir_armed ? '可以控制空调' : '生产开关未开启' }}</em>
+                <em class="kv-sub">可以控制空调</em>
               </div>
               <div>
                 <span>可用控制</span>
@@ -954,8 +949,8 @@ onBeforeUnmount(() => {
 
           <div class="card" v-else>
             <h3><span class="card-title-icon"><AppIcon name="lock" :size="16" /></span>访问权限</h3>
-            <p class="sub" style="line-height: 1.6">当前为只读访客模式。Owner 登录后本设备可被标记为受信任，用于发送空调控制指令。</p>
-            <button style="width: 100%" @click="openLoginModal">Owner 登录</button>
+            <p class="sub" style="line-height: 1.6">当前为只读访客模式。登录后本设备可被标记为受信任，用于发送空调控制指令。</p>
+            <button style="width: 100%" @click="openLoginModal">登录</button>
           </div>
 
           <div class="card grid-full" v-if="isOwner">
@@ -975,7 +970,7 @@ onBeforeUnmount(() => {
             <div class="btn-row">
               <button class="ghost" :disabled="ownerBusy" @click="showRevokeCurrentConfirm = true">移除本机信任</button>
               <button class="ghost" :disabled="ownerBusy" @click="showRevokeAllConfirm = true">移除全部信任</button>
-              <button class="danger" :disabled="ownerBusy" @click="doLogout">退出 Owner 登录</button>
+              <button class="danger" :disabled="ownerBusy" @click="doLogout">退出登录</button>
             </div>
           </div>
           <div class="build-note grid-full">云端空调管家 · 构建 {{ BUILD_ID }} · 提交 {{ GIT_COMMIT.slice(0, 12) }} · {{ BUILD_TS }}</div>
@@ -1005,8 +1000,8 @@ onBeforeUnmount(() => {
 
       <!-- ===== 登录 ===== -->
       <div v-if="showLoginModal" class="modal-mask drawer-mask" @click.self="showLoginModal = false">
-        <div class="modal login-modal" role="dialog" aria-modal="true" aria-label="Owner 登录">
-          <h2>Owner 登录</h2>
+        <div class="modal login-modal" role="dialog" aria-modal="true" aria-label="登录">
+          <h2>登录</h2>
           <form @submit.prevent="submitLogin">
             <label for="owner-pass">Owner 密码</label>
             <input id="owner-pass" v-model="loginPassword" type="password" autocomplete="current-password" />

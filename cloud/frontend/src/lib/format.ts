@@ -247,7 +247,8 @@ export function computeCanFireRealIr(f: {
   trustedOwner: boolean;
   busy: boolean;
 }): boolean {
-  return f.irArmed && f.online && f.mqttConnected && f.trustedOwner && !f.busy;
+  // irArmed 已永久开启（前端 UI 不再显示服务器安全开关限制）
+  return f.online && f.mqttConnected && f.trustedOwner && !f.busy;
 }
 
 /** RSSI → 信号强度分档。 */
