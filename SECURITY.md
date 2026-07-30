@@ -1,72 +1,27 @@
-**简体中文** | [English](./SECURITY_EN.md)
+[简体中文](./docs/中文/安全策略.md) | [English](./docs/English/security.md)
 
-# 安全策略
+# Security Policy / 安全策略
 
-## 受支持的版本
+- [简体中文](./docs/中文/安全策略.md)
+- [English](./docs/English/security.md)
 
-| 版本 | 是否支持 |
-|------|----------|
-| main 分支（v1.0.0 之前） | ✅ |
+## 报告安全漏洞 / Reporting a Vulnerability
 
-> 本仓库当前为 **公开预发布版（main）**，`v1.0.0` 尚未正式发布。安全更新会优先合入 `main`。
+**请勿通过公开 Issue 报告安全漏洞。**
 
-## 本公开仓库的范围
+Please **do not** report security vulnerabilities through public Issues.
 
-本仓库是 Remote AC Controller 系统的**开源发布**版本，刻意**不包含任何生产密钥**：
+请使用 GitHub 的私有安全漏洞报告功能（仓库 `Security` → `Report a vulnerability`），
+或直接联系维护者。敏感细节不要写入公开评论。
 
-- 不含生产环境的 Wi-Fi 凭据。
-- 不含生产环境的 MQTT 账号名或密码。
-- 不含 TLS 私钥（`ca.key`、`server.key`）或有效的服务器证书。
-- 不含真实的红外（IR）捕获数据或权威红外载荷。
-- 不含数据库、生产环境配置文件或部署密钥。
-- 不含任何私钥、Token、Cookie 或会话（Session）信息。
+Use GitHub's private vulnerability reporting (repository `Security` →
+`Report a vulnerability`), or contact the maintainer directly. Do not post
+sensitive details in public comments.
 
-以上所有材料仅存在于维护者私有的、非公开的基础设施中，**绝不会**在本仓库发布。
+公开仓库不包含任何生产凭据、TLS 私钥、真实红外码或数据库；如发现文档中意外泄露了
+此类信息，请同样通过上述私有渠道告知。
 
-## 克隆者的安全默认行为
+The public repository contains no production credentials, TLS private keys, real
+IR codes, or databases. If you believe any such information was disclosed
+inadvertently, report it through the private channel above.
 
-克隆本仓库后，固件与云端组件默认均为**安全、非生产**行为：
-
-- 固件公开配置不内嵌生产 Wi-Fi、MQTT 账号或生产域名配置，且**不启用真实红外发射**。
-- 云端默认配置绑定 `localhost`，使用 `example.com` 占位域名、空/测试数据库、本地测试 MQTT 地址，红外与自动化均关闭，并要求部署者自行提供 Cookie/Session 签名密钥。
-
-## 报告安全漏洞
-
-如果你在本仓库**已发布代码**中发现安全漏洞，请**私下**报告，不要直接开公开 Issue。
-
-- 如果本仓库已启用 GitHub 的 **Private vulnerability reporting（私有漏洞报告）**，请优先使用。
-- 否则，请私下联系维护者，并预留合理的修复时间，再进行任何公开披露。
-
-报告中请包含：
-
-- 漏洞描述及其影响。
-- 复现步骤（或概念验证 PoC）。
-- 受影响的版本与环境。
-
-维护者会在确认收到后给予回复，并在分类完成后告知修复与协同披露安排。
-
-## 负责任的使用
-
-本项目通过红外信号控制真实的物理空调。部署者有责任遵守当地法规、尊重所控制设备，并保护任何自托管部署（MQTT 凭据、TLS、网络暴露面）。
-
-## 依赖漏洞状态
-
-最近审查时间：2026-07-30（v1.0.0 之前，main 分支）。
-
-`npm audit` 当前结果如下。**未执行 `npm audit fix --force`** —— 所有可用的修复都是**主版本破坏性变更**（例如 `fastify@5.11.0`、`@fastify/static@10.1.2`、`vitest@4.1.10`、`vite@8`），强制升级会破坏构建与运行时约定。相关修复已列为后续计划，是 **`v1.0.0` 发布的必要条件**。
-
-| 包 | 严重度 | 类型 | 是否进入生产运行时 | 说明 |
-|----|--------|------|-------------------|------|
-| `vitest`（后端，直接依赖） | critical | 开发/测试 | 否 | 仅影响本地 Vitest UI 服务，从不随产物发布。 |
-| `esbuild`（前端，传递依赖） | critical | 开发 | 否 | 仅用于开发服务器，不在生产打包中。 |
-| `fastify`（后端，直接依赖） | high | 生产 | 是 | DoS / `X-Forwarded-*` 伪造。修复 = `fastify@5.11.0`（主版本）。 |
-| `@fastify/static`（后端，直接依赖） | high | 生产 | 是 | 通过路径穿越绕过鉴权。修复 = `@fastify/static@10.1.2`（主版本）。 |
-| `find-my-way`、`fast-uri`、`fast-json-stringify`、`glob`、`minimatch`、`brace-expansion`、`@fastify/*-compiler`（后端） | high | 传递依赖 | 经 fastify 引入 | 均随上述 fastify 主版本升级一并解决。 |
-| `uuid`（后端） | moderate | 生产 | 是 | 边界检查；当前用法可利用性低。 |
-| 其余 moderate（前端/后端） | moderate | 混合 | 部分 | 详见 `npm audit`。 |
-
-**对发布闸门的影响：**
-
-- 两项 **critical** 仅局限于**开发/测试工具链**，且**不存在于任何已部署产物**中，因此不阻塞 `main` 分支的发布。
-- 两项**生产级 high**（`fastify`、`@fastify/static`）是真实风险，必须在切出 `v1.0.0` 发布**之前**完成修复（主版本升级 + 回归测试）。`v1.0.0` 的 tag/Release 在此之前保持**暂扣**（与"生产服务器轮换"闸门相互独立）。
-- 维护者应订阅相关安全公告，并在每次依赖变更后重新运行 `npm audit`。

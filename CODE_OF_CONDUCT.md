@@ -1,42 +1,24 @@
-**简体中文** | [English](./CODE_OF_CONDUCT_EN.md)
+[简体中文](./docs/中文/行为准则.md) | [English](./docs/English/code-of-conduct.md)
 
-# 贡献者公约行为准则
+# Code of Conduct / 行为准则
 
-> 本文件是 [Contributor Covenant](https://www.contributor-covenant.org) **2.1 版**的中文版本，与英文原文 [`CODE_OF_CONDUCT_EN.md`](./CODE_OF_CONDUCT_EN.md) 内容一致。如中英文表述存在差异，以英文原文为准。归属信息见文末「归属」一节，不得删减。
+- [简体中文](./docs/中文/行为准则.md)
+- [English](./docs/English/code-of-conduct.md)
 
-## 我们的承诺
+本仓库采用 [Contributor Covenant 2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct/)。
+简体中文译本见上方链接，如中英文表述存在差异，以英文原文为准。
 
-作为成员、贡献者和领导者，我们承诺让每个人都能参与到我们的社区中，无论年龄、体型、可见或不可见的残障、种族、性别特征、性别认同与表达、经验水平、教育程度、社会经济地位、国籍、外貌、宗教或性取向与身份认同。
+This project adopts the
+[Contributor Covenant 2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct/).
+The Simplified Chinese translation is linked above; the English text is
+authoritative where the two differ.
 
-我们承诺以有助于营造开放、欢迎、多元、包容和健康社区的方式行事与互动。
+Contributor Covenant 文本采用
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) 授权，版权与归属归
+Contributor Covenant 及其贡献者所有，未经修改不得删除其归属信息。
 
-## 我们的标准
+The Contributor Covenant text is licensed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); copyright and
+attribution belong to Contributor Covenant and its contributors, and attribution
+must not be removed unmodified.
 
-有助于营造积极环境的行为示例：
-
-- 对他人表现出同理心与善意。
-- 尊重不同的意见、观点和经历。
-- 给予并优雅地接受建设性反馈。
-- 对自己的错误负责，并向受影响者道歉。
-- 关注对整个社区最有利的事。
-
-不可接受的行为示例：
-
-- 使用带有性暗示的言语或图像，以及任何形式的性骚扰。
-- 挑衅、侮辱或贬损性评论，以及人身或政治攻击。
-- 公开或私下的骚扰。
-- 未经明确许可公开他人私人信息。
-- 在专业场合中可能被合理认为不适当的其他行为。
-
-## 执行
-
-任何辱骂、骚扰或其他不可接受的行为，均可向项目维护者举报。所有投诉都将被及时、公正地审查与调查。
-
-## 归属
-
-本行为准则改编自 [Contributor Covenant][homepage] 2.1 版，原文见
-https://www.contributor-covenant.org/version/2/1/code_of_conduct.html 。
-
-Contributor Covenant 文本以 **CC BY 4.0** 授权发布。
-
-[homepage]: https://www.contributor-covenant.org

@@ -1,26 +1,15 @@
-**简体中文** | [English](./SUPPORT_EN.md)
+[简体中文](./docs/中文/支持说明.md) | [English](./docs/English/support.md)
 
-# 支持
+# Support / 支持说明
 
-## 文档
+- [简体中文](./docs/中文/支持说明.md)
+- [English](./docs/English/support.md)
 
-- 根目录 [`README.md`](./README.md) —— 系统概览与快速开始。
-- [`docs/`](./docs) —— 架构、硬件、接线、红外学习、MQTT 协议、安全模型、定时、温控自动化、部署与故障排查。
+本仓库为开源项目，支持以社区与文档为主。遇到问题请先查阅上方对应语言的文档；
+若仍无法解决，可在 Issue 中描述复现步骤与日志（请勿包含任何生产凭据）。
 
-## 自托管部署
+This is an open-source project supported primarily by the community and its
+documentation. Please consult the documentation in your language above first; if
+the issue persists, open an Issue with reproduction steps and logs (do not
+include any production credentials).
 
-本仓库仅提供源代码。部署者需自行负责部署工作，包括：
-
-- 保护 MQTT 消息代理（凭据、ACL、TLS）。
-- 自行生成并管理 TLS 证书。
-- 保护云端后端（网络暴露面、密钥、数据库）。
-- 为自己的空调机型提供对应的红外码。
-
-## 获取帮助
-
-- 提交 [GitHub Issue](https://github.com/nobodycareme/remote-ac-controller/issues) 反馈缺陷或功能建议。
-- 安全相关问题请遵循 [`SECURITY.md`](./SECURITY.md) —— **不要**就漏洞开公开 Issue。
-
-## 支持范围
-
-这是一个社区 / 开源项目，支持以"尽力而为"的方式提供。对于通过本系统控制的空调设备出现的任何损坏、故障或意外运行，维护者不承担责任。

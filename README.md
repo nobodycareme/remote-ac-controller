@@ -1,6 +1,7 @@
+**简体中文** | [English](./docs/English/README.md)
+
 # Remote AC Controller · 手机远程控制空调
 
-**简体中文** | [English](./README_EN.md)
 
 一套完整的开源远程空调控制系统：手机网页 → 云端后端 → MQTT（TLS） →
 ESP8266 → 红外 → 空调。从固件到前端全部开源，可自行部署。
@@ -58,7 +59,7 @@ remote-ac-controller/
 ├─ tools/         # test-all.ps1, build-all.ps1
 ├─ .github/       # CI 工作流
 ├─ LICENSE  NOTICE  THIRD_PARTY_NOTICES.md
-├─ README.md（中文）  README_EN.md（English）
+├─ README.md（中文）  docs/English/README.md（English）
 └─ CONTRIBUTING.md  CODE_OF_CONDUCT.md  SECURITY.md  SUPPORT.md  CHANGELOG.md
 ```
 
@@ -71,7 +72,7 @@ remote-ac-controller/
 | Node.js | **≥ 22.5，推荐 24** — 后端使用内置 `node:sqlite` 模块，Node 20 上不存在该模块，启动会抛 `ERR_UNKNOWN_BUILTIN_MODULE` |
 | 编译工具链 | 不需要。全部依赖均无原生编译（`node:sqlite`、`bcryptjs` 都是纯 JS / 内置） |
 | 开发板 | NodeMCU / ESP8266（ESP-12E/F），PlatformIO |
-| 服务器 | 1 GB 内存可用，但**构建必须在本机或 CI 完成**，详见 [`docs/resource-constrained-deployment.md`](./docs/resource-constrained-deployment.md) |
+| 服务器 | 1 GB 内存可用，但**构建必须在本机或 CI 完成**，详见 [`docs/resource-constrained-deployment.md`](./docs/中文/低配置服务器部署.md) |
 
 ## 快速开始（安全 / 非生产）
 
@@ -113,11 +114,11 @@ cd cloud/frontend && npm ci && npm test && npm run build
 
 - **不含任何生产密钥**：无 Wi-Fi / MQTT 口令、无 TLS 私钥、无真实红外数据、
   无数据库、无生产环境文件。
-- 固件与云端的公开默认值均为非生产安全值，详见 [`SECURITY.md`](./SECURITY.md)。
+- 固件与云端的公开默认值均为非生产安全值，详见 [`SECURITY.md`](./docs/中文/安全策略.md)。
 - 自建者需自行准备 MQTT 凭据、TLS 证书与红外码。
 - 真实红外发射受**多重独立开关**保护，全部默认关闭，且只接受字符串
   `"true"` / `"1"` 才视为开启——避免布尔强制转换把 `"false"` 当成真。
-  完整清单见 [`docs/operations-guide.md`](./docs/operations-guide.md) §7。
+  完整清单见 [`docs/operations-guide.md`](./docs/中文/运维指南.md) §7。
 
 ## 文档
 
@@ -125,31 +126,32 @@ cd cloud/frontend && npm ci && npm test && npm run build
 
 | 让它跑起来 | 理解它 | 运维它 |
 |---|---|---|
-| [硬件选型 `hardware.md`](./docs/hardware.md) | [系统架构 `architecture.md`](./docs/architecture.md) | [部署 `deployment.md`](./docs/deployment.md) |
-| [接线 `wiring.md`](./docs/wiring.md) | [MQTT 协议 `mqtt-protocol.md`](./docs/mqtt-protocol.md) | [运维指南 `operations-guide.md`](./docs/operations-guide.md) |
-| [红外学习 `ir-learning.md`](./docs/ir-learning.md) | [安全模型 `security-model.md`](./docs/security-model.md) | [低配部署 `resource-constrained-deployment.md`](./docs/resource-constrained-deployment.md) |
-| | [定时 `scheduling.md`](./docs/scheduling.md) · [温控 `temperature-automation.md`](./docs/temperature-automation.md) | [故障排查 `troubleshooting.md`](./docs/troubleshooting.md) · [备份与恢复 `backup-and-recovery.md`](./docs/backup-and-recovery.md) |
+| [硬件选型 `hardware.md`](./docs/中文/硬件说明.md) | [系统架构 `architecture.md`](./docs/中文/系统架构.md) | [部署 `deployment.md`](./docs/中文/部署指南.md) |
+| [接线 `wiring.md`](./docs/中文/接线说明.md) | [MQTT 协议 `mqtt-protocol.md`](./docs/中文/MQTT协议.md) | [运维指南 `operations-guide.md`](./docs/中文/运维指南.md) |
+| [红外学习 `ir-learning.md`](./docs/中文/红外学习.md) | [安全模型 `security-model.md`](./docs/中文/安全模型.md) | [低配部署 `resource-constrained-deployment.md`](./docs/中文/低配置服务器部署.md) |
+| | [定时 `scheduling.md`](./docs/中文/定时任务.md) · [温控 `temperature-automation.md`](./docs/中文/温度自动控制.md) | [故障排查 `troubleshooting.md`](./docs/中文/故障排查.md) · [备份与恢复 `backup-and-recovery.md`](./docs/中文/备份与恢复.md) |
 
 ## 参与贡献
 
-见 [`CONTRIBUTING.md`](./CONTRIBUTING.md)。贡献内容按 Apache-2.0 授权。
+见 [`CONTRIBUTING.md`](./docs/中文/参与贡献.md)。贡献内容按 Apache-2.0 授权。
 
 ## 许可
 
-[Apache License 2.0](./LICENSE)。中文参考译文见 [`LICENSE_ZH.md`](./LICENSE_ZH.md)；第三方许可汇总见
-[`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md)。
+[Apache License 2.0](./LICENSE)。中文参考译文见 [`LICENSE_ZH.md`](./docs/中文/Apache-2.0许可证参考译文.md)；第三方许可汇总见
+[`THIRD_PARTY_NOTICES.md`](./docs/中文/第三方许可说明.md)。
 
 ## 已知限制
 
 诚实列出，便于评估是否适合你的场景：
 
 - **不含具体空调型号的真实红外码** —— 红外帧与机型强相关，需自行捕获
-  （流程见 [`ir-learning.md`](./docs/ir-learning.md)）。
+  （流程见 [`ir-learning.md`](./docs/中文/红外学习.md)）。
 - **本仓库仅提供源码**，生产部署（TLS、MQTT ACL、密钥管理）由部署者负责。
 - **单设备模型** —— 一个后端实例对应一个 `device_id`，未做多设备扇出。
 - **无 `/metrics` 端点、无内置备份脚本** —— 监控与备份需自行接入，
-  推荐做法见 [`operations-guide.md`](./docs/operations-guide.md) §2、§4.3，
-  以及 [`backup-and-recovery.md`](./docs/backup-and-recovery.md)。
+  推荐做法见 [`operations-guide.md`](./docs/中文/运维指南.md) §2、§4.3，
+  以及 [`backup-and-recovery.md`](./docs/中文/备份与恢复.md)。
 - **数据库迁移无版本账本** —— 迁移靠幂等 `ALTER TABLE` 保证，新版本可安全
   向前迁移旧库；**反向降级未经验证**，降级前务必先备份。
 - 部分硬件 / PCB 产物因许可不兼容未随仓库发布。
+

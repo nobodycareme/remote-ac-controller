@@ -1,6 +1,4 @@
-[简体中文](./docs/中文/第三方许可说明.md) | [English](./LICENSE)
-
-[中文参考说明](./docs/中文/第三方许可说明.md)
+[简体中文](../中文/第三方许可说明.md) | **English**
 
 # Third-Party Notices
 
@@ -63,5 +61,3 @@ review; verify exact versions against each subsystem's dependency manifests
 - If any dependency's license is incompatible with an open-source distribution
   goal (e.g., GPL with static-linking implications), it must be removed or
   replaced prior to release.
-
-

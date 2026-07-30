@@ -1,24 +1,12 @@
-**简体中文** | [English](./CHANGELOG_EN.md)
+[简体中文](./docs/中文/更新日志.md) | [English](./docs/English/changelog.md)
 
-# 更新日志
+# 更新日志 / Changelog
 
-本项目所有重要变更均记录于此。本仓库采用 Monorepo 布局，将 ESP8266 固件与云端后端/前端合并到同一段发布历史中。
+当前状态：**Unreleased** —— 计划在 `main` 分支作为 `v1.0.0` 首次公开发布，尚未打 tag / Release。
 
-> 当前状态：**公开预发布版（main），`v1.0.0` 尚未发布**。以下条目计划在 `v1.0.0` 首次公开版本中发布；只有当远端 `v1.0.0` tag 与 Release 真实创建后，才会转为 `## [1.0.0] - <真实发布日期>`。在此之前，请勿提前宣称已发布。
+Current status: **Unreleased** — planned as the first public `v1.0.0` release on
+the `main` branch; no tag / Release has been cut yet.
 
-## [Unreleased]
+- [简体中文完整更新日志](./docs/中文/更新日志.md)
+- [English Changelog](./docs/English/changelog.md)
 
-计划作为 `v1.0.0` 首次公开版本发布。
-
-### Added
-- Remote AC Controller 系统的首次公开开源发布。
-- `firmware/`：ESP8266（NodeMCU）固件，含 DHT11 温湿度采集、红外学习与发射、带 TLS 的 MQTT 客户端，以及 11 状态空调控制。
-- `cloud/`：Fastify 后端（MQTT 桥接、定时调度、温控自动化、天气、仪表盘 API、Owner/Guest 与受信任设备模型）、Vue 3 响应式前端、Mosquitto 消息代理配置与部署工具。
-- `docs/`：架构、硬件、接线、红外学习、MQTT 协议、安全模型、定时、温控自动化、部署与故障排查文档。
-- `tools/`：`test-all.ps1` 与 `build-all.ps1` 用于统一验证。
-- `.github/workflows/ci.yml`：`firmware-ci` 与 `cloud-ci` 任务。
-- 采用 Apache License 2.0 授权。
-
-### Security
-- 不包含任何生产凭据、私钥、真实红外数据、数据库或生产环境文件。
-- 公开的固件与云端默认值均为非生产安全值。
