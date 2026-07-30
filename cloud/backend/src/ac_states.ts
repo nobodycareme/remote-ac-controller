@@ -1,0 +1,147 @@
+// ── AC 状态目录（2026-07-28 全量集成轮）────────────────────────────────────────
+// 11 个已入固件 PROGMEM 注册表的红外状态。stateId 与固件 codeId 一一对应；
+// 后端只保存公开元数据（长度/SHA256/语义字段），完整 22H 帧字节仅存在于
+// 固件私有资源（gitignored .inc）与本地 Private/ 目录，绝不进入本文件。
+//
+// 事实来源：
+//   - 帧字节：Private/Firmware/IR/CAPTURE_002.bin 与 Learned/<stateId>/canonical.bin
+//   - 结构校验：Private/Evidence/IR_Full_Web_Automation_Integration_20260728T222500/
+//     ir_input_manifest.json（ALL_CANONICAL_STRUCTURE_VALID_PASS=True）
+//   - 元数据：Firmware tools/gen_ir_state_registry.py 的 STATE_META（与本表逐项一致）
+
+export type AcMode = 'cool' | 'dry' | 'heat' | 'off';
+export type AcFan = 'auto' | 'turbo' | 'quiet';
+
+export interface AcState {
+  stateId: string;        // == firmware PROGMEM codeId == MQTT ir_code_id
+  displayName: string;
+  mode: AcMode;
+  temperature: number;    // 0 = 不适用（关机）
+  fan: AcFan;
+  swingVertical: boolean;
+  swingHorizontal: boolean;
+  powerOn: boolean;
+  frameLength: number;    // canonical 22H 帧字节数（元数据，非帧内容）
+  frameSha256: string;
+  enabled: boolean;       // 目录级启停开关（默认全 true，用户决策）
+}
+
+export const AC_STATES: readonly AcState[] = Object.freeze([
+  {
+    stateId: 'hisense_cool_24_quiet_swing_v_on_swing_h_on_power_on_v1',
+    displayName: '制冷24℃ 静音 双向扫风',
+    mode: 'cool', temperature: 24, fan: 'quiet',
+    swingVertical: true, swingHorizontal: true, powerOn: true,
+    frameLength: 418,
+    frameSha256: 'e9ab43feca71acde248df5729d0cb0d228bdbcfb69f8513d43ea4b942cb6ac7e',
+    enabled: true,
+  },
+  {
+    stateId: 'hisense_power_off_v1',
+    displayName: '关机',
+    mode: 'off', temperature: 0, fan: 'auto',
+    swingVertical: false, swingHorizontal: false, powerOn: false,
+    frameLength: 279,
+    frameSha256: '6ca17227761a3fe8b528de4b90298544faaa3e4a75f682386e6f4a7d1a5771b8',
+    enabled: true,
+  },
+  {
+    stateId: 'hisense_cool_24_turbo_swingV_v1',
+    displayName: '制冷24℃ 超强风 上下扫风',
+    mode: 'cool', temperature: 24, fan: 'turbo',
+    swingVertical: true, swingHorizontal: false, powerOn: true,
+    frameLength: 332,
+    frameSha256: 'f9c2286738d8cebd73f4cb6ea66414e8def5d2de0a7f894355963c0694144f32',
+    enabled: true,
+  },
+  {
+    stateId: 'hisense_cool_20_turbo_swingV_v1',
+    displayName: '制冷20℃ 超强风 上下扫风',
+    mode: 'cool', temperature: 20, fan: 'turbo',
+    swingVertical: true, swingHorizontal: false, powerOn: true,
+    frameLength: 416,
+    frameSha256: '01ad71d225f6f47e04e2d1089f004ec8797ab1647d9fbc9dd7ab211a3a6d0073',
+    enabled: true,
+  },
+  {
+    stateId: 'hisense_cool_25_auto_v1',
+    displayName: '制冷25℃ 自动风',
+    mode: 'cool', temperature: 25, fan: 'auto',
+    swingVertical: false, swingHorizontal: false, powerOn: true,
+    frameLength: 420,
+    frameSha256: 'b482108775298f749f460aa926c6b62756f56e77e673f9cc9ea9f9187f59391a',
+    enabled: true,
+  },
+  {
+    stateId: 'hisense_cool_26_auto_v1',
+    displayName: '制冷26℃ 自动风',
+    mode: 'cool', temperature: 26, fan: 'auto',
+    swingVertical: false, swingHorizontal: false, powerOn: true,
+    frameLength: 424,
+    frameSha256: 'a861a5212b6b38aec118fcef368310d18969aeb6810ce4b1855c774f4c628743',
+    enabled: true,
+  },
+  {
+    stateId: 'hisense_dry_24_turbo_swingVH_v1',
+    displayName: '除湿24℃ 超强风 双向扫风',
+    mode: 'dry', temperature: 24, fan: 'turbo',
+    swingVertical: true, swingHorizontal: true, powerOn: true,
+    frameLength: 424,
+    frameSha256: '28b5d939a110a04da5d5aae8eb6e376094372f2ff217cc1ab95202c75f2788ed',
+    enabled: true,
+  },
+  {
+    stateId: 'hisense_dry_24_auto_swingVH_v1',
+    displayName: '除湿24℃ 自动风 双向扫风',
+    mode: 'dry', temperature: 24, fan: 'auto',
+    swingVertical: true, swingHorizontal: true, powerOn: true,
+    frameLength: 350,
+    frameSha256: '9ae7cdc8152bd0965b3141889e6761b4152956c6bf6dc569f55fb39cf98dfceb',
+    enabled: true,
+  },
+  {
+    stateId: 'hisense_dry_24_silent_swingVH_v1',
+    displayName: '除湿24℃ 静音风 双向扫风',
+    mode: 'dry', temperature: 24, fan: 'quiet',
+    swingVertical: true, swingHorizontal: true, powerOn: true,
+    frameLength: 244,
+    frameSha256: 'd731967099a1a0c203ac8b9c4f15255db00f7d96af7d4d5283ab86fe41ffaef9',
+    enabled: true,
+  },
+  {
+    stateId: 'hisense_heat_26_auto_swingVH_v1',
+    displayName: '制热26℃ 自动风 双向扫风',
+    mode: 'heat', temperature: 26, fan: 'auto',
+    swingVertical: true, swingHorizontal: true, powerOn: true,
+    frameLength: 312,
+    frameSha256: '1104384d7451e674009d33d1883935b1554fbd3863f4a9d25b59cd9f83fcb006',
+    enabled: true,
+  },
+  {
+    stateId: 'hisense_heat_28_auto_swingVH_v1',
+    displayName: '制热28℃ 自动风 双向扫风',
+    mode: 'heat', temperature: 28, fan: 'auto',
+    swingVertical: true, swingHorizontal: true, powerOn: true,
+    frameLength: 304,
+    frameSha256: '6363494274c7293a70aea9ddb23b45d2aa8d8d231553d6cbbf25454cee3b542c',
+    enabled: true,
+  },
+]);
+
+const byId = new Map<string, AcState>(AC_STATES.map((s) => [s.stateId, s]));
+
+export function getAcState(stateId: string): AcState | undefined {
+  return byId.get(stateId);
+}
+
+export function listAcStates(): AcState[] {
+  return AC_STATES.slice();
+}
+
+export function enabledStateIds(): Set<string> {
+  return new Set(AC_STATES.filter((s) => s.enabled).map((s) => s.stateId));
+}
+
+// 温控自动化使用的默认目标状态（可被 ac_temperature_rules 覆盖）。
+export const DEFAULT_AUTOMATION_ON_STATE = 'hisense_cool_26_auto_v1';
+export const DEFAULT_AUTOMATION_OFF_STATE = 'hisense_power_off_v1';

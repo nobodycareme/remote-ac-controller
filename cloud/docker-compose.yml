@@ -1,0 +1,95 @@
+# remote-ac-cloud stack: secure MQTT broker + backend (serves API + frontend).
+# Compose project: remote-ac (isolated from host's Halo stack).
+# Ports: 8883 (MQTT TLS, public) + 3100 (backend HTTP, loopback-only).
+# Internal network 1883 is broker-listener only — no host publish.
+
+services:
+  broker:
+    image: eclipse-mosquitto:2.1.3@sha256:4d3876f58c6eade0d93cdde6cc06ab647104039aba7b8fbb6be2a788180f12cb
+    container_name: remote-ac-broker
+    restart: unless-stopped
+    env_file:
+      - ./deploy/secrets.env
+    command: >
+      sh -c "mosquitto_passwd -b -c /mosquitto/run/passwordfile $$MQTT_DEVICE_USERNAME $$MQTT_DEVICE_PASSWORD &&
+             mosquitto_passwd -b    /mosquitto/run/passwordfile $$MQTT_USERNAME           $$MQTT_PASSWORD &&
+             mosquitto -c /mosquitto/config/mosquitto.conf"
+    volumes:
+      - ./broker/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./broker/certs:/mosquitto/certs:ro
+      - ./broker/acl/aclfile:/mosquitto/acl/aclfile:ro
+      - broker-run:/mosquitto/run
+      - broker-data:/mosquitto/data
+    ports:
+      - "8883:8883"
+    networks:
+      - remote-ac
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: "0.5"
+          pids: 50
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-h", "127.0.0.1", "-p", "1883", "-t", "$$SYS/broker/version", "-C", "1", "-W", "3"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: remote-ac-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env.example
+      - ./deploy/secrets.env
+    environment:
+      NODE_ENV: production
+      PORT: "3100"
+      HOST: 0.0.0.0
+      MQTT_URL: mqtt://broker:1883
+      DB_PATH: /data/app.db
+      NODE_OPTIONS: --max-old-space-size=192
+    depends_on:
+      broker:
+        condition: service_healthy
+    volumes:
+      - backend-data:/data
+    networks:
+      - remote-ac
+    ports:
+      - "127.0.0.1:3100:3100"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "1.0"
+          pids: 100
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3100/api/health',(r)=>{process.exit(r.statusCode===200?0:1)})"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  broker-run:
+  broker-data:
+  backend-data:
+
+networks:
+  remote-ac:
+    driver: bridge

@@ -1,0 +1,44 @@
+﻿# Infrastructure
+.env
+.env.*
+*.local
+
+# Docker
+docker-compose.override.yml
+infra/mosquitto/certs/*.key
+infra/mosquitto/certs/*.pem
+infra/mosquitto/certs/private/
+
+# Data
+data/
+*.sqlite3
+*.sqlite3-*
+
+# Logs
+logs/
+*.log
+
+# Node
+node_modules/
+dist/
+.cache/
+
+# Frontend tools 鈥?keep scripts in repo, ignore local validation artifacts
+frontend/tools/screenshots/
+frontend/dist/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+*.secret
+private/
+deploy/secrets.env
+
+# Tool scripts with credentials
+tools/mqtt_verify.js

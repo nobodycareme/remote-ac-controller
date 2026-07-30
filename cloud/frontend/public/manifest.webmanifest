@@ -1,0 +1,17 @@
+{
+  "name": "云端空调管家",
+  "short_name": "空调管家",
+  "description": "受信任设备可进行真实红外控制，陌生浏览器仅可查看状态",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0f1420",
+  "theme_color": "#0f1420",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

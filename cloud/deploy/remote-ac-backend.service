@@ -1,0 +1,34 @@
+[Unit]
+Description=Remote AC Controller - Cloud Backend
+Documentation=https://github.com/nobodycareme/remote-ac-controller
+After=network-online.target mosquitto.service
+Wants=network-online.target mosquitto.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/remote-ac-cloud/backend
+Environment=NODE_ENV=production
+Environment=NODE_OPTIONS=--max-old-space-size=192
+Environment=HOST=127.0.0.1
+Environment=DB_PATH=/opt/remote-ac-cloud/data/app.db
+ExecStart=/usr/local/bin/node dist/index.js
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=20s
+
+# Resource limits — prevent OOM on 1.6 GB server
+MemoryHigh=256M
+MemoryMax=384M
+TasksMax=64
+
+# Security hardening
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/remote-ac-cloud/data
+ReadOnlyPaths=/opt/remote-ac-cloud/backend
+
+[Install]
+WantedBy=multi-user.target

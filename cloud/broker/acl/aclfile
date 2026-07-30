@@ -1,0 +1,31 @@
+# ============================================================
+# remote-ac-cloud Mosquitto ACL
+# Topic prefix: remote-ac/v1/devices/<device_id>/
+#   telemetry / state / availability  (device -> broker, publish)
+#   commands/set                      (backend -> device, publish)
+#   commands/ack                      (device -> broker, publish)
+# ============================================================
+
+# --- Device account: remote-ac-device ---
+# May PUBLISH its own telemetry/state/availability/ack.
+# May SUBSCRIBE only to its own commands/set.
+# Must NOT publish to commands/set, must NOT touch other devices.
+user remote-ac-device
+topic write remote-ac/v1/devices/bedroom-ac-01/telemetry
+topic write remote-ac/v1/devices/bedroom-ac-01/state
+topic write remote-ac/v1/devices/bedroom-ac-01/availability
+topic write remote-ac/v1/devices/bedroom-ac-01/commands/ack
+topic read  remote-ac/v1/devices/bedroom-ac-01/commands/set
+
+# --- Backend account: remote-ac-backend ---
+# May SUBSCRIBE to device telemetry/state/availability/ack.
+# May PUBLISH only to commands/set.
+# Must NOT publish telemetry/state/availability (those are device-owned).
+user remote-ac-backend
+topic read  remote-ac/v1/devices/bedroom-ac-01/telemetry
+topic read  remote-ac/v1/devices/bedroom-ac-01/state
+topic read  remote-ac/v1/devices/bedroom-ac-01/availability
+topic read  remote-ac/v1/devices/bedroom-ac-01/commands/ack
+topic write remote-ac/v1/devices/bedroom-ac-01/commands/set
+
+# Deny everything else by default (Mosquitto denies what is not granted).
