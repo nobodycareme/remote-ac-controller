@@ -53,10 +53,13 @@ jobs:
           $ErrorActionPreference = 'Stop'
           Set-StrictMode -Version Latest
           $required = @(
-            'firmware/platformio.ini',
-            'firmware/src',
-            'firmware/include',
-            'firmware/tools/dev.ps1'
+            'firmware/agent-platformio/platformio.ini',
+            'firmware/agent-platformio/src/main.cpp',
+            'firmware/agent-platformio/include/cloud_secrets.example.h',
+            'firmware/agent-platformio/tools/dev.ps1',
+            'firmware/shared/RemoteACCore/library.properties',
+            'firmware/shared/RemoteACCore/src/RemoteACApp.h',
+            'firmware/arduino-ide/Remote_AC_Controller/Remote_AC_Controller.ino'
           )
           foreach ($p in $required) {
             if (-not (Test-Path -LiteralPath $p)) {
@@ -70,8 +73,8 @@ jobs:
           $ErrorActionPreference = 'Stop'
           Set-StrictMode -Version Latest
           $forbidden = @(
-            'firmware/include/secrets.h',
-            'firmware/include/cloud_secrets.h'
+            'firmware/agent-platformio/include/secrets.h',
+            'firmware/agent-platformio/include/cloud_secrets.h'
           )
           $bad = @()
           foreach ($p in $forbidden) {
@@ -86,7 +89,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           Set-StrictMode -Version Latest
-          $src = Get-Content -LiteralPath 'firmware/tools/dev.ps1' -Raw
+          $src = Get-Content -LiteralPath 'firmware/agent-platformio/tools/dev.ps1' -Raw
           foreach ($cmd in @('build', 'verify', 'test', 'status')) {
             if ($src -notmatch [regex]::Escape("'$cmd'")) {
               Write-Error "DEVPS1_CONTRACT_FAIL: command '$cmd' not found in ValidateSet"
@@ -110,13 +113,52 @@ jobs:
           pio --version
 
       - name: dev.ps1 verify (public profile)
-        run: pwsh firmware/tools/dev.ps1 verify -Profile public
+        run: pwsh firmware/agent-platformio/tools/dev.ps1 verify -Profile public
 
       - name: dev.ps1 test (public profile)
-        run: pwsh firmware/tools/dev.ps1 test -Profile public
+        run: pwsh firmware/agent-platformio/tools/dev.ps1 test -Profile public
 
       - name: dev.ps1 build (public profile, artifact secret-scanned)
-        run: pwsh firmware/tools/dev.ps1 build -Profile public
+        run: pwsh firmware/agent-platformio/tools/dev.ps1 build -Profile public
+
+  # ---------------------------------------------------------------------------
+  # arduino-ide-ci
+  # ---------------------------------------------------------------------------
+  arduino-ide-ci:
+    name: arduino-ide-ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Arduino CLI
+        run: |
+          set -euo pipefail
+          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
+          arduino-cli version
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls https://arduino.esp8266.com/stable/package_esp8266com_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp8266:esp8266@3.1.2
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          arduino-cli lib install "DHT sensor library@1.4.7"
+          arduino-cli lib install "Adafruit Unified Sensor@1.1.15"
+          arduino-cli lib install "PubSubClient@2.8.0"
+          arduino-cli lib install "ArduinoJson@6.21.5"
+
+      - name: Compile Arduino sketch
+        working-directory: firmware/arduino-ide/Remote_AC_Controller
+        run: |
+          set -euo pipefail
+          arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 \
+            --libraries ../../shared \
+            --build-path build
 
   # ---------------------------------------------------------------------------
   # cloud-ci
