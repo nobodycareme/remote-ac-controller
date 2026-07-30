@@ -1,69 +1,55 @@
-# Hardware
+**简体中文** | [English](./README_EN.md)
 
-This directory is the entry point for the physical side of the project: what to
-buy, how to wire it, and what is (and is not) published here.
+# 硬件
 
-Full documentation lives in [`../docs`](../docs):
+本目录是项目物理侧的入口：买什么、怎么接线，以及这里**发布**了什么、**没有**发布什么。
 
-| Document | Covers |
+完整文档位于 [`../docs`](../docs)：
+
+| 文档 | 涵盖内容 |
 |---|---|
-| [`docs/hardware.md`](../docs/hardware.md) | Bill of materials, module selection, GPIO constraints, power budget, memory limits |
-| [`docs/wiring.md`](../docs/wiring.md) | Pin-by-pin wiring, the DHT11 and IR module connections, verification steps |
-| [`docs/ir-learning.md`](../docs/ir-learning.md) | Capturing and registering your air conditioner's IR frames |
-| [`docs/troubleshooting.md`](../docs/troubleshooting.md) | Sensor, IR and connectivity fault tables |
+| [`docs/hardware.md`](../docs/hardware.md) | 物料清单、模块选型、GPIO 约束、功耗预算、内存限制 |
+| [`docs/wiring.md`](../docs/wiring.md) | 逐引脚接线、DHT11 与红外模块连接、验证步骤 |
+| [`docs/ir-learning.md`](../docs/ir-learning.md) | 捕获并登记你的空调红外帧 |
+| [`docs/troubleshooting.md`](../docs/troubleshooting.md) | 传感器、红外与连接故障表 |
 
 ---
 
-## Minimum Build
+## 最小可构建方案
 
-You can build a working node on a breadboard. No custom PCB is required.
+在面包板上即可搭建一个可工作的节点，无需定制 PCB。
 
-| Item | Part | Notes |
+| 项目 | 部件 | 说明 |
 |---|---|---|
-| MCU board | NodeMCU v2/v3 (ESP8266, ESP-12E/F) | USB-serial bridge is typically CH340 or CH9102 — install the matching driver |
-| Temperature / humidity | DHT11 (3-pin module with pull-up) | Bare DHT11 needs an external 4.7 kΩ–10 kΩ pull-up on DATA |
-| IR transmit / receive | ZJ-IR-V2 style module, or a discrete IR LED + driver transistor and a 38 kHz receiver | Receiver only needed while learning codes |
-| Power | 5 V supply, ≥ 1 A, via micro-USB or VIN | Under-powered supplies cause Wi-Fi/TLS instability, not obvious "power" faults |
-| Wiring | Dupont jumpers, breadboard | — |
+| MCU 开发板 | NodeMCU v2/v3（ESP8266，ESP-12E/F） | USB 串口桥通常为 CH340 或 CH9102 —— 安装对应的驱动 |
+| 温湿度 | DHT11（带 3 引脚且含上拉） | 裸 DHT11 需在 DATA 上加 4.7 kΩ–10 kΩ 外部上拉 |
+| 红外发射 / 接收 | ZJ-IR-V2 类模块，或分立红外 LED + 驱动三极管 + 38 kHz 接收头 | 学习红外码期间才需要接收头 |
+| 电源 | 5 V 电源，≥ 1 A，经 micro-USB 或 VIN 供电 | 供电不足会导致 Wi-Fi/TLS 不稳定，而非明显的"电源"故障 |
+| 接线 | 杜邦线、面包板 | — |
 
-Default pin assignment (see `docs/wiring.md` for the reasoning and for pins to
-avoid):
+默认引脚分配（理由与应避免的引脚见 `docs/wiring.md`）：
 
-| Signal | NodeMCU pin | GPIO |
+| 信号 | NodeMCU 引脚 | GPIO |
 |---|---|---|
 | DHT11 DATA | D1 | GPIO5 |
-| IR module TXD | D5 | GPIO14 |
-| IR module RXD | D6 | GPIO12 |
+| 红外模块 TXD | D5 | GPIO14 |
+| 红外模块 RXD | D6 | GPIO12 |
 
-The IR module's TXD/RXD are **crossed** relative to the MCU: module TXD → MCU
-receive side, module RXD → MCU transmit side. Getting this backwards is the most
-common first-build mistake.
+红外模块的 TXD/RXD 相对 MCU 是**交叉**的：模块 TXD → MCU 接收侧，模块 RXD → MCU 发射侧。接反是最常见的新手错误。
 
 ---
 
-## What Is Not Published Here
+## 这里没有发布的内容
 
-- **No PCB source files.** The reference build is breadboard/perfboard; a custom
-  board is unnecessary for a single node and the original layout is not
-  published under a compatible licence.
-- **No enclosure models.** Any small ABS box works. Keep the IR LED unobstructed
-  and give the DHT11 airflow that is not warmed by the board's own regulator.
-- **No IR code data.** Air-conditioner IR frames are model-specific and are not
-  distributed with this project. Capture your own — the procedure is in
-  [`docs/ir-learning.md`](../docs/ir-learning.md).
+- **无 PCB 源文件。** 参考构建为面包板/洞洞板；单节点无需定制板，原始布局因许可不兼容未随仓库发布。
+- **无外壳模型。** 任意小型 ABS 盒即可。保持红外 LED 无遮挡，并让 DHT11 获得不被板载稳压器烤热的通风。
+- **无红外码数据。** 空调红外帧与机型强相关，不随本项目分发。请自行捕获 —— 流程见 [`docs/ir-learning.md`](../docs/ir-learning.md)。
 
 ---
 
-## Safety
+## 安全
 
-This project drives an air conditioner. Two consequences worth stating plainly:
+本项目驱动一台空调。有两点值得明确：
 
-1. **Everything on the node is low-voltage (3.3 V / 5 V).** Nothing in this
-   design connects to mains wiring. If a proposed modification involves mains,
-   it is outside the scope of this project and should be done by a qualified
-   electrician.
-2. **Automation can command a real appliance.** Real IR transmission is
-   disabled by default and gated behind multiple kill switches (see
-   [`docs/security-model.md`](../docs/security-model.md)). Enable it only once
-   you have verified your captured codes, and keep the emergency shutdown
-   procedure to hand.
+1. **节点上的一切都是低压（3.3 V / 5 V）。** 本设计中没有任何部分连接市电。若某项改造涉及市电，则超出本项目范围，应由具备资质的电工完成。
+2. **自动化可以命令真实电器。** 真实红外发射默认关闭，且受多重安全总开关保护（见 [`docs/security-model.md`](../docs/security-model.md)）。只有在验证过自己捕获的红外码之后才启用，并随时备好紧急停用流程。

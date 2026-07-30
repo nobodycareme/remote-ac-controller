@@ -1,81 +1,63 @@
-# Resource-Constrained Deployment
+**简体中文** | [English](./resource-constrained-deployment_EN.md)
 
-How to run this system on a small VPS — the 1–2 GB RAM, 1–2 vCPU class of host
-that also runs other services. This document exists because the default
-"just build it on the server" workflow **will** take such a host down.
+# 资源受限部署（Resource-Constrained Deployment）
 
-Read [`deployment.md`](./deployment.md) first for the installation itself; this
-document covers only the constraints and the workarounds.
+如何在小型 VPS 上运行本系统——即 1–2 GB 内存、1–2 vCPU 这类还同时运行其他服务的主机。之所以有本文档，是因为默认的「直接在服务器上构建」工作流**必然**会让此类主机宕机。
+
+请先阅读 [`deployment.md`](./deployment.md) 了解安装本身；本文档只覆盖约束与规避办法。
 
 ---
 
-## 1. Why This Deserves Its Own Document
+## 1. 为什么值得单独成文
 
-The runtime footprint of this system is genuinely small. The **build** footprint
-is not. Concretely:
+本系统的运行时占用确实很小。但**构建**占用不小。具体而言：
 
-| Phase | Peak RSS (approx.) | Notes |
+| 阶段 | 峰值 RSS（约） | 说明 |
 |---|---|---|
-| Backend runtime | 90–160 MB | Capped at 192 MB heap by `--max-old-space-size` |
-| Broker runtime | 10–30 MB | Compose limit 64 MB |
-| `tsc` compile (backend) | 300–500 MB | Transient, but concurrent with everything else |
-| `vite build` (frontend) | 700 MB – 1.4 GB | Dominated by bundling and minification |
-| `npm ci` (either package) | 200–400 MB + heavy I/O | Also several hundred MB of disk churn |
+| 后端运行时 | 90–160 MB | 由 `--max-old-space-size` 限制为 192 MB 堆 |
+| Broker 运行时 | 10–30 MB | Compose 上限 64 MB |
+| `tsc` 编译（后端） | 300–500 MB | 瞬时，但与其他任务并发 |
+| `vite build`（前端） | 700 MB – 1.4 GB | 主要由打包与压缩主导 |
+| `npm ci`（任一包） | 200–400 MB + 重度 I/O | 还有数百 MB 的磁盘抖动 |
 
-On a host with ~1.6 GB total RAM and other services already resident, a
-front-end build can consume the remaining headroom, push the machine into swap,
-and make it unresponsive for tens of minutes — long enough to look like an
-outage. The kernel OOM killer may then terminate the wrong process.
+在总内存约 1.6 GB、且已有其他服务常驻的主机上，一次前端构建可能耗尽剩余空间，把机器推入 swap，并使其数十分钟无响应——长到足以像是一次宕机。内核的 OOM killer 随后可能杀掉错误的进程。
 
-**Rule: never run `tsc`, `vite build`, or `npm ci` on a constrained production
-host.** Build elsewhere; ship the output.
+**规则：绝不要在受限的生产主机上运行 `tsc`、`vite build` 或 `npm ci`。在别处构建；只传输产物。**
 
 ---
 
-## 2. What Is Already Optimised
+## 2. 已经做了哪些优化
 
-Some of the hard work is done, and it is worth knowing so you do not undo it.
+一些艰苦的工作已经完成，了解这一点很有价值，以免你把它 undo（撤销）掉。
 
-**No native compilation anywhere.** The backend deliberately avoids every
-dependency that requires `node-gyp` or a prebuilt binary:
+**任何地方都没有原生编译。** 后端刻意避开了每一个需要 `node-gyp` 或预编译二进制的依赖：
 
-- Persistence uses the built-in `node:sqlite` module rather than
-  `better-sqlite3` or `sqlite3` — no toolchain, no build step, no glibc
-  surprises.
-- Password hashing uses `bcryptjs` (pure JavaScript) rather than `bcrypt`.
-- The full dependency set — `fastify`, `@fastify/{cookie,rate-limit,websocket,static}`,
-  `mqtt`, `bcryptjs`, `zod`, `uuid` — resolves with zero native modules.
+- 持久化使用内置的 `node:sqlite` 模块，而非 `better-sqlite3` 或 `sqlite3`——无工具链、无构建步骤、无 glibc 兼容问题。
+- 密码哈希使用 `bcryptjs`（纯 JavaScript）而非 `bcrypt`。
+- 完整的依赖集合——`fastify`、`@fastify/{cookie,rate-limit,websocket,static}`、`mqtt`、`bcryptjs`、`zod`、`uuid`——全部以零原生模块解析。
 
-The practical payoff: `npm ci --omit=dev` on the server, if you ever must run
-it, needs no compiler, no Python, and no `build-essential`. Do not introduce a
-native dependency casually; it changes the deployment story entirely.
+实际收益：即便你不得不运行，服务器上的 `npm ci --omit=dev` 也不需要编译器、不需要 Python、不需要 `build-essential`。不要随意引入原生依赖；那会彻底改变部署故事。
 
-> **Requirement.** `node:sqlite` needs **Node 22.5 or newer**; Node 24 is what
-> CI validates and what the Dockerfile uses. On Node 20 the process fails at
-> import with `ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite`.
+> **要求。** `node:sqlite` 需要 **Node 22.5 或更新版本**；Node 24 是 CI 验证的版本，也是 Dockerfile 使用的版本。在 Node 20 上，进程会在导入时失败并报 `ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite`。
 
-**Memory ceilings are pre-configured.** Both deployment profiles cap the
-backend:
+**内存上限已预先配置。** 两种部署配置文件都限制了后端：
 
-| Setting | systemd unit | Docker Compose |
+| 设置 | systemd 单元 | Docker Compose |
 |---|---|---|
-| Node heap | `NODE_OPTIONS=--max-old-space-size=192` | same |
-| Container/service memory | `MemoryHigh=256M`, `MemoryMax=384M` | `limits.memory: 256M` |
-| Task/PID cap | `TasksMax=64` | `pids: 100` |
-| Broker memory | — | `limits.memory: 64M`, `cpus: 0.5` |
+| Node 堆 | `NODE_OPTIONS=--max-old-space-size=192` | 同左 |
+| 容器/服务内存 | `MemoryHigh=256M`、`MemoryMax=384M` | `limits.memory: 256M` |
+| 任务/PID 上限 | `TasksMax=64` | `pids: 100` |
+| Broker 内存 | — | `limits.memory: 64M`、`cpus: 0.5` |
 
-`MemoryHigh` throttles before `MemoryMax` kills, which turns a hard OOM into
-observable slowness. Keep both.
+`MemoryHigh` 会在 `MemoryMax` 杀进程之前先限流，从而把一个硬 OOM 变成可观察的变慢。两者都保留。
 
-**Retention is bounded.** Telemetry is pruned after 7 days and
-commands/events after 180 days by an hourly job, so the database stays in the
-tens of megabytes rather than growing without limit.
+**保留（Retention）有界。** 遥测数据由每小时任务在 7 天后清理，命令/事件在 180 天后清理，因此数据库保持在数十 MB，而非无限增长。
 
 ---
 
-## 3. Build Off-Host, Ship Artifacts
+## 3. 在宿主外构建，传输产物
 
-The supported workflow for a constrained host:
+受限主机支持的流程：
 
 ```
 Developer machine / CI          Production host
@@ -86,22 +68,14 @@ npm run build (fe)  ──────▶     rsync dist/  → /opt/…/frontend
                                 systemctl restart remote-ac-backend
 ```
 
-Practical guidance:
+实用建议：
 
-1. **Build both packages locally**, from a clean tree, and record the commit
-   you built from. A build that cannot be traced to a commit cannot be rolled
-   back with confidence.
-2. **Verify integrity across the wire.** Compute `sha256sum` over the artifact
-   on both ends and compare before restarting anything. Silent truncation
-   during transfer is a real failure mode on flaky links.
-3. **Ship `dist/` only** — not `node_modules`, not sources. Runtime
-   dependencies are installed once on the server with `npm ci --omit=dev` and
-   changed only when `package-lock.json` changes.
-4. **Swap atomically.** Upload to a staging directory, then rename into place,
-   then restart. A half-uploaded `dist/` served to users is worse than downtime.
+1. **在本地从干净的代码树构建两个包**，并记录你构建所基于的提交。无法追溯到某个提交的构建，无法有把握地回滚。
+2. **跨网络验证完整性。** 在两端对产物计算 `sha256sum` 并在重启任何东西之前比对。在不可靠链路上，传输过程中的静默截断是一个真实的失败模式。
+3. **只传输 `dist/`**——不要传 `node_modules`，也不要传源码。运行时依赖在服务器上用 `npm ci --omit=dev` 安装一次，仅当 `package-lock.json` 变化时才变更。
+4. **原子替换。** 先上传到暂存目录，再重命名为正式位置，然后重启。一个半上传的 `dist/` 被提供给用户，比停机更糟。
 
-If you must build on the server despite the warnings, at minimum stop the
-backend first, ensure swap exists, and constrain the build:
+如果你不顾警告必须在服务器上构建，至少先停止后端，确保存在 swap，并约束构建：
 
 ```bash
 systemctl stop remote-ac-backend
@@ -109,27 +83,23 @@ NODE_OPTIONS=--max-old-space-size=512 npm run build   # will be slow
 systemctl start remote-ac-backend
 ```
 
-This trades wall-clock time for survivability. It is a fallback, not a plan.
+这是以挂钟时间为代价换取存活能力。它是兜底方案，而非计划。
 
 ---
 
-## 4. Frontend Bundle Size
+## 4. 前端包体积
 
-The frontend is the heaviest artifact, for one identifiable reason: the trend
-chart imports the charting library in full —
+前端是最重的产物，原因明确可定位：趋势图以完整方式导入了图表库——
 
 ```ts
 import * as echarts from 'echarts'   // pulls the entire library
 ```
 
-and `vite.config.ts` sets no `manualChunks` (only
-`chunkSizeWarningLimit: 1200`). The result is a single large JavaScript chunk in
-the megabyte range. This works, but it costs build memory, build time, and
-first-load bandwidth.
+且 `vite.config.ts` 没有设置 `manualChunks`（仅设置了 `chunkSizeWarningLimit: 1200`）。结果是一个兆字节级别的单块大型 JavaScript chunk。它能工作，但会消耗构建内存、构建时间以及首次加载的带宽。
 
-If bundle size matters for your deployment, two independent improvements:
+如果你的部署在意包体积，有两项相互独立的改进：
 
-**a) Import only the modules actually used.**
+**a) 只导入实际用到的模块。**
 
 ```ts
 import * as echarts from 'echarts/core';
@@ -139,9 +109,9 @@ import { CanvasRenderer } from 'echarts/renderers';
 echarts.use([LineChart, GridComponent, TooltipComponent, CanvasRenderer]);
 ```
 
-This typically removes the large majority of the charting payload.
+这通常能去掉图表负载中的绝大部分。
 
-**b) Split vendor code so the browser can cache it independently.**
+**b) 拆分 vendor 代码，使浏览器可独立缓存它。**
 
 ```ts
 // vite.config.ts
@@ -154,21 +124,15 @@ build: {
 }
 ```
 
-Neither change is applied in this release — they are left as deliberate,
-verifiable improvements rather than untested edits to shipped code.
+这两项改动在本版本中均未应用——它们作为刻意保留的、可验证的改进，而非对发布代码未经测试的修改。
 
-Serving-side mitigations that cost nothing: enable gzip or brotli on the
-reverse proxy, and set long-lived `Cache-Control` on hashed asset filenames.
-Compression alone typically cuts transferred size by roughly 70 % for
-JavaScript.
+在服务端零成本的缓解措施：在反向代理上启用 gzip 或 brotli，并对带哈希的文件名设置长寿命的 `Cache-Control`。仅压缩一项通常就能将 JavaScript 的传输体积削减约 70 %。
 
 ---
 
-## 5. Swap: Insurance, Not Capacity
+## 5. Swap：保险，而非容量
 
-On a 1–2 GB host, configure swap even though the steady-state workload does not
-need it. Swap converts a hard OOM kill into degraded performance, which is
-recoverable; an OOM kill of the broker or the backend is not graceful.
+在 1–2 GB 的主机上，即便稳态负载并不需要，也要配置 swap。Swap 把一次硬 OOM 杀进程变成性能下降，而后者是可恢复的；Broker 或后端的 OOM 被杀则不够优雅。
 
 ```bash
 fallocate -l 1G /swapfile
@@ -181,101 +145,82 @@ echo '/swapfile none swap sw 0 0' >> /etc/fstab
 sysctl -w vm.swappiness=10
 ```
 
-Healthy steady state is **swap present, near-zero used**. Sustained swap usage
-means the host is genuinely over-committed — reduce co-tenants or resize; do
-not raise the Node heap limit to "fix" it.
+健康的稳态是 **swap 存在、几乎零使用**。持续的 swap 使用意味着主机确实被过度分配——应减少同驻服务或扩容；不要通过提高 Node 堆上限来「修复」它。
 
 ---
 
-## 6. Sizing Reference
+## 6. 规模参考
 
-| Host RAM | Verdict |
+| 主机内存 | 结论 |
 |---|---|
-| 512 MB | Not recommended. Runtime alone may fit; any co-tenant or maintenance task will not. |
-| 1 GB | Workable with off-host builds, 1 GB swap, and no heavyweight co-tenants. |
-| 2 GB | Comfortable for runtime plus a reverse proxy and modest co-tenants. Builds still belong off-host. |
-| 4 GB+ | On-host builds become viable, though off-host remains better practice. |
+| 512 MB | 不推荐。仅运行时或许能放下；任何同驻服务或维护任务都不行。 |
+| 1 GB | 可行，需宿主外构建、1 GB swap，且无重量级同驻服务。 |
+| 2 GB | 很宽裕，可容纳运行时加上反向代理以及适度的同驻服务。构建仍应放在宿主外。 |
+| 4 GB+ | 在宿主内构建变得可行，尽管宿主外仍是更好的实践。 |
 
-Disk: budget ~1 GB for the OS-independent footprint (Node runtime, `dist`
-output, runtime `node_modules`, database, logs). The database is small; the
-systemd journal is usually the larger consumer — cap it:
+磁盘：为与操作系统无关的部分预算约 1 GB（Node 运行时、`dist` 产物、运行时 `node_modules`、数据库、日志）。数据库很小；systemd journal 通常是更大的消耗者——对它设上限：
 
 ```bash
 journalctl --vacuum-size=200M
 # persistent: SystemMaxUse=200M in /etc/systemd/journald.conf
 ```
 
-CPU: 1 vCPU is sufficient at runtime. The workload is I/O- and
-timer-driven — an MQTT subscription, a 10-second automation scan, an hourly
-retention job — not compute-bound.
+CPU：运行时 1 vCPU 足够。负载是 I/O 驱动和定时器驱动的——一个 MQTT 订阅、一次 10 秒的自动化扫描、一个每小时的保留任务——而非计算密集型。
 
 ---
 
-## 7. Co-tenancy Rules
+## 7. 同驻（Co-tenancy）规则
 
-Small hosts usually run more than one thing. To keep this system a good
-neighbour:
+小型主机通常运行不止一件事。为了让本系统成为一个良好的邻居：
 
-1. **Give every service an explicit memory cap.** An unbounded co-tenant makes
-   this system's careful ceilings pointless — the OOM killer picks by badness
-   score, not by importance.
-2. **Bind the backend to loopback** (`HOST=127.0.0.1`, the systemd default) and
-   let one reverse proxy own the public ports.
-3. **Do not co-schedule maintenance.** Backups, certificate renewal, log
-   rotation and any container image pulls should be spread across the night,
-   not stacked at the same minute.
-4. **Watch total commit, not per-process RSS.** `free -m` and
-   `systemd-cgtop` tell you more than `top` sorted by memory.
+1. **给每个服务一个明确的内存上限。** 一个无上限的同驻服务会让本系统精心设置的上限形同虚设——OOM killer 是按 badness（致命性）分数挑选，而非按重要性。
+2. **将后端绑定到回环地址**（`HOST=127.0.0.1`，即 systemd 默认值），并让一个反向代理独占公网端口。
+3. **不要将维护任务排在同一时段。** 备份、证书续期、日志轮转以及任何容器镜像拉取应分散在夜间，而非堆叠在同一分钟。
+4. **看总的已提交（commit）内存，而非单进程 RSS。** `free -m` 与 `systemd-cgtop` 比按内存排序的 `top` 更有信息量。
 
 ---
 
-## 8. Verification Checklist
+## 8. 验证清单
 
-After deploying to a constrained host, confirm all of the following:
+部署到受限主机后，确认以下全部：
 
 ```bash
-# 1. Runtime is new enough for node:sqlite
+# 1. 运行时足够新，支持 node:sqlite
 node -e "require('node:sqlite'); console.log('sqlite ok', process.version)"
 
-# 2. Service is up and ready
+# 2. 服务已启动并就绪
 curl -fsS http://127.0.0.1:3100/api/health
 curl -fsS http://127.0.0.1:3100/api/ready
 
-# 3. Memory ceilings are actually in force
+# 3. 内存上限确实生效
 systemctl show remote-ac-backend -p MemoryMax -p MemoryHigh -p TasksMax
 systemctl status remote-ac-backend | grep -i memory
 
-# 4. Swap exists and is idle
+# 4. swap 存在且空闲
 free -m
 
-# 5. Journal is capped
+# 5. journal 已设上限
 journalctl --disk-usage
 ```
 
-Then leave it for 24 hours and re-check `free -m` and the backend's memory
-usage. A stable RSS after a full day — including the hourly retention job and a
-daily backup — is the signal that the sizing is right.
+然后让它运行 24 小时，再复查 `free -m` 与后端的内存占用。经过整整一天——包含每小时保留任务与每日备份——之后 RSS 稳定，是规模规划正确的信号。
 
 ---
 
-## 9. Symptoms and Causes
+## 9. 症状与原因
 
-| Symptom | Likely cause | Action |
+| 症状 | 可能原因 | 处理 |
 |---|---|---|
-| Host unresponsive for many minutes during deploy | `vite build` or `tsc` run on-host | Build off-host (§3) |
-| Backend killed and restarted under load | `MemoryMax` reached | Inspect for a leak before raising the cap; check co-tenants |
-| `ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite` | Node < 22.5 | Upgrade to Node 24 |
-| `npm ci` fails with `ENOSPC` | Disk exhausted by journal/npm cache | `journalctl --vacuum-size`, `npm cache clean --force` |
-| Sustained swap usage | Genuine over-commit | Remove co-tenants or resize; do not raise the heap limit |
-| Slow first page load | Un-split, uncompressed frontend bundle | Enable gzip/brotli; consider §4 |
-| Broker restart loop under Compose | 64 MB limit too tight with heavy retained state | Raise the broker limit modestly and investigate retained topics |
+| 部署期间主机无响应达数分钟 | 在宿主上运行了 `vite build` 或 `tsc` | 宿主外构建（§3） |
+| 后端在负载下被杀并重启 | 达到 `MemoryMax` | 提高上限前先排查泄漏；检查同驻服务 |
+| `ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite` | Node < 22.5 | 升级到 Node 24 |
+| `npm ci` 因 `ENOSPC` 失败 | journal/npm 缓存耗尽磁盘 | `journalctl --vacuum-size`、`npm cache clean --force` |
+| 持续 swap 使用 | 真正的内存过度分配 | 移除同驻服务或扩容；不要提高堆上限 |
+| 首页加载缓慢 | 未拆分、未压缩的前端包 | 启用 gzip/brotli；考虑 §4 |
+| Compose 下 Broker 重启循环 | 64 MB 上限在大量保留状态下过紧 | 适度提高 Broker 上限并调查保留主题 |
 
 ---
 
-## 10. Summary
+## 10. 总结
 
-The runtime is cheap; the build is expensive. Keep builds off the production
-host, keep every service's memory explicitly capped, keep swap present and
-unused, and keep the dependency tree free of native modules. Those four
-disciplines are what make a 1 GB host a reasonable home for this system rather
-than a recurring incident.
+运行时廉价；构建昂贵。保持构建在生产线外，保持每个服务的内存都有明确上限，保持 swap 存在且未使用，并保持依赖树不含原生模块。这四项纪律，正是让 1 GB 主机成为本系统合理归宿、而非反复事故的原因。

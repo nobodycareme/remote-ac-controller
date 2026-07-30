@@ -1,144 +1,137 @@
-# Scheduling
+**简体中文** | [English](./scheduling_EN.md)
 
-Time-based automation: fire a discrete AC state at a given local time on
-selected weekdays.
+# 定时调度
 
-Implementation: `scanSchedules()` in `cloud/backend/src/automation.ts`;
-storage: the `ac_schedules` table in `cloud/backend/src/db.ts`.
+基于时间的自动化：在指定的本地时间、指定的星期几，让空调进入某个离散状态。
 
-## 1. Model
+实现位置：`cloud/backend/src/automation.ts` 中的 `scanSchedules()`；
+存储：`cloud/backend/src/db.ts` 中的 `ac_schedules` 表。
 
-A schedule says: *at this local time, on these weekdays, put the air
-conditioner into this state.*
+## 1. 模型
 
-It does not express duration or ranges. "Cool from 22:00 to 06:00" is
-expressed as two schedules — one that applies a cooling state at 22:00 and one
-that applies the off state at 06:00. This keeps every schedule a single,
-idempotent, auditable action.
+一条调度表达的语义是：*在这个本地时间、这些星期几，把空调置为这个状态。*
 
-## 2. Schema
+它不表达持续时长或时间区间。"22:00 到 06:00 制冷"需要拆成两条调度——一条在 22:00
+应用制冷状态，另一条在 06:00 应用关机状态。这样可以保证每条调度都是单一、幂等、
+可审计的动作。
+
+## 2. 表结构
 
 | Column | Type | Default | Meaning |
 |--------|------|---------|---------|
 | `id` | INTEGER PK | | |
-| `name` | TEXT | `''` | Display label |
-| `state_id` | TEXT | — | Must exist in the AC state catalogue |
-| `time_hhmm` | TEXT | — | Local time, `"HH:MM"`, 24-hour |
-| `days_mask` | INTEGER | `127` | Weekday bitmask, see §3 |
-| `one_shot` | INTEGER | `0` | `1` = disable after firing once |
+| `name` | TEXT | `''` | 展示名称 |
+| `state_id` | TEXT | — | 必须存在于空调状态目录中 |
+| `time_hhmm` | TEXT | — | 本地时间，`"HH:MM"`，24 小时制 |
+| `days_mask` | INTEGER | `127` | 星期位掩码，参见 §3 |
+| `one_shot` | INTEGER | `0` | `1` = 触发一次后自动禁用 |
 | `enabled` | INTEGER | `1` | |
-| `last_fired_minute` | TEXT | `''` | Minute-idempotency anchor |
-| `last_fired_at` | INTEGER | | Epoch ms |
+| `last_fired_minute` | TEXT | `''` | 分钟级幂等锚点 |
+| `last_fired_at` | INTEGER | | Epoch 毫秒 |
 | `created_by` | TEXT | `'owner'` | |
-| `created_at` / `updated_at` | INTEGER | | Epoch ms |
+| `created_at` / `updated_at` | INTEGER | | Epoch 毫秒 |
 
-Indexed on `(enabled, time_hhmm)`.
+在 `(enabled, time_hhmm)` 上建有索引。
 
-## 3. Weekday Bitmask
+## 3. 星期位掩码
 
-`days_mask` is a 7-bit field. **Bit 0 is Monday.**
+`days_mask` 是一个 7 位字段。**第 0 位是星期一。**
 
 | Bit | Value | Day |
 |-----|-------|-----|
-| 0 | 1 | Monday |
-| 1 | 2 | Tuesday |
-| 2 | 4 | Wednesday |
-| 3 | 8 | Thursday |
-| 4 | 16 | Friday |
-| 5 | 32 | Saturday |
-| 6 | 64 | Sunday |
+| 0 | 1 | 星期一 |
+| 1 | 2 | 星期二 |
+| 2 | 4 | 星期三 |
+| 3 | 8 | 星期四 |
+| 4 | 16 | 星期五 |
+| 5 | 32 | 星期六 |
+| 6 | 64 | 星期日 |
 
 | Intent | Mask |
 |--------|------|
-| Every day | `127` |
-| Weekdays only | `31` |
-| Weekends only | `96` |
-| Monday, Wednesday, Friday | `21` |
+| 每天 | `127` |
+| 仅工作日 | `31` |
+| 仅周末 | `96` |
+| 周一、周三、周五 | `21` |
 
-## 4. Time Zone
+## 4. 时区
 
-Local time is computed with `Intl.DateTimeFormat` pinned to
-**`Asia/Shanghai`** (`getLocalNow()`), independent of the host's system time
-zone. A server running in UTC therefore still fires an "07:30" schedule at
-07:30 local time.
+本地时间通过 `Intl.DateTimeFormat` 计算，并固定为 **`Asia/Shanghai`**
+（`getLocalNow()`），与宿主机的系统时区无关。因此，即使服务器运行在 UTC 时区，
+一条 "07:30" 的调度仍会在本地时间 07:30 触发。
 
-To relocate the deployment, change the `timeZone` in the formatter
-construction in `automation.ts`. Note that this project performs no
-daylight-saving transition handling, because `Asia/Shanghai` has none. Adapt
-that logic before moving to a DST zone.
+若要把部署迁移到其他地区，请修改 `automation.ts` 中构造格式化器时的 `timeZone`
+参数。注意本项目未做任何夏令时切换处理，因为 `Asia/Shanghai` 不存在夏令时。迁移到
+有夏令时的时区之前，必须先调整这部分逻辑。
 
-## 5. Execution Loop
+## 5. 执行循环
 
-A single `setInterval` runs every `AUTOMATION_SCAN_INTERVAL_MS` (10 000 ms) and
-drives both the schedule scan and the temperature rule scan.
+一个 `setInterval` 定时器每 `AUTOMATION_SCAN_INTERVAL_MS`（10 000 ms）运行一次，
+同时驱动调度扫描与温度规则扫描。
 
-For each enabled schedule:
+对每条已启用的调度：
 
-1. Skip if the current weekday bit is not set in `days_mask`.
-2. Skip unless `time_hhmm` equals the current local `HH:MM`.
-3. Skip if `last_fired_minute` already equals the current minute key.
-4. Dispatch, then mark fired via `markAcScheduleFired()`, disabling the row if
-   `one_shot` is set.
+1. 若当前星期对应的位未在 `days_mask` 中置位，跳过。
+2. 若 `time_hhmm` 不等于当前本地 `HH:MM`，跳过。
+3. 若 `last_fired_minute` 已等于当前分钟键，跳过。
+4. 下发命令，随后通过 `markAcScheduleFired()` 标记已触发；若设置了 `one_shot`，
+   同时禁用该行。
 
-### Minute idempotency
+### 分钟级幂等
 
-The minute key has the form `2026-07-28T07:30`. Because the scan runs every
-10 s, a schedule matches roughly six times within its minute. Comparing
-against `last_fired_minute` guarantees exactly one dispatch. The anchor is
-persisted, so a process restart mid-minute does not cause a re-fire.
+分钟键的形式为 `2026-07-28T07:30`。由于扫描每 10 s 执行一次，一条调度在其所属的
+那一分钟内大约会匹配六次。与 `last_fired_minute` 比对可确保恰好只下发一次。该锚点
+是持久化的，因此进程在分钟中途重启也不会导致重复触发。
 
-### Missed schedules are not replayed
+### 错过的调度不会补跑
 
-If the backend is down at 07:30 and starts at 07:35, the 07:30 schedule does
-**not** fire. This is deliberate: actuating a physical appliance on stale
-intent is worse than skipping it. The skip is visible in the execution audit.
+如果后端在 07:30 处于宕机状态、07:35 才启动，那么 07:30 的这条调度**不会**触发。
+这是刻意为之：基于过期意图去操作一台实体电器，比直接跳过更糟糕。跳过行为在执行
+审计中可见。
 
-## 6. Dispatch Path and Guards
+## 6. 下发路径与守卫
 
-All schedule dispatches go through `dispatchForAutomation()`, which reuses the
-same `dispatchIrAction()` path as manual control. There is no privileged
-automation shortcut. Guards applied in order:
+所有调度下发都走 `dispatchForAutomation()`，它复用与手动控制完全相同的
+`dispatchIrAction()` 路径。自动化没有任何特权捷径。守卫按以下顺序生效：
 
 | Guard | Recorded status |
 |-------|----------------|
-| State missing or `enabled = false` in the catalogue | `skipped_state_unavailable` |
-| `REAL_IR_PRODUCTION_CONTROL_ENABLED` is not enabled | `skipped_ir_disabled` |
-| Device classified offline | `skipped_device_offline` |
-| Duplicate idempotency key | `idempotent_replay` |
-| Dispatched successfully | `dispatched` |
+| 状态在目录中缺失或 `enabled = false` | `skipped_state_unavailable` |
+| `REAL_IR_PRODUCTION_CONTROL_ENABLED` 未启用 | `skipped_ir_disabled` |
+| 设备被判定为离线 | `skipped_device_offline` |
+| 幂等键重复 | `idempotent_replay` |
+| 下发成功 | `dispatched` |
 
-Consequently, **schedules do nothing physical until the production IR kill
-switch is enabled** — see [`security-model.md`](./security-model.md) §5. They
-still record audit rows, which is a useful dry-run mode.
+由此可见，**在生产红外安全总开关启用之前，调度不会产生任何物理动作** —— 参见
+[`security-model.md`](./security-model.md) §5。但它们仍会写入审计记录，这构成了一种
+很有用的空跑（dry-run）模式。
 
-The `requested_by` field is set to `automation:schedule:<id>`. This prefix
-marks the command as non-manual and excludes it from the manual-suppression
-window used by temperature automation — see
-[`temperature-automation.md`](./temperature-automation.md) §5.
+`requested_by` 字段被设置为 `automation:schedule:<id>`。该前缀标记此命令为非手动
+操作，使其被排除在温度自动化所使用的手动抑制窗口之外 —— 参见
+[`temperature-automation.md`](./temperature-automation.md) §5。
 
-## 7. Audit Trail
+## 7. 审计轨迹
 
-Every evaluation that reaches dispatch — successful or skipped — inserts a row
-into `ac_automation_executions`:
+每一次进入下发环节的评估——无论成功还是被跳过——都会向 `ac_automation_executions`
+插入一行记录：
 
 | Column | Meaning |
 |--------|---------|
 | `source` | `'schedule'` |
-| `rule_id` | Schedule id |
-| `state_id` | Requested state |
-| `command_id` | Present when dispatched |
-| `status` | `dispatched`, `idempotent_replay`, or a `skipped_*` reason |
-| `detail` | Free-text explanation |
+| `rule_id` | 调度 id |
+| `state_id` | 请求的状态 |
+| `command_id` | 实际下发时才有值 |
+| `status` | `dispatched`、`idempotent_replay`，或某个 `skipped_*` 原因 |
+| `detail` | 自由文本说明 |
 
-Exposed via `GET /api/ac/automation/executions`.
+通过 `GET /api/ac/automation/executions` 对外暴露。
 
-Audit before blame: if a schedule "did not work", read this table first. In
-practice the answer is almost always `skipped_ir_disabled` or
-`skipped_device_offline`.
+先查审计，再下结论：如果某条调度"没生效"，请先读这张表。实践中答案几乎总是
+`skipped_ir_disabled` 或 `skipped_device_offline`。
 
-## 8. Worked Example
+## 8. 完整示例
 
-Cool to 26 °C at 21:00 on weekdays, turn off at 06:30 daily:
+工作日 21:00 制冷到 26 °C，每天 06:30 关机：
 
 | Field | Schedule A | Schedule B |
 |-------|-----------|-----------|
@@ -149,12 +142,11 @@ Cool to 26 °C at 21:00 on weekdays, turn off at 06:30 daily:
 | `one_shot` | `0` | `0` |
 | `enabled` | `1` | `1` |
 
-## 9. Operational Notes
+## 9. 运维注意事项
 
-- A `state_id` that is not in the catalogue never fires. Renaming a state
-  (for example bumping `_v1` to `_v2`) silently breaks existing schedules —
-  update them, and check the audit table for `skipped_state_unavailable`.
-- Two schedules at the same minute both fire; ordering is by scan order and is
-  not guaranteed. Avoid conflicting states at the same time.
-- The interval timer is `unref()`'d, so it does not keep the process alive on
-  its own.
+- 不在状态目录中的 `state_id` 永远不会触发。重命名某个状态（例如把 `_v1` 升为
+  `_v2`）会静默地破坏既有调度 —— 请同步更新调度，并检查审计表中是否出现
+  `skipped_state_unavailable`。
+- 同一分钟内的两条调度都会触发；执行顺序取决于扫描顺序，不做保证。请避免在同一
+  时刻配置相互冲突的状态。
+- 该间隔定时器调用了 `unref()`，因此它本身不会阻止进程退出。

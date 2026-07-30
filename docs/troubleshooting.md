@@ -1,12 +1,12 @@
-# Troubleshooting
+**简体中文** | [English](./troubleshooting_EN.md)
 
-Symptom-first diagnostics. Each section states the observable symptom, the
-likely causes in order of probability, and how to discriminate between them.
+# 故障排查（Troubleshooting）
 
-## 1. Diagnostic Order
+以症状为先的诊断。每一节给出可观察的症状、按概率排序的可能原因，以及如何区分它们。
 
-Work from the device outward. Most "the app is broken" reports resolve to a
-device or credential problem two layers down.
+## 1. 诊断顺序
+
+从设备向外排查。大多数「应用坏了」的报告，最终都能归结到下面两层里的一个设备问题或凭据问题。
 
 ```
 1. Is the device powered and sensing?        → serial monitor
@@ -16,238 +16,200 @@ device or credential problem two layers down.
 5. Is the browser authorised?                → error code in the response
 ```
 
-## 2. Build and Flash
+## 2. 构建与烧录
 
-### `dev.ps1 status` reports no serial port
+### `dev.ps1 status` 报告没有串口
 
-| Cause | Discriminator |
+| 原因 | 判别方法 |
 |-------|--------------|
-| Charge-only USB cable | The board does not appear in Device Manager at all |
-| Missing USB-UART driver | Appears as an unknown device |
-| Board not powered | No power LED |
+| 仅充电的 USB 线 | 设备管理器里完全看不到开发板 |
+| 缺少 USB-UART 驱动 | 显示为未知设备 |
+| 开发板未上电 | 无电源 LED |
 
-Install the driver matching your bridge chip (CH9102/CH340, CP210x, or FTDI).
-The tooling enumerates ports dynamically, so there is no port number to
-configure; use `-Port` only to override auto-detection.
+安装与你桥接芯片匹配的驱动（CH9102/CH340、CP210x 或 FTDI）。工具会动态枚举端口，因此无需配置端口号；仅在需要覆盖自动检测时才使用 `-Port`。
 
-### Toolchain errors mentioning archiver or path failures
+### 工具链报错，提及归档器（archiver）或路径失败
 
-The Xtensa toolchain is intolerant of unusual build paths. Symptoms include
-archiver failures and truncated object paths.
+Xtensa 工具链无法容忍异常的构建路径。症状包括归档器失败与对象路径被截断。
 
-Remedies, in order:
+按序处理：
 
-1. Build from a path with only ASCII characters and no spaces.
-2. Keep the path short — deep nesting can exceed platform path limits.
-3. On Windows, map a short virtual drive to the repository root and build from
-   there.
+1. 从一个仅含 ASCII 字符且无空格的路径构建。
+2. 保持路径简短——深层嵌套可能超过平台路径长度限制。
+3. 在 Windows 上，将短虚拟盘映射到仓库根目录，并从那里构建。
 
-### The build stalls indefinitely
+### 构建无限期卡住
 
-Usually a stale PlatformIO core lock left by a killed process. Terminate any
-lingering `pio` processes and remove the lock files under the PlatformIO core
-directory, then retry.
+通常是被杀掉的进程遗留的过期 PlatformIO 核心锁。终止任何残留的 `pio` 进程，并删除 PlatformIO 核心目录下的锁文件，然后重试。
 
-Also check for a proxy environment variable pointing at a dead proxy — package
-resolution will hang rather than fail. Clear `HTTP_PROXY`/`HTTPS_PROXY` for
-the build, or set `NO_PROXY=*`.
+还要检查是否指向了已失效代理的代理环境变量——包解析会挂起而非失败。为构建过程清除 `HTTP_PROXY`/`HTTPS_PROXY`，或设置 `NO_PROXY=*`。
 
-### Upload times out
+### 上传超时
 
-A full upload takes roughly two and a half minutes. Tooling with a shorter
-timeout will kill it mid-write and report a missing binary. Allow at least
-480 seconds.
+一次完整上传大约需要两分半钟。超时设置较短的工具会在写入中途将其杀掉，并报告找不到二进制文件。请至少允许 480 秒。
 
-## 3. Sensor
+## 3. 传感器
 
-### Temperature reads `nan` or `sensor_ok` is false every cycle
+### 温度读为 `nan`，或 `sensor_ok` 每个周期都为 false
 
-| Cause | Check |
+| 原因 | 检查 |
 |-------|-------|
-| DATA on the wrong pin | Must be D1 / GPIO5 |
-| Missing pull-up | Bare 4-pin DHT11 needs 4.7 kΩ to 3V3 |
-| Powered from 5 V | Must be 3V3 |
-| Wrong library | Must be Adafruit DHT 1.4.7 + Unified Sensor 1.1.15 |
+| DATA 接错引脚 | 必须为 D1 / GPIO5 |
+| 缺少上拉 | 裸 4 针 DHT11 需要 4.7 kΩ 上拉到 3V3 |
+| 由 5 V 供电 | 必须为 3V3 |
+| 用错库 | 必须为 Adafruit DHT 1.4.7 + Unified Sensor 1.1.15 |
 
-Substituting a different DHT library produces exactly this symptom on this
-pin/timing combination. Do not change the library.
+在此引脚/时序组合下，换用其他 DHT 库会产生恰好这一症状。不要更换库。
 
-### Readings are plausible but drift high
+### 读数合理但偏高漂移
 
-The sensor is picking up the ESP8266's own heat, or sits in the AC's airflow.
-See [`temperature-automation.md`](./temperature-automation.md) §10 — no amount
-of threshold tuning compensates for placement.
+传感器在吸收 ESP8266 自身的热量，或是处在空调气流中。见 [`temperature-automation.md`](./temperature-automation.md) §10——再多的阈值调优也无法补偿安装位置问题。
 
-## 4. Infrared
+## 4. 红外（Infrared）
 
-### `ir probe` returns nothing
+### `ir probe` 没有任何返回
 
-Almost always the UART lines are not crossed. Module TXD → MCU D5/GPIO14;
-module RXD → MCU D6/GPIO12. Straight-through wiring gives a module that looks
-dead.
+几乎总是 UART 线没有交叉。模块 TXD → MCU D5/GPIO14；模块 RXD → MCU D6/GPIO12。直通接线会让模块看起来像死的。
 
-### Capture length or digest differs between attempts
+### 多次尝试之间捕获长度或摘要不同
 
-Ambient infrared contamination — sunlight, fluorescent or LED lighting, or
-another remote. Reduce ambient IR, hold the remote 3–10 cm from the black
-receiver element, and repeat until three captures agree. Never register a
-frame you have not reproduced.
+环境红外污染——阳光、荧光灯或 LED 灯，或另一个遥控器。降低环境 IR，将遥控器保持在距黑色接收元件 3–10 cm 处，并重复直到三次捕获一致。永远不要注册一个你未能复现的帧。
 
-### Capture succeeds but replay does nothing
+### 捕获成功但重放无反应
 
-| Cause | Check |
+| 原因 | 检查 |
 |-------|-------|
-| Emitter not aimed at the AC | Clear element, line of sight |
-| Out of range | Verify within 1 m first |
-| AC already in that state | Most units give no feedback for a no-op |
-| Frame needs staged transfer | Try `ir stage send` |
-| Insufficient supply current | Works close, fails at distance — see [`hardware.md`](./hardware.md) §4 |
+| 发射器未对准空调 | 接收元件清晰、视线无遮挡 |
+| 超出距离 | 先确认在 1 m 以内 |
+| 空调已处于该状态 | 大多数机型对空操作（no-op）不反馈 |
+| 帧需要分段传输 | 尝试 `ir stage send` |
+| 供电电流不足 | 近处可用、远处失败——见 [`hardware.md`](./hardware.md) §4 |
 
-### Acknowledgement status decoder
+### 确认应答（ACK）状态解码器
 
-| Status | Meaning | Action |
+| 状态 | 含义 | 处理 |
 |--------|---------|--------|
-| `accepted_mock` | Command accepted, no IR sent | Expected while kill switches are off |
-| `blocked_by_ir_policy` | Firmware policy gate refused | Check firmware IR configuration |
-| `ir_state_disabled` | State's `enabled` flag is false | Enable it in the catalogue |
-| `ir_unknown_code` | Code not in the firmware registry | Regenerate the registry and reflash |
-| `ir_module_busy` | Module mid-operation | Reduce command rate |
-| `ir_execute_failed` | Transmission failed | Check power and wiring |
-| `expired` | Arrived after `expires_at` | Latency or a device clock problem |
-| `duplicate` | Seen within the 30 s exec cache | Usually benign |
+| `accepted_mock` | 命令已接受，未发送 IR | 安全总开关关闭期间的预期行为 |
+| `blocked_by_ir_policy` | 固件策略门拒绝 | 检查固件 IR 配置 |
+| `ir_state_disabled` | 状态的 `enabled` 标志为 false | 在目录中启用它 |
+| `ir_unknown_code` | 固件注册表中没有该码 | 重新生成注册表并重新烧录 |
+| `ir_module_busy` | 模块操作中 | 降低命令速率 |
+| `ir_execute_failed` | 传输失败 | 检查电源与接线 |
+| `expired` | 在 `expires_at` 之后到达 | 延迟或设备时钟问题 |
+| `duplicate` | 在 30 s 执行缓存内再次出现 | 通常无碍 |
 
-## 5. Connectivity
+## 5. 连通性
 
-### Device never reaches online
+### 设备始终达不到 online
 
-Read the telemetry counters — they discriminate the failure mode precisely:
+读取遥测计数器——它们能精确区分故障模式：
 
-| Observation | Interpretation |
+| 观察 | 解释 |
 |-------------|---------------|
-| `wifi_reconnect_count` climbing | Wi-Fi association problem, not MQTT |
-| Wi-Fi stable, `mqtt_reconnect_attempt_count` climbing, success flat | TLS or authentication failure |
-| `mqtt_publish_fail_count` climbing | Connected, but ACL denies the topic |
+| `wifi_reconnect_count` 攀升 | Wi-Fi 关联问题，非 MQTT |
+| Wi-Fi 稳定，`mqtt_reconnect_attempt_count` 攀升但成功数为平 | TLS 或认证失败 |
+| `mqtt_publish_fail_count` 攀升 | 已连接，但 ACL 拒绝该主题 |
 
-### TLS handshake fails
+### TLS 握手失败
 
-Two distinct failures that are easy to confuse:
+两种容易混淆的不同失败：
 
-| Indicator | Cause | Fix |
+| 指示 | 原因 | 修复 |
 |-----------|-------|-----|
-| `bearssl_code = 0` **and** free heap < ~28 KB | Heap exhaustion | Reduce memory use elsewhere; keep `setBufferSizes(4096, 1024)` |
-| `bearssl_code = 56` | Subject Alternative Name mismatch | Reissue the broker certificate with a correct SAN |
+| `bearssl_code = 0` **且** 空闲堆 < ~28 KB | 堆耗尽 | 降低其他处内存占用；保持 `setBufferSizes(4096, 1024)` |
+| `bearssl_code = 56` | 主题备用名称（SAN）不匹配 | 用正确的 SAN 重新签发 Broker 证书 |
 
-A code-0 failure is **not** a certificate problem. Do not disable certificate
-validation to "fix" it — that converts a memory bug into a security hole.
+code-0 失败**不是**证书问题。不要为「修复」它而禁用证书校验——那会把一个内存 bug 变成安全漏洞。
 
-### Publishes are rejected
+### 发布被拒绝
 
-The broker ACL grants topics explicitly. If `DEVICE_ID` differs from the ACL
-entries, every publish is denied while the connection itself stays up. Make
-`DEVICE_ID` in the firmware, the backend, and `aclfile` identical.
+Broker 的 ACL 显式授予主题。如果 `DEVICE_ID` 与 ACL 条目不同，则每次发布都会被拒绝，但连接本身仍然保持。请使固件、后端与 `aclfile` 中的 `DEVICE_ID` 保持一致。
 
-## 6. Backend
+## 6. 后端
 
-### Server exits immediately on start
+### 服务器启动后立即退出
 
-Configuration is validated by Zod at startup and a failure is fatal by design.
-The error names the offending variable. Compare against
-`cloud/backend/.env.example`.
+配置在启动时会由 Zod 校验，失败按设计是致命的。错误会指出有问题的变量。请对照 `cloud/backend/.env.example`。
 
-### `node:sqlite` is not available
+### `node:sqlite` 不可用
 
-Requires Node.js 22 or newer. On older versions the import fails outright.
-Node 24 is the tested version.
+需要 Node.js 22 或更新版本。在更旧的版本上，导入会直接失败。Node 24 是经测试的版本。
 
-### Health check passes but the UI shows nothing
+### 健康检查通过但 UI 什么都不显示
 
-Almost always the reverse proxy is not forwarding the WebSocket upgrade. Add
-the `Upgrade` and `Connection` headers — see
-[`deployment.md`](./deployment.md) §8. REST works, live updates do not, which
-makes the UI look stale rather than broken.
+几乎总是反向代理没有转发 WebSocket 升级（upgrade）。添加 `Upgrade` 与 `Connection` 请求头——见
+[`deployment.md`](./deployment.md) §8。REST 正常、实时更新不正常，会让 UI 看起来陈旧而非坏了。
 
-### The server becomes unresponsive during a build
+### 服务器在构建期间变得无响应
 
-Do not build on a small server. Compiling TypeScript and bundling the frontend
-can exhaust memory to the point of losing SSH access. Build on a workstation
-and ship artifacts. See
-[`resource-constrained-deployment.md`](./resource-constrained-deployment.md).
+不要在小型服务器上构建。编译 TypeScript 并打包前端可能耗尽内存到丢失 SSH 访问的程度。请在 workstation 上构建并传输产物。见
+[`resource-constrained-deployment.md`](./resource-constrained-deployment.md)。
 
-## 7. Web Application
+## 7. Web 应用
 
-Error codes are returned in a uniform deny envelope; read `errorCode` rather
-than guessing from the HTTP status.
+错误码以统一的拒绝（deny）信封返回；请读取 `errorCode`，而不是凭 HTTP 状态猜测。
 
-| `errorCode` | Meaning | Fix |
+| `errorCode` | 含义 | 修复 |
 |-------------|---------|-----|
-| `ORIGIN_DENIED` | Origin header does not match | `PUBLIC_BASE_URL`/`ALLOWED_ORIGINS` must match exactly, no trailing slash |
-| `CSRF_INVALID` | Token missing or wrong | Reload the page; check cookie forwarding through the proxy |
-| `UNAUTHORIZED` | No valid session | Log in |
-| `SESSION_EXPIRED` | Session TTL elapsed | Log in again |
-| `OWNER_REQUIRED` | Guest attempted a privileged action | Use an owner session |
-| `REAL_IR_DISABLED` | Kill switch off | See [`security-model.md`](./security-model.md) §5 |
-| `DEVICE_OFFLINE` | No recent telemetry | Diagnose the device first |
-| `IDEMPOTENCY_KEY_PAYLOAD_MISMATCH` | Same key, different payload | Client bug — generate a fresh key |
-| `TOO_MANY_REQUESTS` | Rate limit (100/min) | Back off |
+| `ORIGIN_DENIED` | Origin 请求头不匹配 | `PUBLIC_BASE_URL`/`ALLOWED_ORIGINS` 必须完全匹配，无结尾斜杠 |
+| `CSRF_INVALID` | 令牌缺失或错误 | 重新加载页面；检查经代理转发的 cookie |
+| `UNAUTHORIZED` | 无有效会话 | 登录 |
+| `SESSION_EXPIRED` | 会话 TTL 已过 | 重新登录 |
+| `OWNER_REQUIRED` | 访客尝试了特权操作 | 使用所有者会话 |
+| `REAL_IR_DISABLED` | 安全总开关关闭 | 见 [`security-model.md`](./security-model.md) §5 |
+| `DEVICE_OFFLINE` | 近期无遥测 | 先诊断设备 |
+| `IDEMPOTENCY_KEY_PAYLOAD_MISMATCH` | 相同 key、不同 payload | 客户端 bug——生成新 key |
+| `TOO_MANY_REQUESTS` | 速率限制（100/分钟） | 退避 |
 
-### Owner login stopped working after a password change
+### 改密码后所有者登录失效
 
-Expected. Trusted sessions embed a fingerprint derived from the owner
-credentials; rotating the password invalidates every trusted session. Log in
-again and re-trust the device.
+这是预期的。受信任会话内嵌了由所有者凭据派生的指纹；轮换密码会使每个受信任会话失效。请重新登录并重新信任设备。
 
-### Device shows online but is unplugged
+### 设备显示 online 但实际已断电
 
-If you observe this, check whether liveness is being derived from the retained
-`availability` message rather than from telemetry recency. Retained messages
-outlive the publisher, so they cannot be used as a liveness signal — the
-backend classifies liveness from telemetry age instead. See
-[`mqtt-protocol.md`](./mqtt-protocol.md) §5.
+如果你观察到这一现象，检查存活判定是否来自保留的 `availability` 消息，而非来自遥测的新近度（recency）。保留消息的寿命长于发布者，因此它们不能用作存活信号——后端改为依据遥测数据的时间新旧来分类存活。见
+[`mqtt-protocol.md`](./mqtt-protocol.md) §5。
 
-## 8. Automation
+## 8. 自动化
 
-### A schedule did not fire
+### 定时任务未触发
 
-Read `ac_automation_executions` (`GET /api/ac/automation/executions`) before
-anything else.
+在做任何其他事之前，先读取 `ac_automation_executions`（`GET /api/ac/automation/executions`）。
 
-| Status | Meaning |
+| 状态 | 含义 |
 |--------|---------|
-| `skipped_ir_disabled` | Production IR kill switch is off |
-| `skipped_device_offline` | Device was offline at the scheduled minute |
-| `skipped_state_unavailable` | `state_id` missing or disabled |
-| No row at all | The schedule never matched — check `days_mask` (bit 0 = Monday) and `time_hhmm` |
+| `skipped_ir_disabled` | 生产 IR 安全总开关关闭 |
+| `skipped_device_offline` | 在计划的那一分钟设备离线 |
+| `skipped_state_unavailable` | `state_id` 缺失或已禁用 |
+| 根本没有行 | 定时任务从未匹配——检查 `days_mask`（bit 0 = 周一）与 `time_hhmm` |
 
-Note that missed schedules are not replayed after downtime; this is
-deliberate.
+注意：错过的定时任务在停机后不会补触发；这是刻意的设计。
 
-### Temperature automation does nothing
+### 温度自动化没有任何动作
 
-Read `last_eval_reason` on the rule row. Every evaluation writes it.
+读取规则行上的 `last_eval_reason`。每次评估都会写入它。
 
-| Reason | Meaning |
+| 原因 | 含义 |
 |--------|---------|
-| `insufficient_samples` | Fewer than 3 telemetry samples |
-| `sensor_stale` | Newest sample older than `sensor_stale_s` |
-| `in_deadband:<t>C` | Temperature is between the thresholds — normal |
-| `already_on` / `already_off` | Already in the desired state |
-| `min_interval_hold` | Rate limited |
-| `manual_suppressed` | Within the manual override window (default 30 min) |
-| `pending_confirm_<d>:1/2` | Waiting for the second agreeing evaluation |
+| `insufficient_samples` | 少于 3 个遥测样本 |
+| `sensor_stale` | 最新样本早于 `sensor_stale_s` |
+| `in_deadband:<t>C` | 温度处于阈值之间——正常 |
+| `already_on` / `already_off` | 已处于期望状态 |
+| `min_interval_hold` | 受速率限制 |
+| `manual_suppressed` | 在手动覆盖窗口内（默认 30 分钟） |
+| `pending_confirm_<d>:1/2` | 等待第二次一致评估 |
 
-### Automation cycles the AC too often
+### 自动化使空调频繁开关
 
-Widen the dead band (raise `on_threshold_c`, lower `off_threshold_c`) and
-raise `min_interval_s`. Do not go below roughly 300 s for a real compressor.
+放宽滞回区间（dead band）（提高 `on_threshold_c`、降低 `off_threshold_c`），并提高 `min_interval_s`。对于真实压缩机，不要低于大约 300 秒。
 
-## 9. Escalation
+## 9. 升级上报（Escalation）
 
-If a problem is not covered here:
+如果此处未涵盖某问题：
 
-1. Capture the serial log and the relevant telemetry counters.
-2. Capture the deny envelope, including `errorCode` and `requestId`.
-3. Note firmware version, Node version, and whether the kill switches are on.
-4. Open an issue using the template in `.github/ISSUE_TEMPLATE/`.
+1. 捕获串口日志与相关的遥测计数器。
+2. 捕获拒绝（deny）信封，包括 `errorCode` 与 `requestId`。
+3. 记录固件版本、Node 版本，以及安全总开关是否开启。
+4. 使用 `.github/ISSUE_TEMPLATE/` 中的模板提交 issue。
 
-**Redact before posting:** hostnames, IP addresses, credentials, certificates,
-and captured IR frames.
+**发布前请脱敏：** 主机名、IP 地址、凭据、证书，以及捕获的 IR 帧。

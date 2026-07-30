@@ -1,43 +1,37 @@
-# Wiring
+**简体中文** | [English](./wiring_EN.md)
 
-Physical connections between the NodeMCU and the two peripherals.
+# 接线
 
-Pin assignments are defined in exactly one source file:
-`firmware/include/config/hardware_config.h`. If you change the wiring, change
-that header — do not scatter pin numbers through the code.
-`firmware/include/board_pins.h` exists only to provide backwards-compatible
-aliases.
+NodeMCU 与两个外设之间的物理连接。
 
-## 1. Connection Table
+引脚分配只定义在唯一的源文件中：`firmware/include/config/hardware_config.h`。如需改动接线，请修改该头文件 —— 不要把引脚号散落在代码各处。`firmware/include/board_pins.h` 仅用于提供向后兼容的别名。
 
-### DHT11 temperature/humidity sensor
+## 1. 连接表
 
-| DHT11 pin | NodeMCU pin | GPIO | Notes |
+### DHT11 温湿度传感器
+
+| DHT11 引脚 | NodeMCU 引脚 | GPIO | 备注 |
 |-----------|-------------|------|-------|
-| VCC / `+` | `3V3` | — | **Not** VIN/5 V |
+| VCC / `+` | `3V3` | — | **不是** VIN/5 V |
 | DATA / `out` | `D1` | GPIO5 | `DHT11_DATA_PIN` |
 | GND / `-` | `GND` | — | |
 
-3-pin breakout modules include the pull-up resistor. A bare 4-pin DHT11 needs
-an external 4.7 kΩ resistor between DATA and 3V3.
+3 针模块板自带上拉电阻。4 针裸 DHT11 需在 DATA 与 3V3 之间外接一个 4.7 kΩ 电阻。
 
-### ZJ-IR-V2 infrared module
+### ZJ-IR-V2 红外模块
 
-| ZJ-IR-V2 pin | NodeMCU pin | GPIO | Direction | Notes |
+| ZJ-IR-V2 引脚 | NodeMCU 引脚 | GPIO | 方向 | 备注 |
 |--------------|-------------|------|-----------|-------|
 | VCC | `3V3` | — | — | |
 | GND | `GND` | — | — | |
-| TXD | `D5` | GPIO14 | module → MCU | `IR_UART_RX_PIN` |
-| RXD | `D6` | GPIO12 | MCU → module | `IR_UART_TX_PIN` |
+| TXD | `D5` | GPIO14 | 模块 → MCU | `IR_UART_RX_PIN` |
+| RXD | `D6` | GPIO12 | MCU → 模块 | `IR_UART_TX_PIN` |
 
-**The UART lines cross.** The module's TXD goes to the MCU's RX pin and vice
-versa. Wiring them straight through is the single most common assembly error
-and produces a module that appears dead — no frames received, no ACKs.
+**UART 线必须交叉。** 模块的 TXD 接 MCU 的 RX 引脚，反之亦然。直连是最常见的装配错误，会导致模块看起来"死了"—— 收不到帧，也没有任何确认应答（ACK）。
 
-The port is opened as `SoftwareSerial(IR_UART_RX_PIN, IR_UART_TX_PIN)`, i.e.
-`SoftwareSerial(RX, TX)`.
+串口按 `SoftwareSerial(IR_UART_RX_PIN, IR_UART_TX_PIN)` 打开，即 `SoftwareSerial(RX, TX)`。
 
-## 2. Diagram
+## 2. 接线图
 
 ```
         NodeMCU v1.0 (ESP-12E)
@@ -59,48 +53,44 @@ The port is opened as `SoftwareSerial(IR_UART_RX_PIN, IR_UART_TX_PIN)`, i.e.
               └── micro-USB, 5 V / ≥1 A (data-capable cable)
 ```
 
-## 3. Assembly Checklist
+## 3. 装配检查清单
 
-1. Power off / unplug USB before changing wiring.
-2. Confirm both peripherals are on **3V3**, not VIN.
-3. Confirm the IR module's TXD/RXD are **crossed**.
-4. Confirm no wire lands on GPIO6–GPIO11.
-5. Point the clear (emitter) element at the air conditioner.
-6. Plug in USB and confirm the board enumerates as a serial device.
+1. 改动接线前先断电 / 拔掉 USB。
+2. 确认两个外设都接在 **3V3** 上，而不是 VIN。
+3. 确认红外模块的 TXD/RXD 已**交叉**连接。
+4. 确认没有任何连线落在 GPIO6–GPIO11 上。
+5. 将透明（发射）元件对准空调。
+6. 插入 USB，确认开发板被枚举为串口设备。
 
-## 4. Verification
+## 4. 验证
 
-From the `firmware/` directory:
+在 `firmware/` 目录下执行：
 
 ```powershell
 ./tools/dev.ps1 status
 ```
 
-This reports the toolchain state and the detected serial port. A missing port
-usually means a charge-only USB cable or an absent USB-UART driver — see
-[`troubleshooting.md`](./troubleshooting.md).
+该命令会报告工具链状态和检测到的串口。检测不到串口通常意味着使用了仅充电的 USB 线，或缺少 USB-UART 驱动 —— 见 [`troubleshooting.md`](./troubleshooting.md)。
 
-After flashing, open the serial monitor:
+烧录后打开串口监视器：
 
 ```powershell
 ./tools/dev.ps1 monitor
 ```
 
-Expected within the first few seconds:
+最初几秒内应看到：
 
-- Sensor readings with plausible temperature and humidity, and `sensor_ok` true.
-- The IR module responding to a `probe` command from the serial CLI.
+- 温湿度读数在合理范围内，且 `sensor_ok` 为 true。
+- 红外模块能响应串口 CLI 的 `probe` 命令。
 
-If temperature reads as `nan` or the sensor reports failure on every cycle,
-re-check the DATA line and the pull-up before suspecting the firmware.
+如果温度读数为 `nan`，或传感器每个周期都报告失败，请先复查 DATA 线和上拉电阻，再怀疑固件。
 
-## 5. Changing Pins
+## 5. 修改引脚
 
-If GPIO5/14/12 conflict with something else in your build:
+如果 GPIO5/14/12 与你的搭建中的其他部件冲突：
 
-1. Edit `firmware/include/config/hardware_config.h`.
-2. Respect the constraints in [`hardware.md`](./hardware.md) §3 — avoid
-   boot-strapping pins and the flash-connected range.
-3. Rebuild and re-verify with `./tools/dev.ps1 verify`.
+1. 编辑 `firmware/include/config/hardware_config.h`。
+2. 遵守 [`hardware.md`](./hardware.md) §3 中的约束 —— 避开启动配置引脚和与 Flash 相连的引脚区间。
+3. 重新构建并用 `./tools/dev.ps1 verify` 重新验证。
 
-No other file should need to change.
+不需要改动任何其他文件。

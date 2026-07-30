@@ -1,44 +1,40 @@
-# Contributing
+**简体中文** | [English](./CONTRIBUTING_EN.md)
 
-Thanks for your interest in improving the Remote AC Controller project!
+# 参与贡献
 
-## Getting Started
+感谢你关注并希望改进 Remote AC Controller 项目！
 
-This is a Monorepo with two main subsystems:
+## 开始之前
 
-- `firmware/` — ESP8266 firmware (PlatformIO / Arduino).
-- `cloud/` — backend (Node.js / Fastify / TypeScript) and frontend
-  (Vue 3 / TypeScript), plus `broker/`, `deploy/`, and `tools/`.
+这是一个 Monorepo，包含两个主要子系统：
 
-See the root [`README.md`](./README.md) and the [`docs/`](./docs) directory
-for architecture and setup details.
+- `firmware/` —— ESP8266 固件（PlatformIO / Arduino）。
+- `cloud/` —— 后端（Node.js / Fastify / TypeScript）与前端（Vue 3 / TypeScript），以及 `broker/`、`deploy/`、`tools/`。
 
-## Development Workflow
+架构与配置细节请参阅根目录 [`README.md`](./README.md) 与 [`docs/`](./docs) 目录。
 
-1. Fork and clone the repository.
-2. For firmware changes, use the existing `firmware/tools/dev.ps1` entry
-   point — do **not** invoke `pio`/`platformio`/`esptool` directly.
-3. For cloud changes, install dependencies in `cloud/backend` and
-   `cloud/frontend`, then run the test suites.
-4. Run the root-level helper scripts before opening a pull request:
-   - `tools/test-all.ps1` — runs firmware and cloud test suites.
-   - `tools/build-all.ps1` — runs the firmware and cloud builds.
-5. Open a pull request against `main`.
+## 开发流程
 
-## Code Style
+1. Fork 并克隆本仓库。
+2. 修改固件时，请使用现有的 `firmware/tools/dev.ps1` 入口脚本 —— **不要**直接调用 `pio` / `platformio` / `esptool`。
+3. 修改云端时，先在 `cloud/backend` 与 `cloud/frontend` 安装依赖，再运行测试套件。
+4. 在发起 Pull Request 前，先运行仓库根目录的辅助脚本：
+   - `tools/test-all.ps1` —— 运行固件与云端的测试套件。
+   - `tools/build-all.ps1` —— 运行固件与云端的构建。
+5. 针对 `main` 分支发起 Pull Request。
 
-- Keep commits focused and use clear, conventional commit messages.
-- Add or update tests for behavior changes.
-- Ensure `firmware-ci` and `cloud-ci` (GitHub Actions) pass.
+## 代码风格
 
-## Security
+- 提交应保持聚焦，并撰写清晰、符合约定（conventional commit）的提交信息。
+- 行为变更应补充或更新对应测试。
+- 确保 `firmware-ci` 与 `cloud-ci`（GitHub Actions）通过。
 
-- **Never** commit secrets: passwords, private keys, tokens, cookies,
-  sessions, real IR data, or production environment files.
-- Use `.example` files for configuration templates.
-- Report security issues per [`SECURITY.md`](./SECURITY.md).
+## 安全
 
-## License
+- **绝不**提交密钥：密码、私钥、Token、Cookie、Session、真实红外数据或生产环境文件。
+- 配置模板请使用 `.example` 文件。
+- 安全问题请按 [`SECURITY.md`](./SECURITY.md) 报告。
 
-By contributing, you agree that your contributions will be licensed under
-the [Apache License 2.0](./LICENSE).
+## 许可
+
+通过贡献，你同意你的贡献内容将依据 [Apache License 2.0](./LICENSE) 授权。

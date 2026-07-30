@@ -1,174 +1,166 @@
-# Security Model
+**简体中文** | [English](./security-model_EN.md)
 
-Threat model, controls, and the safe-by-default posture of the public
-repository.
+# 安全模型
 
-## 1. What This Repository Contains
+威胁模型、控制措施，以及本公开仓库"默认安全"的整体姿态。
 
-The public repository contains **source code only**. It does not contain, and
-has never contained in its published history:
+## 1. 本仓库包含什么
 
-- Wi-Fi credentials, MQTT passwords, or web login passwords
-- TLS private keys, certificate authorities, or issued certificates
-- Real infrared frame data for any specific air-conditioner model
-- Databases, session stores, or operational logs
-- Production hostnames, IP addresses, or operator identity
+公开仓库**仅包含源代码**。它不包含、且在其已发布的历史记录中从未包含过：
 
-Documentation and examples use reserved placeholder values
-(`example.com`, `203.0.113.0/24`, `CHANGE_ME`) as defined by RFC 2606 and
-RFC 5737.
+- Wi-Fi 凭据、MQTT 密码或 Web 登录密码
+- TLS 私钥、证书颁发机构或已签发的证书
+- 任何具体空调型号的真实红外帧数据
+- 数据库、会话存储或运行日志
+- 生产环境主机名、IP 地址或运维人员身份信息
 
-CI enforces part of this automatically: the `repo-hygiene` job in
-`.github/workflows/ci.yml` fails the build if `.pem`, `.key`, `.db`, or
-`.sqlite` files are tracked, and the `firmware-ci` job asserts that
-`include/secrets.h` and `include/cloud_secrets.h` are absent.
+文档与示例统一使用 RFC 2606 与 RFC 5737 定义的保留占位值（`example.com`、
+`203.0.113.0/24`、`CHANGE_ME`）。
 
-## 2. Assets and Threat Actors
+CI 对其中一部分做了自动化强制：`.github/workflows/ci.yml` 中的 `repo-hygiene`
+job 会在 `.pem`、`.key`、`.db` 或 `.sqlite` 文件被纳入版本控制时使构建失败；
+`firmware-ci` job 则断言 `include/secrets.h` 与 `include/cloud_secrets.h` 不存在。
+
+## 2. 资产与威胁主体
 
 | Asset | Impact if compromised |
 |-------|----------------------|
-| MQTT device credentials | Attacker can forge telemetry, ACK commands falsely |
-| MQTT backend credentials | Attacker can actuate the air conditioner |
-| Owner web password | Full control including real IR transmission |
-| Session cookie | Impersonation for the session lifetime |
-| TLS private key | Broker impersonation, traffic interception |
-| IR frame data | Reveals appliance model; enables replay by a co-located attacker |
+| MQTT 设备凭据 | 攻击者可伪造遥测、虚假地确认应答（ACK）命令 |
+| MQTT 后端凭据 | 攻击者可实际操控空调 |
+| Owner Web 密码 | 完全控制，包括真实红外发射 |
+| 会话 Cookie | 在会话有效期内可冒充用户 |
+| TLS 私钥 | 冒充 Broker、截获流量 |
+| 红外帧数据 | 泄露电器型号；使同处一室的攻击者可实施重放 |
 
 | Actor | Capability assumed |
 |-------|-------------------|
-| Network observer | Can see traffic between device, broker, and browser |
-| Internet scanner | Can reach any port you expose |
-| Co-located attacker | Physical IR line of sight, physical access to the board |
-| Malicious guest | Holds valid guest credentials |
+| 网络监听者 | 可观察设备、Broker 与浏览器之间的流量 |
+| 互联网扫描器 | 可访问你对外暴露的任意端口 |
+| 同处一地的攻击者 | 具备红外视距条件，可物理接触开发板 |
+| 恶意访客 | 持有有效的 guest 凭据 |
 
-Explicitly **out of scope**: a physically compromised ESP8266 (flash contents
-are readable by anyone holding the board), and IR replay by someone already
-inside the room.
+明确**不在范围内**的情形：被物理攻陷的 ESP8266（任何拿到板子的人都能读出 Flash
+内容），以及已经身处房间内的人实施的红外重放。
 
-## 3. Authentication and Roles
+## 3. 认证与角色
 
-Two roles, defined in `cloud/backend/src/auth.ts`:
+两种角色，定义于 `cloud/backend/src/auth.ts`：
 
 | Role | Capability |
 |------|-----------|
-| `guest` | Read status and telemetry; limited or no actuation depending on `ACCESS_MODE` |
-| `owner` | Full control, including real IR when the corresponding switches are enabled |
+| `guest` | 读取状态与遥测；能否执行动作取决于 `ACCESS_MODE`，通常受限或完全禁止 |
+| `owner` | 完全控制，在相应开关启用时包括真实红外发射 |
 
-Password storage uses **scrypt** (`scryptVerify`). A legacy `bcryptjs` path
-exists solely to migrate historical hashes and should be considered
-deprecated. Passwords are stored as `salt:hash`; plaintext is never persisted.
+密码存储使用 **scrypt**（`scryptVerify`）。仓库中保留的 `bcryptjs` 遗留路径仅用于
+迁移历史哈希，应视为已废弃。密码以 `salt:hash` 形式存储；明文绝不落盘。
 
-Real IR authorisation requires a **separate** credential
-(`IR_OWNER_USER` / `IR_OWNER_PASSWORD`), distinct from the web login. Web
-session compromise alone therefore does not grant physical actuation.
+真实红外授权需要一份**独立**凭据（`IR_OWNER_USER` / `IR_OWNER_PASSWORD`），与 Web
+登录凭据相互区分。因此，仅仅攻陷 Web 会话并不足以获得物理执行能力。
 
-### Trusted devices
+### 受信任设备
 
-An owner may mark a browser as trusted, producing a long-lived session
-(`sessions.trusted_label`, TTL `TRUSTED_OWNER_SESSION_TTL_DAYS`). Each trusted
-session records an `owner_password_fingerprint`, derived from the current
-owner credentials. Rotating the owner password changes the fingerprint and
-**invalidates every existing trusted session** — the intended behaviour after
-a suspected compromise.
+Owner 可以将某个浏览器标记为受信任设备（Trusted device），从而获得一个长期有效的
+会话（`sessions.trusted_label`，TTL 由 `TRUSTED_OWNER_SESSION_TTL_DAYS` 控制）。
+每个受信任会话都会记录一个 `owner_password_fingerprint`，由当前 owner 凭据派生。
+轮换 owner 密码会改变该指纹，并**使所有既有的受信任会话失效** —— 这正是怀疑发生
+泄露后所期望的行为。
 
-The frontend treats `role === 'owner' && trusted === true` as the gate for
-privileged UI (`App.vue`).
+前端（Frontend）以 `role === 'owner' && trusted === true` 作为特权 UI 的准入条件
+（见 `App.vue`）。
 
-## 4. Web-Tier Controls
+## 4. Web 层控制措施
 
 | Control | Implementation |
 |---------|----------------|
-| Origin allow-list | `requireOrigin` guard against `ALLOWED_ORIGINS` |
-| CSRF | Per-session token compared with `crypto.timingSafeEqual` in `validateCsrf` |
-| Session cookies | Signed with `SESSION_SECRET`; TTL `SESSION_TTL_MIN` (default 480 min) |
-| Rate limiting | `@fastify/rate-limit`, 100 requests/minute |
-| Uniform deny envelope | `reply_utils.deny()` |
+| Origin 白名单 | `requireOrigin` 守卫，比对 `ALLOWED_ORIGINS` |
+| CSRF | 每会话令牌，在 `validateCsrf` 中用 `crypto.timingSafeEqual` 比较 |
+| 会话 Cookie | 使用 `SESSION_SECRET` 签名；TTL 为 `SESSION_TTL_MIN`（默认 480 分钟） |
+| 速率限制 | `@fastify/rate-limit`，100 requests/minute |
+| 统一拒绝响应封装 | `reply_utils.deny()` |
 
-CSRF comparison is constant-time by construction; do not replace it with `===`.
+CSRF 比较在实现上就是常数时间的；请勿将其替换为 `===`。
 
-### Deny error codes
+### 拒绝错误码
 
-Rejections return a machine-readable `errorCode` so the UI can render precise
-guidance instead of a generic failure:
+被拒绝的请求会返回机器可读的 `errorCode`，使 UI 能给出精确提示，而不是笼统的失败
+信息：
 
-`ORIGIN_DENIED`, `UNAUTHORIZED`, `CSRF_INVALID`, `OWNER_REQUIRED`,
-`SESSION_EXPIRED`, `REAL_IR_DISABLED`, `DEVICE_OFFLINE`,
-`IDEMPOTENCY_KEY_PAYLOAD_MISMATCH`, `IDEMPOTENCY_REPLAY`,
-`INVALID_CREDENTIALS`, `TOO_MANY_REQUESTS`.
+`ORIGIN_DENIED`、`UNAUTHORIZED`、`CSRF_INVALID`、`OWNER_REQUIRED`、
+`SESSION_EXPIRED`、`REAL_IR_DISABLED`、`DEVICE_OFFLINE`、
+`IDEMPOTENCY_KEY_PAYLOAD_MISMATCH`、`IDEMPOTENCY_REPLAY`、
+`INVALID_CREDENTIALS`、`TOO_MANY_REQUESTS`。
 
-## 5. Infrared Kill Switches
+## 5. 红外安全总开关
 
-Physical actuation is the highest-consequence action in the system, so it is
-gated by layered switches. **All default to `false`.**
+物理执行是本系统中后果最严重的动作，因此由多层开关层层设防。**所有开关默认均为
+`false`。**
 
 | Variable | Purpose |
 |----------|---------|
-| `WEB_REAL_IR_ENABLED` | Master switch for the debug/experiment path |
-| `REAL_IR_PRODUCTION_CONTROL_ENABLED` | Master switch for normal production control |
-| `REAL_IR_DEBUG_MODE` | Enables the constrained debug session mechanism |
-| `REAL_IR_DEBUG_EXPIRES_AT` | Absolute expiry for a debug window |
-| `REAL_IR_DEBUG_ALLOWED_CODE_ID` | Restricts debug to a single code |
-| `REAL_IR_DEBUG_ALLOWED_SHA256` | Restricts debug to a single frame digest |
-| `REAL_IR_DEBUG_ALLOWED_LENGTH` | Restricts debug to a single frame length |
-| `REAL_IR_DEBUG_MAX_TOTAL_COMMANDS` | Hard cap on transmissions in a window |
-| `REAL_IR_DEBUG_COOLDOWN_SECONDS` | Minimum interval between transmissions |
-| `REAL_IR_DEBUG_COMMAND_TTL_SECONDS` | Per-command expiry |
-| `REAL_IR_DEBUG_SESSION_TTL_SECONDS` | Debug session lifetime |
+| `WEB_REAL_IR_ENABLED` | 调试 / 实验路径的总开关 |
+| `REAL_IR_PRODUCTION_CONTROL_ENABLED` | 常规生产控制的总开关 |
+| `REAL_IR_DEBUG_MODE` | 启用受约束的调试会话机制 |
+| `REAL_IR_DEBUG_EXPIRES_AT` | 调试窗口的绝对过期时刻 |
+| `REAL_IR_DEBUG_ALLOWED_CODE_ID` | 将调试限制在单一码值上 |
+| `REAL_IR_DEBUG_ALLOWED_SHA256` | 将调试限制在单一帧摘要上 |
+| `REAL_IR_DEBUG_ALLOWED_LENGTH` | 将调试限制在单一帧长度上 |
+| `REAL_IR_DEBUG_MAX_TOTAL_COMMANDS` | 单个窗口内发射次数的硬上限 |
+| `REAL_IR_DEBUG_COOLDOWN_SECONDS` | 两次发射之间的最小间隔 |
+| `REAL_IR_DEBUG_COMMAND_TTL_SECONDS` | 单条命令的过期时间 |
+| `REAL_IR_DEBUG_SESSION_TTL_SECONDS` | 调试会话的生存期 |
 
-Two implementation rules that must not be relaxed:
+有两条实现规则不得放宽：
 
-1. **Strict boolean parsing.** Only the exact strings `"true"` and `"1"` are
-   truthy. A permissive coercion (for example `z.coerce.boolean()`) treats any
-   non-empty string — including `"false"` — as true, which would silently arm
-   the system. This is a known trap; the strict parser is deliberate.
-2. **Single dispatch point.** Every real IR emission passes through
-   `dispatchIrAction()` in `firmware/src/cloud/command_service.cpp`. Legacy
-   `set_power` / `set_temperature` commands are always acknowledged as
-   `accepted_mock` and never transmit. Do not add a second dispatch path.
+1. **严格布尔解析。** 只有精确的字符串 `"true"` 和 `"1"` 才为真。宽松的类型强转
+   （例如 `z.coerce.boolean()`）会把任何非空字符串——包括 `"false"`——都当作真值，
+   从而在无声无息中把系统置于"已武装"状态。这是一个已知陷阱；严格解析器是刻意为
+   之的。
+2. **单一下发出口。** 每一次真实红外发射都必须经过
+   `firmware/src/cloud/command_service.cpp` 中的 `dispatchIrAction()`。遗留的
+   `set_power` / `set_temperature` 命令始终以 `accepted_mock` 应答，永不实际发射。
+   不要新增第二条下发路径。
 
-## 6. Transport Security
+## 6. 传输安全
 
-- **Browser ↔ backend:** HTTPS, terminated by the reverse proxy. The backend
-  itself binds to `127.0.0.1` and is never exposed directly.
-- **Backend ↔ broker:** MQTT over TLS. The broker should listen on loopback
-  only, with external access mediated by a TLS-terminating stream proxy.
-- **Device ↔ broker:** MQTT over TLS with CA validation on the device.
+- **浏览器 ↔ 后端：** HTTPS，由反向代理终结。后端自身仅绑定 `127.0.0.1`，绝不直接
+  对外暴露。
+- **后端 ↔ Broker：** MQTT over TLS。Broker 应仅监听回环地址，外部访问由负责 TLS
+  终结的 stream 代理中转。
+- **设备 ↔ Broker：** MQTT over TLS，并在设备侧执行 CA 校验。
 
-BearSSL error interpretation on the ESP8266:
+ESP8266 上 BearSSL 错误的解读：
 
 | Symptom | Interpretation |
 |---------|---------------|
-| `bearssl_code = 0`, free heap < ~28 KB | Heap exhaustion, not a certificate fault |
-| `bearssl_code = 56` | Subject Alternative Name mismatch |
+| `bearssl_code = 0`，空闲堆内存 < 约 28 KB | 堆内存耗尽，而非证书问题 |
+| `bearssl_code = 56` | 主题备用名称（SAN）不匹配 |
 
-Do not "fix" a code-0 failure by disabling certificate validation.
+切勿通过关闭证书校验来"修复" code 0 类型的失败。
 
-## 7. Broker Authorisation
+## 7. Broker 授权
 
-See [`mqtt-protocol.md`](./mqtt-protocol.md) §2. The essential property is that
-the device account has **no write access** to `commands/set`, so a compromised
-device cannot actuate itself or any peer.
+参见 [`mqtt-protocol.md`](./mqtt-protocol.md) §2。其核心性质在于：设备账号对
+`commands/set` **没有写权限**，因此被攻陷的设备无法操控自身，也无法操控任何同类
+设备。
 
-## 8. Operator Responsibilities
+## 8. 运维者责任
 
-Self-hosters must provide:
+自托管者必须自行提供：
 
-1. A unique `SESSION_SECRET` with high entropy.
-2. Owner and IR-owner passwords, stored as scrypt `salt:hash`.
-3. MQTT credentials, distinct per account, plus matching ACL entries.
-4. A TLS certificate chain and a private CA (or a public CA) for MQTT.
-5. Their own IR frame data, captured from their own remote control.
+1. 一个高熵的、唯一的 `SESSION_SECRET`。
+2. owner 与 IR-owner 密码，以 scrypt `salt:hash` 形式存储。
+3. MQTT 凭据，每个账号各不相同，并配置匹配的 ACL 条目。
+4. 用于 MQTT 的 TLS 证书链，以及一个私有 CA（或公共 CA）。
+5. 自行从自己的遥控器上采集的红外帧数据。
 
-Recommended hardening:
+推荐的加固措施：
 
-- Expose only the reverse proxy; bind the backend and broker to loopback.
-- Keep both IR kill switches disabled until control has been verified in a
-  simulated path.
-- Rotate the owner password after any suspected exposure — this invalidates
-  trusted sessions.
-- Retain the deny-envelope error codes in logs for incident analysis.
+- 仅暴露反向代理；将后端与 Broker 绑定到回环地址。
+- 在通过模拟路径验证控制链路之前，保持两个红外安全总开关处于关闭状态。
+- 一旦怀疑 owner 密码泄露就立即轮换 —— 这会使所有受信任会话失效。
+- 在日志中保留拒绝响应封装中的错误码，以便事件分析。
 
-## 9. Reporting Vulnerabilities
+## 9. 漏洞报告
 
-See [`SECURITY.md`](../SECURITY.md) in the repository root. Please do not open
-a public issue for security-relevant defects.
+参见仓库根目录的 [`SECURITY.md`](../SECURITY.md)。请勿为安全相关缺陷公开创建
+issue。

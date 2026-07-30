@@ -1,25 +1,25 @@
-# Deployment
+**简体中文** | [English](./deployment_EN.md)
 
-Taking the system from a clone to a working installation.
+# 部署（Deployment）
 
-Read [`security-model.md`](./security-model.md) first. Deploying this with
-default credentials on a public address is not safe.
+将系统从一次代码克隆变为可用的部署。
 
-## 1. Prerequisites
+请先阅读 [`security-model.md`](./security-model.md) 安全模型文档。在公网地址上使用默认凭据部署本系统并不安全。
 
-| Component | Requirement |
+## 1. 前置条件
+
+| 组件 | 要求 |
 |-----------|-------------|
-| Server | Linux, 1 vCPU / 1 GB RAM minimum (see [`resource-constrained-deployment.md`](./resource-constrained-deployment.md)) |
-| Node.js | 24.x (22+ required for built-in `node:sqlite`) |
-| MQTT broker | Mosquitto 2.x |
-| Reverse proxy | Nginx, Caddy, or equivalent, with TLS |
-| Build machine | Any host with Node.js and PlatformIO |
-| Domain | One hostname for the web app, one for MQTT (may share an IP) |
+| 服务器 | Linux，最低 1 vCPU / 1 GB 内存（见 [`resource-constrained-deployment.md`](./resource-constrained-deployment.md)） |
+| Node.js | 24.x（内置 `node:sqlite` 需要 22+） |
+| MQTT Broker（消息代理） | Mosquitto 2.x |
+| 反向代理 | Nginx、Caddy 或同类方案，需支持 TLS |
+| 构建机 | 任意装有 Node.js 与 PlatformIO 的主机 |
+| 域名 | 一个主机名用于 Web 应用，一个用于 MQTT（可共享同一 IP） |
 
-A **separate build machine is strongly recommended**. Compiling TypeScript and
-bundling the frontend on a 1 GB server is a known way to make it unresponsive.
+强烈建议使用**独立的构建机**。在 1 GB 的服务器上编译 TypeScript 并打包前端，是已知的导致服务器无响应的做法。
 
-## 2. Topology
+## 2. 拓扑结构
 
 ```
 Internet
@@ -31,29 +31,26 @@ Internet
                     └── 1883 (loopback / container network only) ──▶ backend
 ```
 
-Two invariants:
+两条不变量：
 
-- The backend binds to `127.0.0.1` and is never published directly.
-- The broker's plaintext listener is reachable only from the backend, never
-  from the network.
+- 后端仅绑定 `127.0.0.1`，绝不对外直接暴露。
+- Broker 的明文监听器仅后端可达，网络侧永远无法访问。
 
-## 3. Certificates
+## 3. 证书
 
-Two independent certificate needs.
+存在两类相互独立的证书需求。
 
-### 3.1 Web (browser-facing)
+### 3.1 Web（面向浏览器）
 
-Any publicly trusted certificate. With certbot:
+任何公开受信任的证书均可。使用 certbot 时：
 
 ```bash
 certbot certonly --standalone -d ac.example.com
 ```
 
-### 3.2 MQTT (device-facing)
+### 3.2 MQTT（面向设备）
 
-The ESP8266 validates the broker certificate against a CA you control. A
-private CA is appropriate here — the device pins it, so public trust is not
-required.
+ESP8266 会依据你掌控的 CA 校验 Broker 证书。此处使用私有 CA 是合适的——设备会对其做固证（pin），因此不需要公开信任。
 
 ```bash
 # Private CA (keep ca.key offline; it never goes on the server)
@@ -75,16 +72,14 @@ openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
   -out server.crt -days 825 -sha256 -extfile san.cnf
 ```
 
-> **The SAN extension is not optional.** A certificate without a matching SAN
-> produces BearSSL error code 56 on the device. See
-> [`troubleshooting.md`](./troubleshooting.md).
+> **SAN 扩展不可省略。** 缺少匹配 SAN 的证书会在设备上产生 BearSSL 错误码 56。见
+> [`troubleshooting.md`](./troubleshooting.md)。
 
-Place `ca.crt`, `server.crt`, `server.key` in `cloud/broker/certs/`. The
-`.gitignore` rules exclude them.
+将 `ca.crt`、`server.crt`、`server.key` 放入 `cloud/broker/certs/`。`.gitignore` 规则会将其排除。
 
-## 4. Broker Configuration
+## 4. Broker 配置
 
-`cloud/broker/config/mosquitto.conf` already encodes the required posture:
+`cloud/broker/config/mosquitto.conf` 已经体现了所需的安全配置：
 
 ```
 allow_anonymous false
@@ -98,65 +93,59 @@ certfile /mosquitto/certs/server.crt
 keyfile  /mosquitto/certs/server.key
 ```
 
-Update `cloud/broker/acl/aclfile` for your `DEVICE_ID` if it is not the
-default. Every topic is listed explicitly; Mosquitto denies anything not
-granted.
+如果你的 `DEVICE_ID` 不是默认值，请更新 `cloud/broker/acl/aclfile`。每个主题都显式列出；Mosquitto 会拒绝一切未被授权的内容。
 
-## 5. Secrets
+## 5. 密钥
 
 ```bash
 cd cloud/deploy
 cp secrets.env.example secrets.env
 ```
 
-Fill in:
+需要填写：
 
-| Variable | How to produce it |
+| 变量 | 如何生成 |
 |----------|------------------|
 | `MQTT_DEVICE_PASSWORD` | `node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"` |
-| `MQTT_PASSWORD` | Same, different value |
+| `MQTT_PASSWORD` | 同上，使用不同的值 |
 | `SESSION_SECRET` | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
-| `WEB_PASSWORD` | scrypt hash, `salt:hash` form |
-| `IR_OWNER_PASSWORD` | scrypt hash, different from `WEB_PASSWORD` |
+| `WEB_PASSWORD` | scrypt 哈希，格式为 `salt:hash` |
+| `IR_OWNER_PASSWORD` | scrypt 哈希，需与 `WEB_PASSWORD` 不同 |
 
-`secrets.env` is git-ignored. Verify with `git check-ignore -v` before your
-first commit.
+`secrets.env` 已被 git 忽略。首次提交前请用 `git check-ignore -v` 验证。
 
-## 6. Deploying with Docker Compose
+## 6. 使用 Docker Compose 部署
 
-The simplest path. From `cloud/`:
+最简单的方式。在 `cloud/` 目录下执行：
 
 ```bash
 docker compose up -d
 ```
 
-This starts:
+这将启动：
 
-| Service | Memory cap | Ports |
+| 服务 | 内存上限 | 端口 |
 |---------|-----------|-------|
-| `broker` (Mosquitto 2.1.3, digest-pinned) | 64 MB | `8883` published |
-| `backend` | 256 MB | `127.0.0.1:3100` only |
+| `broker`（Mosquitto 2.1.3，已固定镜像摘要） | 64 MB | `8883` 对外暴露 |
+| `backend` | 256 MB | 仅 `127.0.0.1:3100` |
 
-Both have health checks and capped JSON log rotation (10 MB × 3).
+两者都配置了健康检查以及受限的 JSON 日志轮转（10 MB × 3）。
 
-The broker provisions its password file from `secrets.env` on first start.
-To rotate credentials later, update `secrets.env` and recreate the broker
-container so the password file is rebuilt.
+Broker 会在首次启动时根据 `secrets.env` 生成其密码文件。日后如需轮换凭据，请更新 `secrets.env` 并重建 broker 容器，以便重新生成密码文件。
 
-## 7. Deploying Without Docker
+## 7. 不使用 Docker 部署
 
-Appropriate when memory is tight — see
-[`resource-constrained-deployment.md`](./resource-constrained-deployment.md).
+适用于内存紧张的场景——见
+[`resource-constrained-deployment.md`](./resource-constrained-deployment.md)。
 
-**Build on your workstation, not the server:**
+**在 workstation 上构建，而不是在服务器上：**
 
 ```bash
 cd cloud/backend  && npm ci && npx tsc --noEmit && npm run build
 cd ../frontend    && npm ci && npm test && npm run build
 ```
 
-Transfer only the build output plus production dependencies. Then install the
-unit file:
+只传输构建产物以及生产依赖。然后安装单元文件：
 
 ```bash
 cp cloud/deploy/remote-ac-backend.service /etc/systemd/system/
@@ -164,14 +153,11 @@ systemctl daemon-reload
 systemctl enable --now remote-ac-backend
 ```
 
-The unit assumes `/opt/remote-ac-cloud`; adjust `WorkingDirectory`, `DB_PATH`,
-`ReadWritePaths` and `ReadOnlyPaths` if you deploy elsewhere. It already sets
-`MemoryMax=384M`, `NoNewPrivileges`, `ProtectSystem=strict` and
-`ProtectHome=yes`.
+该单元文件假定路径为 `/opt/remote-ac-cloud`；若部署在其他位置，请相应调整 `WorkingDirectory`、`DB_PATH`、`ReadWritePaths` 与 `ReadOnlyPaths`。它已设置 `MemoryMax=384M`、`NoNewPrivileges`、`ProtectSystem=strict` 以及 `ProtectHome=yes`。
 
-## 8. Reverse Proxy
+## 8. 反向代理
 
-Nginx, terminating TLS and forwarding to the loopback backend:
+Nginx 终止 TLS 并转发至回环地址上的后端：
 
 ```nginx
 server {
@@ -192,16 +178,13 @@ server {
 }
 ```
 
-The `Upgrade`/`Connection` headers are required — without them live telemetry
-silently stops updating while the rest of the UI appears fine.
+`Upgrade`/`Connection` 请求头是必需的——缺少它们时，实时遥测数据会静默停止更新，而 UI 的其余部分看起来正常。
 
-`PUBLIC_BASE_URL` and `ALLOWED_ORIGINS` must match this hostname **exactly**,
-including scheme and with no trailing slash. A mismatch produces
-`ORIGIN_DENIED` on every write.
+`PUBLIC_BASE_URL` 与 `ALLOWED_ORIGINS` 必须与本主机名**完全一致**，包括协议且无结尾斜杠。不匹配会导致每次写入都返回 `ORIGIN_DENIED`。
 
-## 9. Firmware Provisioning
+## 9. 固件烧录
 
-On your build machine:
+在构建机上：
 
 ```bash
 cd firmware
@@ -209,9 +192,7 @@ cp include/secrets.example.h include/secrets.h
 cp include/config.example.h  include/config_local.h
 ```
 
-Fill in Wi-Fi credentials, MQTT host and account, and embed the CA
-certificate. Both files are git-ignored, and CI fails if they are ever
-committed.
+填写 Wi-Fi 凭据、MQTT 主机与账号，并嵌入 CA 证书。这两个文件均被 git 忽略，一旦被提交 CI 会失败。
 
 ```powershell
 ./tools/dev.ps1 verify
@@ -220,51 +201,39 @@ committed.
 ./tools/dev.ps1 monitor
 ```
 
-The port is detected automatically; override with `-Port` if needed.
+端口会自动检测；如有需要可用 `-Port` 覆盖。
 
-## 10. Bring-Up Sequence
+## 10. 启动顺序
 
-Verify in this order. Do not skip ahead — each step depends on the previous.
+按以下顺序验证，不要跳步——每一步都依赖前一步。
 
-1. **Broker reachable.** `mosquitto_sub` with the backend credentials over TLS
-   receives messages. Wrong credentials must be rejected.
-2. **Backend healthy.** `GET /api/health` returns 200 on loopback.
-3. **Proxy correct.** The web app loads over HTTPS and the WebSocket connects.
-4. **Device online.** Telemetry appears; the dashboard shows `online`.
-5. **Mock command round-trip.** Issue a command with IR still disabled; expect
-   an `accepted_mock` acknowledgement. This proves the whole path works
-   without touching hardware.
-6. **Enable debug IR.** Set `WEB_REAL_IR_ENABLED=true`, configure the
-   allow-list triple, keep `REAL_IR_DEBUG_MAX_TOTAL_COMMANDS` low. Confirm one
-   physical actuation.
-7. **Enable production IR.** Set `REAL_IR_PRODUCTION_CONTROL_ENABLED=true`.
-8. **Enable automation.** Only now create schedules and the temperature rule.
+1. **Broker 可达。** 使用后端凭据通过 TLS 的 `mosquitto_sub` 能收到消息。错误的凭据必须被拒绝。
+2. **后端健康。** 回环地址上 `GET /api/health` 返回 200。
+3. **代理正确。** Web 应用通过 HTTPS 加载且 WebSocket 成功连接。
+4. **设备上线。** 遥测数据出现；仪表盘显示 `online`。
+5. **Mock（模拟）命令往返。** 在 IR 仍处于禁用状态下发一条命令；预期收到 `accepted_mock` 确认应答（ACK）。这证明了整条链路可用，且无需触碰硬件。
+6. **启用调试用真实 IR。** 设置 `WEB_REAL_IR_ENABLED=true`，配置允许列表三元组，并保持 `REAL_IR_DEBUG_MAX_TOTAL_COMMANDS` 为一个较小值。确认一次物理动作。
+7. **启用生产用真实 IR。** 设置 `REAL_IR_PRODUCTION_CONTROL_ENABLED=true`。
+8. **启用自动化。** 只有到此才创建定时任务与温度规则。
 
-## 11. Backups
+## 11. 备份
 
-The single stateful artifact is the SQLite database at `DB_PATH`. It holds
-sessions, telemetry history, schedules, automation rules, and the state
-catalogue.
+唯一有状态的对象是位于 `DB_PATH` 的 SQLite 数据库。它保存会话、遥测历史、定时任务、自动化规则以及状态目录。
 
 ```bash
 sqlite3 /opt/remote-ac-cloud/data/app.db ".backup '/backup/app-$(date +%F).db'"
 ```
 
-Use `.backup` rather than `cp` — copying a live SQLite file can capture a torn
-write. Back up before every upgrade and before any credential rotation.
+请使用 `.backup` 而不是 `cp`——直接复制一个运行中的 SQLite 文件可能捕获到未写完的数据。每次升级前以及任何凭据轮换前都应备份。
 
-Certificates and `secrets.env` should be backed up separately, encrypted, and
-must never enter the repository.
+证书与 `secrets.env` 应单独备份、加密保存，且绝不可进入代码仓库。
 
-## 12. Upgrading
+## 12. 升级
 
-1. Back up the database.
-2. Build on the workstation; run `./tools/test-all.ps1` and confirm `PASS`.
-3. Transfer artifacts; restart the service.
-4. Verify `/api/health`, then that telemetry resumes.
-5. Reflash firmware only if the firmware changed — it is independently
-   versioned.
+1. 备份数据库。
+2. 在 workstation 上构建；运行 `./tools/test-all.ps1` 并确认结果为 `PASS`。
+3. 传输产物；重启服务。
+4. 验证 `/api/health`，然后确认遥测数据恢复。
+5. 仅当固件发生变化时才重新烧录固件——固件有独立的版本号。
 
-Database migrations run automatically on start and are forward-only. There is
-no automatic downgrade: to roll back, restore the database backup as well as
-the code.
+数据库迁移会在启动时自动运行，且只能向前。没有自动降级：要回滚，需要同时恢复数据库备份与代码。

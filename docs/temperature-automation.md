@@ -1,18 +1,19 @@
-# Temperature Automation
+**简体中文** | [English](./temperature-automation_EN.md)
 
-Closed-loop control: drive the air conditioner from the DHT11 reading using a
-dual-threshold hysteresis rule with several safety guards.
+# 温度自动化
 
-Implementation: `scanTemperatureRule()` in `cloud/backend/src/automation.ts`;
-storage: the single-row `ac_temperature_rules` table.
+闭环控制：依据 DHT11 的读数，通过带多重安全守卫的双阈值滞回（Hysteresis）规则来
+驱动空调。
 
-## 1. Why Hysteresis, Not a Setpoint
+实现位置：`cloud/backend/src/automation.ts` 中的 `scanTemperatureRule()`；
+存储：单行表 `ac_temperature_rules`。
 
-A single setpoint produces short-cycling: the temperature oscillates around
-the threshold and the compressor starts and stops every few minutes, which is
-both inefficient and mechanically damaging.
+## 1. 为什么用滞回而不是单一设定点
 
-This implementation uses two thresholds with a dead band between them:
+单一设定点会导致频繁启停（short-cycling）：温度在阈值附近来回振荡，压缩机每隔几
+分钟就启动、停止一次，既低效又会造成机械损伤。
+
+本实现采用两个阈值，中间夹着一段滞回区间（死区）：
 
 ```
 temperature
@@ -25,35 +26,34 @@ temperature
      ▼
 ```
 
-Inside the dead band nothing happens, regardless of which direction the
-temperature is moving. Widening the band reduces cycling at the cost of a
-larger comfort swing.
+在滞回区间内不做任何动作，无论温度朝哪个方向变化。加宽区间可以减少启停次数，代价
+是舒适度上的温度摆幅更大。
 
-## 2. Schema
+## 2. 表结构
 
-Single row, `id = 1`.
+单行记录，`id = 1`。
 
 | Column | Type | Default | Meaning |
 |--------|------|---------|---------|
-| `enabled` | INTEGER | `0` | Master switch, **off by default** |
-| `on_threshold_c` | REAL | `28.0` | Turn on at or above this |
-| `off_threshold_c` | REAL | `26.0` | Turn off at or below this |
-| `on_state_id` | TEXT | — | State applied when turning on |
-| `off_state_id` | TEXT | — | State applied when turning off |
-| `min_interval_s` | INTEGER | `600` | Minimum seconds between actions |
-| `sensor_stale_s` | INTEGER | `180` | Reject readings older than this |
-| `manual_suppress_s` | INTEGER | `1800` | Back off after manual control |
+| `enabled` | INTEGER | `0` | 总开关，**默认关闭** |
+| `on_threshold_c` | REAL | `28.0` | 达到或超过该值时开机 |
+| `off_threshold_c` | REAL | `26.0` | 达到或低于该值时关机 |
+| `on_state_id` | TEXT | — | 开机时应用的状态 |
+| `off_state_id` | TEXT | — | 关机时应用的状态 |
+| `min_interval_s` | INTEGER | `600` | 两次动作之间的最小秒数 |
+| `sensor_stale_s` | INTEGER | `180` | 拒绝比该时长更旧的读数 |
+| `manual_suppress_s` | INTEGER | `1800` | 手动控制后的退避时长 |
 | `last_action` | TEXT | `''` | `'on'` \| `'off'` \| `''` |
-| `last_action_at` | INTEGER | | Epoch ms |
-| `last_eval_reason` | TEXT | `''` | Why the last evaluation did what it did |
-| `last_eval_at` | INTEGER | | Epoch ms |
+| `last_action_at` | INTEGER | | Epoch 毫秒 |
+| `last_eval_reason` | TEXT | `''` | 上一次评估之所以如此决策的原因 |
+| `last_eval_at` | INTEGER | | Epoch 毫秒 |
 
-`on_threshold_c` must be strictly greater than `off_threshold_c`. Inverting
-them produces a rule that can satisfy both branches and will oscillate.
+`on_threshold_c` 必须严格大于 `off_threshold_c`。若把两者颠倒，将得到一条可同时
+满足两个分支的规则，从而产生振荡。
 
-## 3. Evaluation Algorithm
+## 3. 评估算法
 
-Runs every 10 s, on the same timer as the schedule scan.
+每 10 s 运行一次，与调度扫描共用同一个定时器。
 
 ```
 1. Rule missing or disabled          → clear pending state, return
@@ -76,75 +76,66 @@ Runs every 10 s, on the same timer as the schedule scan.
 10. Dispatch, record the action
 ```
 
-## 4. Noise Rejection
+## 4. 噪声抑制
 
-Three independent mechanisms, because a DHT11 in a real room is noisy:
+三套彼此独立的机制，因为真实房间环境下的 DHT11 读数噪声很大：
 
-1. **Median of three samples.** A single spurious reading cannot move the
-   median. The mean would be dragged by an outlier; the median is not.
-2. **Two consecutive agreeing evaluations.** A transient that survives the
-   median still has to persist through a second scan ~10 s later. This adds
-   about 10 s of latency before any action — negligible for thermal control.
-3. **Staleness rejection.** If the newest telemetry is older than
-   `sensor_stale_s` (default 180 s), the rule refuses to act. A dead sensor
-   produces inaction, not a stuck command.
+1. **三样本中位数。** 单个异常读数无法拉动中位数。均值会被离群点带偏，中位数不会。
+2. **连续两次评估结论一致。** 一个能扛过中位数过滤的瞬时扰动，还必须在约 10 s 后
+   的第二次扫描中继续存在。这会在任何动作前引入约 10 s 的延迟 —— 对热控制而言可以
+   忽略不计。
+3. **过期数据拒绝。** 如果最新的遥测数据比 `sensor_stale_s`（默认 180 s）更旧，
+   规则将拒绝动作。传感器失效的结果是不作为，而不是发出一条卡死的命令。
 
-The two-evaluation confirmation counter is held **in memory**. A process
-restart resets it, which fails safe: after a restart the system requires fresh
-confirmation before actuating.
+两次评估的确认计数器保存在**内存**中。进程重启会将其清零，这属于失效安全（fail
+safe）：重启之后，系统必须重新获得确认才会执行动作。
 
-## 5. Manual Override
+## 5. 手动覆盖
 
-Any manual IR command starts a suppression window of `manual_suppress_s`
-(default 1800 s = 30 minutes). During it, temperature automation records
-`manual_suppressed:<desired>` and takes no action.
+任何一条手动红外命令都会开启一个时长为 `manual_suppress_s`（默认 1800 s = 30 分钟）
+的抑制窗口。在此期间，温度自动化只记录 `manual_suppressed:<desired>` 而不采取任何
+动作。
 
-The rule for distinguishing manual from automatic is the `requested_by`
-prefix: commands issued by automation carry
-`automation:schedule:<id>` or `automation:temperature:<id>`, and
-`getLastManualIrCommandAt()` excludes them. Automation therefore never
-suppresses itself.
+区分手动与自动的依据是 `requested_by` 前缀：由自动化发出的命令携带
+`automation:schedule:<id>` 或 `automation:temperature:<id>`，而
+`getLastManualIrCommandAt()` 会将它们排除在外。因此自动化永远不会抑制自己。
 
-Rationale: if a person just overrode the machine, the machine should defer to
-them for a while rather than immediately reverting.
+设计理由：如果一个人刚刚手动否决了机器的决定，机器就应该在一段时间内让位于人，而
+不是立刻把设置改回去。
 
-## 6. Rate Limiting
+## 6. 速率限制
 
-`min_interval_s` (default 600 s) enforces a floor on the interval between
-actions, independent of the thresholds. Even with a badly configured narrow
-dead band, the compressor cannot be cycled more than once per interval.
+`min_interval_s`（默认 600 s）为两次动作之间的间隔设定了一个下限，与阈值配置无关。
+即便滞回区间被配置得极窄，压缩机在每个间隔内也最多只能被切换一次。
 
-Do not reduce this below roughly 300 s for a real compressor.
+对真实压缩机而言，不要把该值降到大约 300 s 以下。
 
-## 7. Guards Shared With Manual Control
+## 7. 与手动控制共享的守卫
 
-Dispatch uses the same `dispatchForAutomation()` → `dispatchIrAction()` path as
-everything else, so the same guards apply:
+下发走的是与其他所有路径相同的 `dispatchForAutomation()` → `dispatchIrAction()`
+链路，因此适用同一套守卫：
 
 | Condition | Audit status |
 |-----------|-------------|
-| State disabled or absent from the catalogue | `skipped_state_unavailable` |
-| `REAL_IR_PRODUCTION_CONTROL_ENABLED` not enabled | `skipped_ir_disabled` |
-| Device offline | `skipped_device_offline` |
-| Dispatched | `dispatched` |
+| 状态被禁用或不在目录中 | `skipped_state_unavailable` |
+| `REAL_IR_PRODUCTION_CONTROL_ENABLED` 未启用 | `skipped_ir_disabled` |
+| 设备离线 | `skipped_device_offline` |
+| 已下发 | `dispatched` |
 
-The idempotency key is `auto-temp-<ruleId>-<on|off>-<minuteAnchor>`, so two
-evaluations within the same minute cannot produce two physical actions.
+幂等键为 `auto-temp-<ruleId>-<on|off>-<minuteAnchor>`，因此同一分钟内的两次评估不
+可能产生两次物理动作。
 
-## 8. Observability
+## 8. 可观测性
 
-- `last_eval_reason` / `last_eval_at` on the rule row record **every**
-  evaluation, including no-ops. This is the primary diagnostic surface: if the
-  system "isn't doing anything", the reason is written there.
-- `ac_automation_executions` records dispatch attempts, with
-  `source = 'temperature'`.
-- Successful actions also write `last_action` / `last_action_at`, and the
-  detail string carries the deciding median, e.g. `median=28.4C -> on`.
+- 规则行上的 `last_eval_reason` / `last_eval_at` 会记录**每一次**评估，包括无动作
+  的情况。这是首要的诊断入口：如果系统"什么都不干"，原因就写在这里。
+- `ac_automation_executions` 记录下发尝试，其 `source = 'temperature'`。
+- 成功的动作还会写入 `last_action` / `last_action_at`，并在 detail 字符串中带上
+  起决定作用的中位数，例如 `median=28.4C -> on`。
 
-## 9. Configuration Example
+## 9. 配置示例
 
-Cool when the room reaches 28 °C, stop at 26 °C, at most one action per
-10 minutes:
+房间温度达到 28 °C 时制冷，降到 26 °C 时停止，每 10 分钟最多执行一次动作：
 
 | Field | Value |
 |-------|-------|
@@ -157,23 +148,20 @@ Cool when the room reaches 28 °C, stop at 26 °C, at most one action per
 | `sensor_stale_s` | `180` |
 | `manual_suppress_s` | `1800` |
 
-## 10. Sensor Placement
+## 10. 传感器安装位置
 
-Control quality is bounded by measurement quality. Place the DHT11:
+控制质量的上限由测量质量决定。DHT11 的安装应做到：
 
-- Away from direct airflow from the air conditioner — otherwise it measures
-  the appliance's output, the rule satisfies itself in seconds, and the room
-  never actually reaches the target.
-- Away from the ESP8266's own heat, which biases readings upward by 1–2 °C.
-- Away from direct sunlight and exterior walls.
+- 避开空调的直吹气流 —— 否则它测到的是电器的出风温度，规则会在几秒内自我满足，
+  房间实际上永远达不到目标温度。
+- 远离 ESP8266 自身的发热，该热源会使读数偏高 1–2 °C。
+- 避开阳光直射和外墙。
 
-A poorly placed sensor cannot be compensated for by tuning thresholds.
+传感器位置没放好，靠调阈值是补救不回来的。
 
-## 11. Known Limitations
+## 11. 已知限制
 
-- Single rule only. Per-season or per-time-of-day rule sets are not supported;
-  approximate them with schedules that change the state catalogue in use.
-- No predictive or model-based control. This is intentionally a hysteresis
-  band, not a thermal model.
-- Humidity is recorded and displayed but does not participate in the control
-  decision.
+- 仅支持单条规则。不支持按季节或按时段的多规则集；只能用调度切换所使用的状态目录
+  来近似实现。
+- 不做预测式或基于模型的控制。这里刻意只做滞回区间，而不是热力学模型。
+- 湿度会被记录和展示，但不参与控制决策。

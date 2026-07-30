@@ -1,42 +1,38 @@
-# Operations Guide
+**简体中文** | [English](./operations-guide_EN.md)
 
-Day-2 operations for a running deployment: health checks, logs, database
-maintenance, certificate renewal, incident response, and upgrades.
+# 运维指南（Operations Guide）
 
-This guide assumes the system is already installed as described in
-[`deployment.md`](./deployment.md). For memory- and disk-constrained hosts, read
-[`resource-constrained-deployment.md`](./resource-constrained-deployment.md)
-alongside this document.
+已部署系统上线后的日常运维（Day-2 operations）：健康检查、日志、数据库维护、证书续期、事件响应与升级。
 
-> **Scope note.** This guide contains no deployment-specific host names,
-> credentials, or IP addresses. Every example uses placeholders such as
-> `ac.example.com` and `/opt/remote-ac-cloud`. Substitute your own values.
+本指南假设系统已按 [`deployment.md`](./deployment.md) 完成安装。对于内存与磁盘受限的主机，请同时阅读
+[`resource-constrained-deployment.md`](./resource-constrained-deployment.md)。
+
+> **范围说明。** 本指南不包含任何特定于部署的主机名、凭据或 IP 地址。每个示例均使用占位符，例如 `ac.example.com` 和 `/opt/remote-ac-cloud`。请替换为你的实际值。
 
 ---
 
-## 1. Service Topology Recap
+## 1. 服务拓扑回顾
 
-| Component | Default listen | Managed by |
+| 组件 | 默认监听 | 管理方 |
 |---|---|---|
-| Backend (Fastify) | `127.0.0.1:3100` | systemd unit `remote-ac-backend`, or Docker Compose service `backend` |
-| MQTT broker (Mosquitto) | `8883` (TLS), `1883` (internal only) | `mosquitto.service`, or Compose service `broker` |
-| Reverse proxy (TLS termination / SNI routing) | `443` | Operator-provided (nginx, Caddy, …) |
-| Device (ESP8266) | outbound only | Firmware |
+| 后端（Fastify） | `127.0.0.1:3100` | systemd 单元 `remote-ac-backend`，或 Docker Compose 服务 `backend` |
+| MQTT Broker（Mosquitto） | `8883`（TLS）、`1883`（仅内部） | `mosquitto.service`，或 Compose 服务 `broker` |
+| 反向代理（TLS 终止 / SNI 路由） | `443` | 由运维方提供（nginx、Caddy 等） |
+| 设备（ESP8266） | 仅出站 | 固件 |
 
-The backend deliberately binds to loopback in the systemd profile
-(`HOST=127.0.0.1`). All public exposure is the reverse proxy's responsibility.
+后端在 systemd 配置中刻意绑定回环地址（`HOST=127.0.0.1`）。所有公网暴露均由反向代理负责。
 
 ---
 
-## 2. Health Checks
+## 2. 健康检查
 
-Three unauthenticated endpoints are exposed for liveness and readiness probes.
+暴露了三个无需认证的端点，用于存活（liveness）与就绪（readiness）探活。
 
-| Endpoint | Purpose | Healthy response |
+| 端点 | 用途 | 健康响应 |
 |---|---|---|
-| `GET /api/health` | Process liveness | `{"status":"ok","uptime":<seconds>}` |
-| `GET /api/ready` | Readiness incl. DB probe (`SELECT 1`) | `{"status":"ready","db":"ok"}` |
-| `GET /api/version` | Deployed artifact identity | `{"version":"1.0.0","node":"v24.x.x"}` |
+| `GET /api/health` | 进程存活 | `{"status":"ok","uptime":<seconds>}` |
+| `GET /api/ready` | 就绪（含数据库探测 `SELECT 1`） | `{"status":"ready","db":"ok"}` |
+| `GET /api/version` | 已部署构件身份 | `{"version":"1.0.0","node":"v24.x.x"}` |
 
 ```bash
 curl -fsS http://127.0.0.1:3100/api/health
@@ -44,66 +40,49 @@ curl -fsS http://127.0.0.1:3100/api/ready
 curl -fsS http://127.0.0.1:3100/api/version
 ```
 
-Recommended probe policy:
+推荐的探活策略：
 
-- **Liveness** — `/api/health`, 10 s interval, 3 failures before restart.
-- **Readiness** — `/api/ready`, 30 s interval. A `not_ready` result means the
-  SQLite file is missing, locked, or unreadable; restarting rarely helps —
-  check the filesystem and `DB_PATH` first.
+- **存活（Liveness）** — `/api/health`，间隔 10 s，连续失败 3 次后重启。
+- **就绪（Readiness）** — `/api/ready`，间隔 30 s。返回 `not_ready` 表示 SQLite 文件缺失、被锁定或不可读；重启通常无济于事——应先检查文件系统与 `DB_PATH`。
 
-`APP_VERSION` may be set at deploy time (Git tag, CI build id) so that
-`/api/version` reports the exact artifact rather than the source constant.
+`APP_VERSION` 可在部署时设置（Git 标签、CI 构建号），以便 `/api/version` 报告确切的构件，而非源码中的常量。
 
-### 2.1 Deep Health via the Dashboard API
+### 2.1 通过仪表盘 API 做深度健康检查
 
-`GET /api/dashboard` (**authenticated**) is the authoritative operational view.
-Fields worth alerting on:
+`GET /api/dashboard`（**需认证**）是权威的运维视图。值得告警的字段：
 
-| Field | Meaning | Alert condition |
+| 字段 | 含义 | 告警条件 |
 |---|---|---|
-| `online` | Trusted liveness verdict | `false` for > 5 min |
-| `liveness_reason` | Why the verdict was reached | `device_offline`, `telemetry_stale` |
-| `data_freshness` | Age classification of latest telemetry | `stale` / `offline` |
-| `last_telemetry_at` | Timestamp of newest sample | age > `offline_threshold_ms` |
-| `mqtt_backend_connected` | Backend↔broker link | `false` |
-| `mqtt_reconnect_attempt_count` | Cumulative reconnect attempts | rapid growth (flapping) |
-| `availability` | Raw retained LWT value | see caution below |
+| `online` | 受信任设备的存活判定结论 | `false` 持续超过 5 分钟 |
+| `liveness_reason` | 得出该结论的原因 | `device_offline`、`telemetry_stale` |
+| `data_freshness` | 最新遥测数据的时效分级 | `stale` / `offline` |
+| `last_telemetry_at` | 最新采样的时间戳 | 距今超过 `offline_threshold_ms` |
+| `mqtt_backend_connected` | 后端↔Broker 链路 | `false` |
+| `mqtt_reconnect_attempt_count` | 累计重连次数 | 快速增长（抖动/flapping） |
+| `availability` | 原始保留的遗嘱（LWT）值 | 见下方注意事项 |
 
-> **Caution — do not alert on `availability` alone.** The broker retains the
-> device's last-will/birth message, so a device that vanished without a clean
-> disconnect can keep reporting `online` indefinitely. The backend therefore
-> derives liveness from telemetry freshness, and `availability` is exposed only
-> as a hint (`availability_hint`). Use `online` / `liveness_reason` for alerts.
+> **注意——不要仅凭 `availability` 告警。** Broker 会保留设备的遗嘱/出生（last-will/birth）消息，因此一个在未正常断开的情况下消失的设备，可能持续无限期地报告 `online`。后端因此从遥测数据的时效性推导存活状态，`availability` 仅作为提示（`availability_hint`）暴露。告警请使用 `online` / `liveness_reason`。
 
-### 2.2 No Metrics Endpoint
+### 2.2 无指标（Metrics）端点
 
-There is **no** `/metrics` (Prometheus) endpoint in this release. If you need
-time-series monitoring, the pragmatic options are:
+本版本**没有** `/metrics`（Prometheus）端点。如果你需要时序监控，务实的选择是：
 
-1. Scrape `/api/dashboard` with an authenticated exporter script and translate
-   the fields above into metrics.
-2. Ship the structured JSON logs (§3) into a log-based metrics pipeline.
+1. 用一个带认证的采集脚本抓取 `/api/dashboard`，并将上面的字段转换为指标。
+2. 将结构化 JSON 日志（§3）接入基于日志的指标管线。
 
 ---
 
-## 3. Logs
+## 3. 日志
 
-The backend uses a small purpose-built logger (`cloud/backend/src/logger.ts`),
-not pino or winston. Characteristics:
+后端使用了一个小型、专门实现的日志器（`cloud/backend/src/logger.ts`），而非 pino 或 winston。特性如下：
 
-- **Format** — one JSON object per line: `{"ts":…,"level":…,"msg":…,"meta":{…}}`.
-- **Destination** — `stdout` for `info`, `stderr` for `warn`/`error`. Under
-  systemd this lands in the journal; under Docker in the container log.
-- **Redaction** — keys matching a sensitive set (password, session, cookie,
-  token, secret, …) are recursively replaced before serialization. Do not defeat
-  this by logging whole request bodies in custom patches.
-- **Request logging** — Fastify's own logger is disabled (`logger: false`).
-  There is no per-request access log. If you need one, put it in the reverse
-  proxy, where it belongs.
-- **Log level** — there is no `LOG_LEVEL` environment variable in this release;
-  levels are emitted unconditionally. Filter downstream.
+- **格式** — 每行一个 JSON 对象：`{"ts":…,"level":…,"msg":…,"meta":{…}}`。
+- **去向** — `info` 写入 `stdout`，`warn`/`error` 写入 `stderr`。在 systemd 下进入 journal，在 Docker 下进入容器日志。
+- **脱敏** — 匹配敏感集合（password、session、cookie、token、secret 等）的键会在序列化前被递归替换为占位。不要通过在自定义补丁中记录完整请求体来破坏这一机制。
+- **请求日志** — Fastify 自身的日志器已禁用（`logger: false`）。没有按请求的访问日志。如果需要，应放在反向代理中，那才是它该在的地方。
+- **日志级别** — 本版本没有 `LOG_LEVEL` 环境变量；各级别都会被无条件输出。请在下游过滤。
 
-Reading logs:
+读取日志：
 
 ```bash
 # systemd
@@ -115,10 +94,10 @@ docker compose logs -f backend
 docker compose logs --since 1h broker
 ```
 
-Useful filters:
+有用的过滤方式：
 
 ```bash
-# MQTT bridge lifecycle
+# MQTT 桥接生命周期
 journalctl -u remote-ac-backend --since today --output=cat | grep -i mqtt
 
 # Command dispatch and ACK correlation (search by requestId)
@@ -127,58 +106,44 @@ journalctl -u remote-ac-backend --output=cat | grep '<request-id>'
 
 ---
 
-## 4. Database Operations
+## 4. 数据库运维
 
-The backend uses the built-in `node:sqlite` module — no native compilation, no
-external database server.
+后端使用内置的 `node:sqlite` 模块——无需原生编译，无外部数据库服务。
 
-| Property | Value |
+| 属性 | 值 |
 |---|---|
-| Path | `DB_PATH` env var (default `./data/app.db`; systemd `/opt/remote-ac-cloud/data/app.db`; Compose `/data/app.db`) |
-| Journal mode | WAL (`PRAGMA journal_mode = WAL`) |
-| Foreign keys | ON |
-| Busy timeout | 5000 ms |
+| 路径 | `DB_PATH` 环境变量（默认 `./data/app.db`；systemd 为 `/opt/remote-ac-cloud/data/app.db`；Compose 为 `/data/app.db`） |
+| 日志模式 | WAL（`PRAGMA journal_mode = WAL`） |
+| 外键 | 开启 |
+| 忙等待超时 | 5000 ms |
 
-### 4.1 Schema and Migrations
+### 4.1 Schema 与迁移
 
-All schema work happens inside `initDb()` at startup:
+所有 schema 工作都在启动时的 `initDb()` 内完成：
 
-1. `CREATE TABLE IF NOT EXISTS` for every table.
-2. Idempotent `ALTER TABLE … ADD COLUMN` guards for columns added after the
-   initial schema (idempotency keys, IR code ids, session roles, liveness
-   columns, MQTT counters, IR telemetry fields).
+1. 对每个表执行 `CREATE TABLE IF NOT EXISTS`。
+2. 对初始 schema 之后新增的列，使用幂等（idempotent）的 `ALTER TABLE … ADD COLUMN` 保护（幂等性键、IR 码 id、会话角色、存活相关列、MQTT 计数器、IR 遥测字段）。
 
-A `schema_migrations` table is declared but is **not** currently used as a
-version ledger — migrations are made safe by idempotency, not by version
-tracking. Consequence for operators: **starting a newer backend against an
-older database is safe and self-migrating; starting an older backend against a
-newer database is not tested and may fail on unknown columns.** Always back up
-before a downgrade.
+声明了 `schema_migrations` 表，但当前**未**作为版本账本使用——迁移的安全性来自幂等性，而非版本追踪。对运维的后果：**用较新的后端连接较旧的数据库是安全的且会自迁移；用较旧的后端连接较新的数据库未经测试，可能因未知列而失败。** 降级前务必备份。
 
-Tables: `schema_migrations`, `users`, `sessions`, `devices`, `telemetry`,
-`telemetry_minute`, `device_state`, `commands`, `ir_debug_sessions`,
-`ir_debug_commands`, `events`, `weather_cache`, `ac_states`, `ac_schedules`,
-`ac_temperature_rules`, `ac_automation_executions`.
+表：`schema_migrations`、`users`、`sessions`、`devices`、`telemetry`、`telemetry_minute`、`device_state`、`commands`、`ir_debug_sessions`、`ir_debug_commands`、`events`、`weather_cache`、`ac_states`、`ac_schedules`、`ac_temperature_rules`、`ac_automation_executions`。
 
-### 4.2 Retention
+### 4.2 保留（Retention）
 
-An hourly job (`retentionCleanup()`, `setInterval(3600_000)`) prunes:
+一个每小时运行的任务（`retentionCleanup()`，`setInterval(3600_000)`）会清理：
 
-| Data | Retention |
+| 数据 | 保留期 |
 |---|---|
-| `telemetry` | 7 days |
-| `events`, `commands` | 180 days |
+| `telemetry` | 7 天 |
+| `events`、`commands` | 180 天 |
 
-`telemetry_minute` holds the downsampled series used by the trend chart and is
-not pruned by this job — it is small by construction (one row per minute).
+`telemetry_minute` 保存趋势图使用的降采样序列，本任务不会清理它——它天生很小（每分钟一行）。
 
-### 4.3 Backup
+### 4.3 备份
 
-**No backup script ships with this repository.** Backups are the operator's
-responsibility. With WAL enabled, do not simply copy `app.db` while the service
-is running — the copy may miss committed data still in the `-wal` file.
+**本仓库不附带任何备份脚本。** 备份是运维方的责任。启用 WAL 后，不要简单地在服务运行时复制 `app.db`——副本可能漏掉仍处在 `-wal` 文件中已提交的数据。
 
-Recommended online backup (no downtime):
+推荐的在线备份（无需停机）：
 
 ```bash
 DB=/opt/remote-ac-cloud/data/app.db
@@ -189,7 +154,7 @@ sqlite3 "$OUT" "PRAGMA integrity_check;"
 gzip -9 "$OUT"
 ```
 
-If `sqlite3` is not installed, take a cold backup instead:
+如果未安装 `sqlite3`，则改用冷备份：
 
 ```bash
 systemctl stop remote-ac-backend
@@ -197,10 +162,9 @@ cp -a /opt/remote-ac-cloud/data/app.db{,-wal,-shm} /var/backups/remote-ac/ 2>/de
 systemctl start remote-ac-backend
 ```
 
-Copy the `-wal` and `-shm` files together with the main database, or the copy
-may be inconsistent.
+主数据库文件需与 `-wal` 和 `-shm` 文件一起复制，否则副本可能不一致。
 
-Restore:
+恢复：
 
 ```bash
 systemctl stop remote-ac-backend
@@ -211,37 +175,28 @@ systemctl start remote-ac-backend
 curl -fsS http://127.0.0.1:3100/api/ready
 ```
 
-Schedule daily backups with a systemd timer or cron, and verify at least one
-restore per quarter. An untested backup is a hypothesis, not a backup.
+用 systemd timer 或 cron 安排每日备份，并每季度至少验证一次恢复。未经测试的备份只是一个假设，而非真正的备份。
 
 ---
 
-## 5. Secrets Management
+## 5. 密钥管理
 
-Secrets live in a single operator-owned file that is **never** committed:
+密钥存放在一个运维方拥有的单一文件中，且**绝不**提交：
 
 ```
 <install-root>/deploy/secrets.env      # referenced by systemd and Compose
 ```
 
-Start from [`cloud/deploy/secrets.env.example`](../cloud/deploy/secrets.env.example).
-Required entries include the two MQTT accounts (`MQTT_USERNAME` /
-`MQTT_PASSWORD` for the backend, `MQTT_DEVICE_USERNAME` /
-`MQTT_DEVICE_PASSWORD` for the device), `SESSION_SECRET`, `WEB_PASSWORD`, and
-optionally `IR_OWNER_PASSWORD`.
+以 [`cloud/deploy/secrets.env.example`](../cloud/deploy/secrets.env.example) 为起点。必需的条目包括两个 MQTT 账号（后端的 `MQTT_USERNAME` / `MQTT_PASSWORD`，设备的 `MQTT_DEVICE_USERNAME` / `MQTT_DEVICE_PASSWORD`）、`SESSION_SECRET`、`WEB_PASSWORD`，以及可选的 `IR_OWNER_PASSWORD`。
 
-Hygiene rules:
+卫生规则：
 
-- `chmod 600` and root-owned (or service-user-owned). It is read at start only.
-- The owner password is stored as a scrypt digest in `salt:hash` form, never in
-  plaintext. See [`security-model.md`](./security-model.md).
-- **Rotating `SESSION_SECRET`, `WEB_PASSWORD`, or `IR_OWNER_PASSWORD`
-  invalidates all existing sessions**, including trusted devices. This is
-  intentional and is the fastest way to evict every client.
-- Back up `secrets.env` separately from the database, with stricter access
-  control. Losing it means re-provisioning MQTT accounts and all sessions.
+- 设为 `chmod 600` 且由 root（或服务用户）拥有。它仅在启动时读取。
+- 所有者密码以 scrypt 摘要形式存储，格式为 `salt:hash`，绝不以明文保存。见 [`security-model.md`](./security-model.md)。
+- **轮换 `SESSION_SECRET`、`WEB_PASSWORD` 或 `IR_OWNER_PASSWORD` 会使所有现有会话失效**，包括受信任设备。这是有意为之，也是驱逐所有客户端最快的方式。
+- 将 `secrets.env` 与数据库分开备份，并施加更严格的访问控制。丢失它意味着需要重新配置 MQTT 账号与所有会话。
 
-Rotation procedure:
+轮换流程：
 
 ```bash
 cp -a deploy/secrets.env deploy/secrets.env.bak.$(date +%Y%m%d-%H%M%S)
@@ -252,26 +207,18 @@ curl -fsS http://127.0.0.1:3100/api/ready
 # firmware/device credential in the same maintenance window.
 ```
 
-MQTT credential rotation touches three places and must be done together:
-`secrets.env` → broker password file (`mosquitto_passwd`) → device firmware
-configuration. Rotating only one will silently break the link.
+MQTT 凭据轮换涉及三处，必须一起完成：`secrets.env` → Broker 密码文件（`mosquitto_passwd`）→ 设备固件配置。只轮换其中一处会静默地断开链路。
 
 ---
 
-## 6. TLS Certificates
+## 6. TLS 证书
 
-Two certificates are in play:
+涉及两个证书：
 
-1. **Web certificate** for the browser-facing hostname — normally a public CA
-   (ACME/Let's Encrypt). Renewal is handled by your ACME client; the reverse
-   proxy reloads it.
-2. **Broker certificate** for the MQTT endpoint — commonly a private CA, because
-   the ESP8266 pins the CA. **The leaf must carry a Subject Alternative Name
-   matching the hostname the firmware connects to**; a CN-only certificate will
-   fail on BearSSL with error code `56`.
+1. **Web 证书**，用于面向浏览器的主机名——通常为公开 CA（ACME/Let's Encrypt）。续期由你的 ACME 客户端处理；反向代理重新加载它。
+2. **Broker 证书**，用于 MQTT 端点——通常为私有 CA，因为 ESP8266 会对 CA 做固证（pin）。**叶子证书必须携带与固件所连接主机名匹配的主题备用名称（SAN）；仅含 CN 的证书会在 BearSSL 上以错误码 `56` 失败。**
 
-Monitoring is provided by `cloud/tools/cert-monitor.sh`, which performs
-read-only TLS handshakes and exits non-zero as expiry approaches:
+监控由 `cloud/tools/cert-monitor.sh` 提供，它会执行只读的 TLS 握手，并在临近过期时以非零状态退出：
 
 ```bash
 WEB_HOST=ac.example.com MQTT_HOST=mqtt.example.com \
@@ -279,163 +226,130 @@ WEB_HOST=ac.example.com MQTT_HOST=mqtt.example.com \
 # exit 0 = OK, 2 = inside WARN_DAYS (default 30), 3 = expired/unreachable/<CRIT_DAYS (14)
 ```
 
-Run it daily from a timer and alert on a non-zero exit code. If the broker is
-published behind a TLS-passthrough proxy on 443, set `MQTT_PORT=443` — SNI still
-selects the broker certificate.
+用 timer 每天运行它，并在非零退出时告警。如果 Broker 发布在 443 端口、位于 TLS 透传代理之后，请设置 `MQTT_PORT=443`——SNI 仍会选择 Broker 证书。
 
-Broker certificate renewal checklist:
+Broker 证书续期清单：
 
-1. Issue a new leaf from the same private CA **with the correct SAN**.
-2. Install the leaf and key where `mosquitto.conf` expects them.
-3. Reload the broker (`systemctl reload mosquitto` or restart the container).
-4. Confirm the device reconnects: watch `mqtt_reconnect_success_count` and
-   `last_telemetry_at` on the dashboard.
-5. **Only replace the CA certificate itself if the firmware's embedded CA is
-   updated in the same window** — otherwise every device is locked out. Plan CA
-   rotation as a firmware release, not a server task.
+1. 从同一个私有 CA 签发新的叶子证书，**并带有正确的 SAN**。
+2. 将叶子证书与密钥安装到 `mosquitto.conf` 期望的位置。
+3. 重新加载 Broker（`systemctl reload mosquitto` 或重启容器）。
+4. 确认设备重新连接：在仪表盘上观察 `mqtt_reconnect_success_count` 与 `last_telemetry_at`。
+5. **仅当同一维护窗口内更新了固件中嵌入的 CA 时，才替换 CA 证书本身**——否则每个设备都会被锁死。请将 CA 轮换作为一次固件发布来规划，而非一项服务器任务。
 
 ---
 
-## 7. Real-IR Kill Switches
+## 7. 真实 IR 安全总开关（Kill Switch）
 
-Real infrared transmission is gated by multiple independent switches, all
-default-off. Strict string parsing is used — only `"true"` or `"1"` enables a
-switch, so a stray `WEB_REAL_IR_ENABLED=false` cannot be coerced to true.
+真实红外发射由多个相互独立的开关共同控制，默认全部关闭。使用严格字符串解析——只有 `"true"` 或 `"1"` 才能启用某个开关，因此多余的 `WEB_REAL_IR_ENABLED=false` 无法被强制解释为 true。
 
-| Variable | Default | Effect |
+| 变量 | 默认值 | 效果 |
 |---|---|---|
-| `WEB_REAL_IR_ENABLED` | `false` | Master switch for the web/debug real-IR path |
-| `REAL_IR_PRODUCTION_CONTROL_ENABLED` | `false` | Master switch for owner-driven production control |
-| `REAL_IR_DEBUG_MODE` | `false` | Opens the temporary no-login on-site debug window |
-| `REAL_IR_DEBUG_EXPIRES_AT` | *(empty)* | Debug window expiry; empty means no expiry |
-| `REAL_IR_DEBUG_ALLOWED_CODE_ID` | *(empty)* | Debug allow-list: code id |
-| `REAL_IR_DEBUG_ALLOWED_CODE_SHA256` | *(empty)* | Debug allow-list: frame digest |
-| `REAL_IR_DEBUG_ALLOWED_CODE_LENGTH` | `0` | Debug allow-list: frame length |
-| `IR_OWNER_PASSWORD` | *(empty)* | Empty means no owner IR authorization is possible |
+| `WEB_REAL_IR_ENABLED` | `false` | Web/调试真实 IR 路径的总开关 |
+| `REAL_IR_PRODUCTION_CONTROL_ENABLED` | `false` | 所有者驱动的生产控制总开关 |
+| `REAL_IR_DEBUG_MODE` | `false` | 开放临时的免登录现场调试窗口 |
+| `REAL_IR_DEBUG_EXPIRES_AT` | *(空)* | 调试窗口过期时间；为空表示不过期 |
+| `REAL_IR_DEBUG_ALLOWED_CODE_ID` | *(空)* | 调试允许列表：码 id |
+| `REAL_IR_DEBUG_ALLOWED_CODE_SHA256` | *(空)* | 调试允许列表：帧摘要 |
+| `REAL_IR_DEBUG_ALLOWED_CODE_LENGTH` | `0` | 调试允许列表：帧长度 |
+| `IR_OWNER_PASSWORD` | *(空)* | 为空表示无法做任何所有者 IR 授权 |
 
-The debug transmit path additionally requires **all three** allow-list values to
-be non-empty; otherwise it returns `DEBUG_CODE_CONFIG_INVALID`. Debug windows
-are further limited by `REAL_IR_DEBUG_MAX_TOTAL_COMMANDS` (3),
-`_COOLDOWN_SECONDS` (10), `_COMMAND_TTL_SECONDS` (30), and
-`_SESSION_TTL_SECONDS` (3600).
+调试发射路径还要求允许列表的**三个**值全部非空；否则返回 `DEBUG_CODE_CONFIG_INVALID`。调试窗口进一步受 `REAL_IR_DEBUG_MAX_TOTAL_COMMANDS`（3）、`_COOLDOWN_SECONDS`（10）、`_COMMAND_TTL_SECONDS`（30）与 `_SESSION_TTL_SECONDS`（3600）限制。
 
-### Emergency shutdown
+### 紧急关停
 
 ```bash
 bash cloud/tools/disable-real-ir-debug.sh /opt/remote-ac-cloud
 ```
 
-The script backs up `secrets.env`, forces every real-IR switch to `false`,
-clears the `ir_debug_sessions` / `ir_debug_commands` tables, and restarts the
-service. Run it whenever a debug window is suspected to be open longer than
-intended, or before handing the host to anyone else.
+该脚本会备份 `secrets.env`，强制每个真实 IR 开关为 `false`，清空 `ir_debug_sessions` / `ir_debug_commands` 表，并重启服务。每当怀疑某个调试窗口打开时间超出预期，或在把主机交给其他人之前，都应运行它。
 
 ---
 
-## 8. Routine Maintenance
+## 8. 常规维护
 
-| Cadence | Task |
+| 频率 | 任务 |
 |---|---|
-| Daily (automated) | Certificate monitor; database backup; alert on `online=false` > 5 min |
-| Weekly | Review `error`-level log lines; confirm retention job ran; check disk free |
-| Monthly | Verify a backup restores into a scratch copy; review open kill switches; review `sessions` table for stale trusted devices |
-| Quarterly | Dependency updates + `npm audit`; rehearse the rollback procedure; review MQTT ACL |
-| Per firmware release | Re-verify the device reconnects and telemetry resumes; confirm CA/SAN assumptions still hold |
+| 每日（自动） | 证书监控；数据库备份；对 `online=false` 超过 5 分钟告警 |
+| 每周 | 审查 `error` 级别日志行；确认保留任务已运行；检查磁盘剩余 |
+| 每月 | 验证备份能恢复到临时副本；审查处于打开状态的安全总开关；审查 `sessions` 表中过期的受信任设备 |
+| 每季度 | 依赖更新 + `npm audit`；演练回滚流程；审查 MQTT ACL |
+| 每次固件发布 | 重新验证设备重新连接且遥测恢复；确认 CA/SAN 假设仍然成立 |
 
-Disk usage grows mainly through the journal and the WAL file. If disk pressure
-appears, check `journalctl --disk-usage` before suspecting the database — with
-7-day telemetry retention the database is normally in the tens of megabytes.
+磁盘用量主要通过日志（journal）与 WAL 文件增长。若出现磁盘压力，在怀疑数据库之前先检查 `journalctl --disk-usage`——在 7 天遥测保留下，数据库通常只有数十 MB。
 
 ---
 
-## 9. Upgrade Procedure
+## 9. 升级流程
 
-The safe order is: **back up → build off-host → stop → swap → start → verify**.
+安全的顺序是：**备份 → 在宿主外构建 → 停止 → 替换 → 启动 → 验证**。
 
 ```bash
-# 1. Back up (see §4.3) and record the running version
+# 1. 备份（见 §4.3）并记录运行中的版本
 curl -fsS http://127.0.0.1:3100/api/version
 
-# 2. Build artifacts OFF the production host (see resource-constrained-deployment.md §3)
-#    Then ship only dist/ output to the server.
+# 2. 在生产宿主之外构建构件（见 resource-constrained-deployment.md §3）
+#    然后仅将 dist/ 产物传到服务器。
 
-# 3. Swap and restart
+# 3. 替换并重启
 systemctl stop remote-ac-backend
 #   replace backend/dist and frontend dist as appropriate
 systemctl start remote-ac-backend
 
-# 4. Verify
+# 4. 验证
 curl -fsS http://127.0.0.1:3100/api/ready
 curl -fsS http://127.0.0.1:3100/api/version
 journalctl -u remote-ac-backend --since "2 min ago" --output=cat | grep -i error
 ```
 
-Then confirm end-to-end behaviour: log in, observe fresh telemetry, and send one
-harmless command with real IR still disabled — the ACK path should report
-`ACCEPTED_MOCK`.
+随后确认端到端行为：登录，观察新鲜遥测数据，并在真实 IR 仍禁用的情况下发送一条无害命令——确认应答（ACK）路径应报告 `ACCEPTED_MOCK`。
 
-Rollback is the same sequence with the previous artifact plus, if the schema
-changed, a database restore. Because migrations only add columns, an
-older-binary/newer-database combination is untested; restore the matching
-backup rather than gambling on it.
+回滚是相同流程，但使用上一版构件，并且如果 schema 发生变化则还需恢复数据库。由于迁移只新增列，较旧二进制/较新数据库的组合未经测试；请恢复匹配的备份，而不是去赌它能工作。
 
 ---
 
-## 10. Incident Playbooks
+## 10. 事件处置手册（Playbook）
 
-### 10.1 Device shows offline
+### 10.1 设备显示离线
 
-1. `GET /api/dashboard` → read `liveness_reason` and `last_telemetry_at`.
-2. `mqtt_backend_connected=false` → the backend cannot reach the broker: check
-   the broker service, credentials, and TLS. Everything else is downstream.
-3. Backend connected but no telemetry → the device is at fault: power, Wi-Fi,
-   TLS handshake, or credentials. Check the serial console.
-4. Handshake failures on the device: heap below ~28 KB with `bearssl_code=0`
-   indicates memory exhaustion, **not** a certificate problem — do not start
-   replacing certificates. `bearssl_code=56` is a genuine SAN mismatch.
-5. Full decision tree: [`troubleshooting.md`](./troubleshooting.md).
+1. `GET /api/dashboard` → 读取 `liveness_reason` 与 `last_telemetry_at`。
+2. `mqtt_backend_connected=false` → 后端无法到达 Broker：检查 Broker 服务、凭据与 TLS。其余问题都在下游。
+3. 后端已连接但无遥测 → 设备本身有问题：电源、Wi-Fi、TLS 握手或凭据。检查串口控制台。
+4. 设备端握手失败：堆（heap）低于约 28 KB 且 `bearssl_code=0` 表示内存耗尽，**不是**证书问题——不要去替换证书。`bearssl_code=56` 才是真正的 SAN 不匹配。
+5. 完整决策树：见 [`troubleshooting.md`](./troubleshooting.md)。
 
-### 10.2 Commands accepted but the AC does not react
+### 10.2 命令被接受但空调无反应
 
-Check, in order: real-IR kill switches (§7) — if disabled, ACKs are
-`ACCEPTED_MOCK` by design and no IR is emitted; then the IR code registration;
-then emitter aim and power. See [`ir-learning.md`](./ir-learning.md).
+按顺序检查：真实 IR 安全总开关（§7）——若已禁用，确认应答（ACK）按设计返回 `ACCEPTED_MOCK` 且不发射任何 IR；然后是 IR 码注册；再是发射器朝向与供电。见 [`ir-learning.md`](./ir-learning.md)。
 
-### 10.3 Backend restart loop
+### 10.3 后端重启循环
 
-`journalctl -u remote-ac-backend -n 200 --output=cat`. Common causes:
+`journalctl -u remote-ac-backend -n 200 --output=cat`。常见原因：
 
-- Missing or malformed `secrets.env` → configuration validation aborts startup.
-- `DB_PATH` not writable → `initDb()` throws.
-- Memory ceiling: the unit sets `MemoryMax=384M` and
-  `NODE_OPTIONS=--max-old-space-size=192`. An OOM kill is visible as
-  `systemd… Killed process`. See
-  [`resource-constrained-deployment.md`](./resource-constrained-deployment.md).
-- Node version too old: `node:sqlite` requires Node 22.5+ (24 recommended and
-  what CI validates). `ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite` means the
-  runtime is too old.
+- 缺失或格式错误的 `secrets.env` → 配置校验中止启动。
+- `DB_PATH` 不可写 → `initDb()` 抛错。
+- 内存上限：该单元设置了 `MemoryMax=384M` 与 `NODE_OPTIONS=--max-old-space-size=192`。OOM 被杀会显示为 `systemd… Killed process`。见
+  [`resource-constrained-deployment.md`](./resource-constrained-deployment.md)。
+- Node 版本过旧：`node:sqlite` 需要 Node 22.5+（推荐 24，也是 CI 验证的版本）。`ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite` 表示运行时太旧。
 
-### 10.4 Suspected compromise
+### 10.4 疑似被入侵
 
-1. Rotate `SESSION_SECRET` and `WEB_PASSWORD` → every session dies immediately.
-2. Run `disable-real-ir-debug.sh` to close all real-IR paths.
-3. Rotate both MQTT passwords (backend + device) and update the firmware
-   credential.
-4. Preserve `journalctl` output and the `events` table before pruning.
-5. Review `sessions` for unexpected trusted devices; delete the rows.
+1. 轮换 `SESSION_SECRET` 与 `WEB_PASSWORD` → 所有会话立即失效。
+2. 运行 `disable-real-ir-debug.sh` 关闭所有真实 IR 路径。
+3. 轮换两个 MQTT 密码（后端 + 设备）并更新固件凭据。
+4. 在清理之前保留 `journalctl` 输出与 `events` 表。
+5. 审查 `sessions` 表中是否存在异常受信任设备；删除这些行。
 
 ---
 
-## 11. What This Release Does Not Provide
+## 11. 本版本未提供的功能
 
-Stated plainly so you can plan around it:
+明确列出，以便你提前规划：
 
-- No `/metrics` endpoint and no bundled dashboards.
-- No backup script or scheduled backup — you must build this.
-- No log level control and no access log in the application tier.
-- No version-ledger migrations; downgrades are unverified.
-- No multi-device fan-out: the deployment model is one backend per device id.
-- No automated certificate renewal for the broker's private-CA leaf.
+- 没有 `/metrics` 端点，也没有捆绑的仪表盘。
+- 没有备份脚本或定时备份——你必须自己搭建。
+- 没有日志级别控制，应用层也没有访问日志。
+- 没有基于版本的迁移账本；降级未经验证。
+- 没有多设备扇出：部署模型是「一个设备 id 对应一个后端」。
+- 没有针对 Broker 私有 CA 叶子证书的自动续期。
 
-Each is a deliberate scope decision for a single-device, low-resource
-deployment rather than an oversight — but they are real gaps if you scale up.
+每一项都是针对单设备、低资源部署刻意做出的范围决策，而非疏漏——但如果你要扩展规模，这些都是真实存在的缺口。

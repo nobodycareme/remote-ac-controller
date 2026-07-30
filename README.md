@@ -5,7 +5,7 @@
 一套完整的开源远程空调控制系统：手机网页 → 云端后端 → MQTT（TLS） →
 ESP8266 → 红外 → 空调。从固件到前端全部开源，可自行部署。
 
-> **状态：** v1.0.0 — 首个公开开源版本
+> **状态：** 公开预发布版（main），`v1.0.0` 尚未发布
 > **许可：** [Apache License 2.0](./LICENSE)
 
 ---
@@ -53,7 +53,7 @@ remote-ac-controller/
 │  ├─ src/  include/  lib/  test/  tools/  platformio.ini  README.md
 ├─ cloud/         # 后端 + 前端 + broker + 部署 + 工具
 │  ├─ backend/  frontend/  broker/  deploy/  tools/  README.md
-├─ docs/          # 架构、硬件、红外、MQTT、安全、运维（共 12 篇）
+├─ docs/          # 架构、硬件、红外、MQTT、安全、运维、备份恢复（共 13 篇）
 ├─ hardware/      # 物料清单、接线摘要、未公开内容说明
 ├─ tools/         # test-all.ps1, build-all.ps1
 ├─ .github/       # CI 工作流
@@ -121,14 +121,14 @@ cd cloud/frontend && npm ci && npm test && npm run build
 
 ## 文档
 
-[`docs/`](./docs) 共 12 篇，按使用目的分组：
+[`docs/`](./docs) 共 13 篇，按使用目的分组：
 
 | 让它跑起来 | 理解它 | 运维它 |
 |---|---|---|
 | [硬件选型 `hardware.md`](./docs/hardware.md) | [系统架构 `architecture.md`](./docs/architecture.md) | [部署 `deployment.md`](./docs/deployment.md) |
 | [接线 `wiring.md`](./docs/wiring.md) | [MQTT 协议 `mqtt-protocol.md`](./docs/mqtt-protocol.md) | [运维指南 `operations-guide.md`](./docs/operations-guide.md) |
 | [红外学习 `ir-learning.md`](./docs/ir-learning.md) | [安全模型 `security-model.md`](./docs/security-model.md) | [低配部署 `resource-constrained-deployment.md`](./docs/resource-constrained-deployment.md) |
-| | [定时 `scheduling.md`](./docs/scheduling.md) · [温控 `temperature-automation.md`](./docs/temperature-automation.md) | [故障排查 `troubleshooting.md`](./docs/troubleshooting.md) |
+| | [定时 `scheduling.md`](./docs/scheduling.md) · [温控 `temperature-automation.md`](./docs/temperature-automation.md) | [故障排查 `troubleshooting.md`](./docs/troubleshooting.md) · [备份与恢复 `backup-and-recovery.md`](./docs/backup-and-recovery.md) |
 
 ## 参与贡献
 
@@ -136,7 +136,7 @@ cd cloud/frontend && npm ci && npm test && npm run build
 
 ## 许可
 
-[Apache License 2.0](./LICENSE)。第三方许可汇总见
+[Apache License 2.0](./LICENSE)。中文参考译文见 [`LICENSE_ZH.md`](./LICENSE_ZH.md)；第三方许可汇总见
 [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md)。
 
 ## 已知限制
@@ -148,7 +148,8 @@ cd cloud/frontend && npm ci && npm test && npm run build
 - **本仓库仅提供源码**，生产部署（TLS、MQTT ACL、密钥管理）由部署者负责。
 - **单设备模型** —— 一个后端实例对应一个 `device_id`，未做多设备扇出。
 - **无 `/metrics` 端点、无内置备份脚本** —— 监控与备份需自行接入，
-  推荐做法见 [`operations-guide.md`](./docs/operations-guide.md) §2、§4.3。
+  推荐做法见 [`operations-guide.md`](./docs/operations-guide.md) §2、§4.3，
+  以及 [`backup-and-recovery.md`](./docs/backup-and-recovery.md)。
 - **数据库迁移无版本账本** —— 迁移靠幂等 `ALTER TABLE` 保证，新版本可安全
   向前迁移旧库；**反向降级未经验证**，降级前务必先备份。
 - 部分硬件 / PCB 产物因许可不兼容未随仓库发布。
