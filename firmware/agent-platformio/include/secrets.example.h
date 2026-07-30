@@ -12,5 +12,5 @@
  * include/secrets.h is git-ignored and must NEVER be committed, logged, or
  * packaged into the review ZIP.
  */
-#define CAMPUS_USERNAME "YOUR_CAMPUS_ACCOUNT"
-#define CAMPUS_PASSWORD "YOUR_CAMPUS_PASSWORD"
+#define XIDIAN_USERNAME "YOUR_CAMPUS_ACCOUNT"
+#define XIDIAN_PASSWORD "YOUR_CAMPUS_PASSWORD"

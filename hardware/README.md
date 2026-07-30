@@ -50,8 +50,11 @@ is the most common first-build mistake.
 
 ## 未随仓库发布的内容 / Not Published Here
 
-- **无 PCB 源文件 / No PCB sources.** 参考实现为面包板/洞洞板；单节点无需定制板，
-  原始布线图不在兼容许可下发布。
+- **PCB 源文件和制造文件现已发布 / PCB sources and fabrication files are now
+  published.** 参见 [pcb/](pcb/) 目录。包含 EasyEDA Pro 工程文件 (.eprj2)、
+  Gerber 层、钻孔文件和飞针测试数据。
+  See the [pcb/](pcb/) directory. Includes EasyEDA Pro project file (.eprj2),
+  Gerber layers, drill files, and flying probe test data.
 - **无外壳模型 / No enclosure models.** 任意小型 ABS 盒即可。保持红外 LED 无遮挡，
   并让 DHT11 处于不受板载稳压器余热影响的气流中。
 - **无红外码数据 / No IR code data.** 空调红外帧与机型强相关，不随项目分发，

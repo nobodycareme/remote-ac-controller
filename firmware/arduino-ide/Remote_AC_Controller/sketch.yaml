@@ -1,0 +1,16 @@
+# Arduino CLI / IDE 2.x project configuration
+# https://arduino.github.io/arduino-cli/latest/sketch-project-file/
+
+profiles:
+  default:
+    fqbn: esp8266:esp8266:nodemcuv2
+    # Optional: specify port for direct upload
+    # port: COM3
+    # Optional: custom programmer
+    # programmer: esptool
+
+# Dependencies are installed via Arduino Library Manager.
+# See README.md for the full dependency list.
+
+# Shared library: firmware/shared/RemoteACCore/
+# Install it by symlinking or copying to the Arduino libraries folder.

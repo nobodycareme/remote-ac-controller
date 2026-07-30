@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390, initial-scale=1.0">
+<title>云端空调管家 - 移动端</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:#0d1220;
+  color:#eaf0fd;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;
+  min-height:100vh;
+  font-size:15px;
+  line-height:1.5;
+  width:390px;
+  height:844px;
+  overflow:hidden;
+  position:relative;
+}
+.c{background:#141b2d;border:1px solid #283452;border-radius:20px;padding:16px;box-shadow:0 2px 10px rgba(0,0,0,0.28);margin:0;min-width:0}
+
+/* Shell */
+.shell{
+  width:calc(100% - 32px);
+  margin:0 auto;
+  padding:16px 0 80px;
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+  height:100%;
+  overflow-y:auto;
+}
+
+/* Topbar */
+.tb{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
+.brand{display:flex;align-items:center;gap:8px;min-width:0}
+.brand svg{flex-shrink:0}
+.bn{font-size:16px;font-weight:700;letter-spacing:.2px;white-space:nowrap}
+.bs{font-size:11px;color:#6b7a97;margin-top:-2px;white-space:nowrap}
+.ta{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:600}
+.pill.on{background:rgba(54,211,153,0.15);color:#36d399}
+.ibtn{background:transparent;color:#9fb0cc;border:1px solid #283452;width:36px;height:36px;min-height:36px;padding:0;border-radius:10px;display:inline-flex;align-items:center;just-content:center;cursor:pointer}
+
+/* Hero */
+.hc{position:relative;overflow:hidden;display:flex;flex-direction:column;gap:14px;background:linear-gradient(140deg,#17233f 0%,#131b30 55%,#14202e 100%);border:1px solid #283452;border-radius:20px;padding:16px;box-shadow:0 8px 28px rgba(0,0,0,0.38);margin:0;min-width:0}
+.hs{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.hs .ft{font-size:11px;color:#6b7a97}
+.hb{display:flex;align-items:flex-end;gap:14px 20px;flex-wrap:wrap}
+.hp{min-width:0}
+.ht{font-size:40px;font-weight:700;line-height:1;letter-spacing:-1px}
+.ht .u{font-size:18px;font-weight:600;color:#9fb0cc;margin-left:1px}
+.htl{font-size:12px;color:#9fb0cc;margin-bottom:6px;display:flex;align-items:center;gap:5px}
+.hm{display:flex;gap:12px 18px;flex-wrap:wrap;flex:1;min-width:0;padding-bottom:2px}
+.hme{display:flex;flex-direction:column;gap:2px;min-width:0}
+.hml{display:flex;align-items:center;gap:4px;font-size:11px;color:#6b7a97;white-space:nowrap}
+.hme strong{color:#eaf0fd;font-size:14px;font-weight:600}
+.hf{margin-top:auto;padding-top:10px;border-top:1px solid #283452;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px;color:#6b7a97;line-height:1.4}
+
+/* Section */
+.sec{display:flex;flex-direction:column;gap:10px;min-width:0}
+.st{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700;margin:0;min-width:0}
+
+/* Quick Controls - 2 cols */
+.qg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:stretch}
+.qb{display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-height:96px;height:100%;padding:14px;background:#141b2d;border:1px solid #283452;border-radius:14px;color:#eaf0fd;text-align:left;box-shadow:0 2px 10px rgba(0,0,0,0.28);min-width:0;cursor:pointer}
+.qi{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;flex-shrink:0}
+.qn{font-size:14px;font-weight:700;margin-top:1px}
+.qs{font-size:11px;color:#9fb0cc;font-weight:500}
+.qc .qi{background:rgba(79,157,255,0.14);color:#4f9dff}
+.qd .qi{background:rgba(47,198,183,0.14);color:#2fc6b7}
+.qh .qi{background:rgba(255,138,76,0.14);color:#ff8a4c}
+.qo .qi{background:rgba(255,93,108,0.13);color:#ff5d6c}
+.qo{border-color:rgba(255,93,108,0.3)}
+
+/* Activity */
+.h3{font-size:13px;font-weight:600;color:#9fb0cc;margin:0 0 10px;display:flex;align-items:center;gap:6px;letter-spacing:.3px}
+
+.atl{position:relative;min-height:0}
+.tli{display:flex;gap:10px;padding:6px 0;align-items:flex-start}
+.tlb{width:26px;height:26px;border-radius:50%;flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;background:#222d47;color:#9fb0cc}
+.tlb.ok{background:rgba(54,211,153,0.15);color:#36d399}
+.tlb.wr{background:rgba(255,176,32,0.14);color:#ffb020}
+.tlbd{min-width:0;flex:1}
+.tlbt{font-size:12px;line-height:1.4;overflow-wrap:anywhere}
+.tlbm{font-size:11px;color:#6b7a97;margin-top:1px}
+
+/* Trend Chart */
+.cf{width:100%;height:160px}
+
+/* Schedule */
+.scd{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #283452;min-height:50px}
+.scd:last-of-type{border-bottom:none}
+.sm{display:flex;flex-direction:column;gap:2px;min-width:0}
+.sl1{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.sct{font-size:20px;font-weight:700}
+.scn{font-size:12px;font-weight:600;overflow-wrap:anywhere}
+.scd2{font-size:11px;color:#9fb0cc}
+.sa{display:flex;gap:6px;align-items:center;flex-shrink:0}
+.mtg{min-width:48px;min-height:32px;padding:5px 10px;border-radius:999px;font-size:11px;background:rgba(54,211,153,0.15);color:#36d399;cursor:pointer;border:none;font-family:inherit;font-weight:600}
+
+/* Bottom Nav */
+.bnav{
+  position:fixed;left:0;right:0;bottom:0;z-index:40;
+  display:flex;justify-content:space-around;
+  background:rgba(13,18,32,0.86);backdrop-filter:blur(14px);
+  border-top:1px solid #283452;
+  padding:6px 4px;
+}
+.bnav button{
+  flex:1;max-width:96px;min-height:52px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  background:transparent;border:none;border-radius:10px;
+  color:#6b7a97;font-size:10.5px;font-weight:600;padding:4px 0;cursor:pointer
+}
+.bnav button.ac{color:#4f9dff}
+</style>
+</head>
+<body>
+<div class="shell">
+  <!-- Top Bar -->
+  <header class="tb">
+    <div class="brand">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#4f9dff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="background:rgba(79,157,255,0.14);border-radius:10px;padding:4px">
+        <path d="M12 3v18M5 6.5l14 11M19 6.5l-14 11M12 3l-2 2.2M12 3l2 2.2M12 21l-2-2.2M12 21l2-2.2M5 6.5l2.9.5M5 17.5l2.9-.5M19 6.5l-2.9.5M19 17.5l-2.9-.5"/>
+      </svg>
+      <div>
+        <div class="bn">Remote AC Controller</div>
+        <div class="bs">卧室 · 海信空调</div>
+      </div>
+    </div>
+    <div class="ta">
+      <span class="pill on"><span style="width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block"></span>在线</span>
+      <button class="ibtn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M19.1 4.9l-1.7 1.7M6.6 17.4l-1.7 1.7"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Hero Card -->
+  <div class="hc">
+    <div class="hs">
+      <span class="pill on"><span style="width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block"></span>在线</span>
+      <span class="pill" style="background:rgba(79,157,255,0.14);color:#4f9dff">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 5 6v5.2c0 4.4 3 8 7 9.8 4-1.8 7-5.4 7-9.8V6Z"/></svg>红外已开启
+      </span>
+      <span class="ft">2 秒前</span>
+    </div>
+    <div class="hb">
+      <div class="hp">
+        <div class="htl"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 4a2 2 0 0 1 4 0v9.3a4.5 4.5 0 1 1-4 0Z"/></svg>室内温度</div>
+        <div class="ht">33.5<span class="u">°C</span></div>
+      </div>
+      <div class="hm">
+        <div class="hme">
+          <span class="hml"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5s6 6.4 6 10.6a6 6 0 0 1-12 0C6 9.9 12 3.5 12 3.5Z"/></svg>湿度</span>
+          <strong>45%</strong>
+        </div>
+        <div class="hme">
+          <span class="hml"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5a13.5 13.5 0 0 1 18 0M6 13a9 9 0 0 1 12 0M9 16.4a4.5 4.5 0 0 1 6 0"/></svg>Wi-Fi</span>
+          <strong>-73 dBm</strong>
+        </div>
+        <div class="hme">
+          <span class="hml"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v8"/></svg>最近</span>
+          <strong>制冷 24°C</strong>
+        </div>
+      </div>
+    </div>
+    <div class="hf">温控自动化运行中 · 2 个定时任务启用</div>
+  </div>
+
+  <!-- Quick Controls -->
+  <section class="sec">
+    <div class="st">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2.8" width="8" height="18.4" rx="2.4"/></svg>快捷控制
+    </div>
+    <div class="qg">
+      <button class="qb qc">
+        <span class="qi"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M5 6.5l14 11M19 6.5l-14 11"/></svg></span>
+        <span class="qn">制冷 26°C</span>
+        <span class="qs">制冷 · 自动风速</span>
+      </button>
+      <button class="qb qc">
+        <span class="qi"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M5 6.5l14 11M19 6.5l-14 11"/></svg></span>
+        <span class="qn">强冷 22°C</span>
+        <span class="qs">制冷 · 高风速</span>
+      </button>
+      <button class="qb qd">
+        <span class="qi"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5s6 6.4 6 10.6a6 6 0 0 1-12 0C6 9.9 12 3.5 12 3.5Z"/></svg></span>
+        <span class="qn">除湿 24°C</span>
+        <span class="qs">除湿 · 自动风速</span>
+      </button>
+      <button class="qb qo">
+        <span class="qi"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v8"/><path d="M7 6.2a8 8 0 1 0 10 0"/></svg></span>
+        <span class="qn">关机</span>
+        <span class="qs">发送关机指令</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- Trend Chart -->
+  <div class="c">
+    <div class="h3"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7a97" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v15.5a.5.5 0 0 0 .5.5H20"/><path d="M7.5 14.5l3.5-4 3 2.5 4.5-6"/></svg>温湿度趋势（近 1 小时）</div>
+    <div class="cf">
+      <svg viewBox="0 0 340 160" preserveAspectRatio="xMidYMid meet">
+        <line x1="45" y1="15" x2="325" y2="15" stroke="#283452" stroke-width="0.5"/>
+        <line x1="45" y1="145" x2="325" y2="145" stroke="#283452" stroke-width="0.5"/>
+        <line x1="45" y1="80" x2="325" y2="80" stroke="#283452" stroke-width="0.5" stroke-dasharray="4,4"/>
+        <text x="38" y="19" fill="#6b7a97" font-size="9" text-anchor="end">36°C</text>
+        <text x="38" y="84" fill="#6b7a97" font-size="9" text-anchor="end">34°C</text>
+        <text x="38" y="149" fill="#6b7a97" font-size="9" text-anchor="end">32°C</text>
+        <polyline fill="none" stroke="#4f9dff" stroke-width="2" stroke-linecap="round"
+          points="45,80 80,76 115,72 150,69 185,64 220,58 255,54 290,49 325,40"/>
+        <polygon fill="rgba(79,157,255,0.12)"
+          points="45,145 45,80 80,76 115,72 150,69 185,64 220,58 255,54 290,49 325,40 325,145"/>
+        <circle cx="45" cy="80" r="2.5" fill="#4f9dff"/>
+        <circle cx="185" cy="64" r="2.5" fill="#4f9dff"/>
+        <circle cx="325" cy="40" r="2.5" fill="#4f9dff"/>
+        <polyline fill="none" stroke="#2fc6b7" stroke-width="1.5" stroke-dasharray="5,3"
+          points="45,42 80,44 115,41 150,47 185,40 220,45 255,42 290,44 325,41"/>
+      </svg>
+    </div>
+  </div>
+
+  <!-- Activity -->
+  <div class="c">
+    <div class="h3"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7a97" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="1.8"/><circle cx="6" cy="12" r="1.8"/><circle cx="6" cy="18" r="1.8"/><path d="M10.5 6H20M10.5 12H20M10.5 18H20"/></svg>最近活动</div>
+    <div class="atl">
+      <div class="tli">
+        <div class="tlb ok"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></div>
+        <div class="tlbd"><div class="tlbt">自动化执行：制冷 26°C（超阈值）</div><div class="tlbm">约 5 分钟前</div></div>
+      </div>
+      <div class="tli">
+        <div class="tlb ok"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2.8" width="8" height="18.4" rx="2.4"/></svg></div>
+        <div class="tlbd"><div class="tlbt">用户发送：制冷 24°C</div><div class="tlbm">约 20 分钟前</div></div>
+      </div>
+      <div class="tli">
+        <div class="tlb wr"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 2.8 19.5h18.4Z"/><path d="M12 10v4.2M12 16.8h.01"/></svg></div>
+        <div class="tlbd"><div class="tlbt">「晚安关机」未执行：设备离线</div><div class="tlbm">约 1 小时前</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Schedule -->
+  <section class="sec">
+    <div class="st">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/></svg>定时任务
+    </div>
+    <div class="c">
+      <div class="scd">
+        <div class="sm">
+          <div class="sl1"><span class="sct">07:30</span><span class="scn">制冷 26°C</span></div>
+          <span class="scd2">工作日 · 上次执行 今天</span>
+        </div>
+        <div class="sa"><span class="mtg">开</span></div>
+      </div>
+      <div class="scd">
+        <div class="sm">
+          <div class="sl1"><span class="sct">23:00</span><span class="scn">关机</span></div>
+          <span class="scd2">每天 · 上次执行 昨天</span>
+        </div>
+        <div class="sa"><span class="mtg">开</span></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- Bottom Nav -->
+<nav class="bnav">
+  <button class="ac"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 4.5l8 7"/><path d="M6 10.5V19a1 1 0 0 0 1 1h3.5v-5h3v5H17a1 1 0 0 0 1-1v-8.5"/></svg>首页</button>
+  <button><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2.8" width="8" height="18.4" rx="2.4"/><circle cx="12" cy="7" r="1.4"/><path d="M10.3 11.4h3.4M10.3 14.4h3.4M10.3 17.4h3.4"/></svg>控制</button>
+  <button><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></svg>定时</button>
+  <button><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v3M12 17.5v3M3.5 12h3M17.5 12h3"/><circle cx="12" cy="12" r="3.6"/></svg>自动化</button>
+  <button><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5M12 8h.01"/></svg>更多</button>
+</nav>
+</body>
+</html>

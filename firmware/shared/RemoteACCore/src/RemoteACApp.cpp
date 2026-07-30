@@ -1,8 +1,12 @@
 // ============================================================
-// main.cpp — Remote AC Controller v0.4.0-cloud-foundation
-// Single serial router via Cli + Cloud auto-connectivity.
+// RemoteACApp.cpp — Shared application entry points
+// Remote AC Controller v0.4.0-cloud-foundation
+//
+// Used by both PlatformIO (agent-platformio) and Arduino IDE builds.
+// Contains all business logic previously in main.cpp.
 // ============================================================
 #include <Arduino.h>
+#include "RemoteACApp.h"
 
 #include "config/hardware_config.h"
 #include "board_pins.h"
@@ -12,8 +16,7 @@
 #include "serial_cli.h"
 #include "network/wifi_manager.h"
 
-// Cloud module (MQTT/telemetry/command) is WIP — gated on ENABLE_CLOUD (not defined by default).
-// This preserves the cloud source for future development without breaking builds.
+// Cloud module (MQTT/telemetry/command) gated on ENABLE_CLOUD
 #if ENABLE_CLOUD
 #include "cloud/connectivity_state_machine.h"
 #include "cloud/mqtt_client.h"
@@ -21,23 +24,23 @@
 #include "cloud/command_service.h"
 #endif
 
-Dht11Sensor dht(DHT11_DATA_PIN);
-IrModule ir;
-Cli     gCli(dht, ir);
-WifiManager net;
+// ---- Global instances ----
+static Dht11Sensor dht(DHT11_DATA_PIN);
+static IrModule    ir;
+static Cli         gCli(dht, ir);
+static WifiManager net;
 
-// Per-boot identifier (used as capture-file metadata; not security-critical).
 uint32_t gBootId = 0;
 
 #if ENABLE_CLOUD
-ConnectivityStateMachine cloudSM;
-MqttClientWrapper        mqtt;
-TelemetryService         telemetry;
-CommandService           commands;
-static bool _wasWifiUp = false;  // for Wi-Fi reconnect counting in loop()
+static ConnectivityStateMachine cloudSM;
+static MqttClientWrapper        mqtt;
+static TelemetryService         telemetry;
+static CommandService           commands;
+static bool _wasWifiUp = false;
 #endif
 
-// === Cloud state machine callbacks ===
+// ---- Cloud state machine callbacks ----
 #if ENABLE_CLOUD
 static bool cbWifiConnected() {
     return net.state() >= WIFI_DHCP_WAIT;
@@ -68,14 +71,11 @@ static bool cbMqttConnect() {
     return true;
 }
 
-// Section 三: MQTT real-connection liveness supervision callbacks.
-// The state machine's CS_CLOUD_ONLINE drives these instead of trusting isOnline().
 static bool cbMqttConnected() {
     return mqtt.isConnected();
 }
 
 static bool cbMqttLoop() {
-    // Drives PubSubClient loop(); returns true only if still connected after processing.
     MqttLoopResult r = mqtt.loop();
     return (r == MqttLoopResult::Ok);
 }
@@ -90,8 +90,6 @@ static TelemetryPublishResult cbTelemetryTick() {
 }
 
 static void cbMqttDisconnect() {
-    // Cleanly close a stale TLS socket before reconnect (only if still "connected"
-    // to avoid touching a dead socket that could block).
     if (mqtt.isConnected()) mqtt.disconnect();
 }
 
@@ -104,16 +102,20 @@ static int cbMqttSslError() {
 }
 #endif
 
-void setup() {
+// ---- Entry Points ----
+
+void appSetup(void) {
   gCli.begin();
   gCli.attachNetwork(net);
   ir.begin(IR_DEFAULT_BAUD);
-  // Generate a stable-per-boot id for capture-file metadata.
+
   randomSeed((uint32_t)(ESP.getCycleCount() ^ ESP.getChipId()));
   gBootId = (uint32_t)random();
   gCli.banner();
+
   Serial.print(F("BOOT_ID=0x"));
   Serial.println(gBootId, HEX);
+
   dht.begin();
   Serial.print(F("DHT11_MODULE_READY pin=GPIO"));
   Serial.println(DHT11_DATA_PIN);
@@ -125,7 +127,6 @@ void setup() {
   Serial.println(F("SINGLE_SERIAL_ROUTER=TRUE"));
 
 #if ENABLE_CLOUD
-  // === Cloud module init (v0.4.0) ===
   MqttConfig mqttCfg;
 #if ENABLE_CLOUD_CREDENTIALS
   if (CloudCredentials::available()) {
@@ -142,7 +143,6 @@ void setup() {
       telemetry.begin(&dht, &mqtt);
       commands.begin(&mqtt);
 
-      // Wire up state machine callbacks
       cloudSM.onCheckWifiConnected = cbWifiConnected;
       cloudSM.onCheckDhcpReady     = cbDhcpReady;
       cloudSM.onDetectPortal       = cbDetectPortal;
@@ -155,11 +155,8 @@ void setup() {
       cloudSM.onMqttDisconnect       = cbMqttDisconnect;
       cloudSM.onMqttErrorState       = cbMqttErrorState;
       cloudSM.onMqttSslError         = cbMqttSslError;
+
       Serial.println(F("CLOUD_STATE_MACHINE_READY"));
-      // Auto-initiate Wi-Fi association on cloud boot so the device self-recovers
-      // after a power cycle WITHOUT a manual `wifi connect` (cold-boot recovery).
-      // net.connect() uses the default campus SSID (CAMPUS_SSID); the cloud state
-      // machine picks the association up on its next tick.
       net.connect();
       Serial.println(F("AUTO_WIFI_CONNECT_ISSUED"));
   } else {
@@ -168,18 +165,12 @@ void setup() {
 #endif
 }
 
-void loop() {
-  // 1) CLI handler (keeps serial responsive)
+void appLoop(void) {
   gCli.handle();
 
 #if ENABLE_CLOUD
-  // 2) Cloud state machine tick (non-blocking).
-  //    CS_CLOUD_ONLINE now drives mqtt.loop() + telemetry.tick() via its
-  //    liveness-supervision callbacks (Section 三). Do NOT call them here too —
-  //    that would double-drive the client and defeat disconnect detection.
   cloudSM.tick();
 
-  // Track Wi-Fi reconnects for telemetry (false->true transition after a drop)
   bool wifiUp = net.state() >= WIFI_DHCP_WAIT;
   if (wifiUp && !_wasWifiUp) telemetry.incrementWifiReconnect();
   _wasWifiUp = wifiUp;
