@@ -4,7 +4,7 @@
 
 | Version | Supported |
 |---------|-----------|
-| v1.0.0  | ✅ |
+| main branch (pre-v1.0.0) | ✅ |
 
 ## Scope of this Public Repository
 
@@ -58,3 +58,36 @@ This project controls a physical air conditioner via infrared signals.
 Operators are responsible for complying with local regulations, respecting
 the devices they control, and securing any self-hosted deployment (MQTT
 credentials, TLS, network exposure).
+
+## Dependency Vulnerability Status
+
+Last reviewed: 2026-07-30 (pre-v1.0.0, main branch).
+
+`npm audit` reports the following. **No `npm audit fix --force` was applied**
+— every available fix is a **major-version breaking change** (e.g.
+`fastify@5.11.0`, `@fastify/static@10.1.2`, `vitest@4.1.10`, `vite@8`), and
+force-upgrading would break the build and runtime contracts. Remediation is
+tracked as a planned follow-up and is a **prerequisite for the v1.0.0
+release**.
+
+| Package | Severity | Type | In production runtime? | Notes |
+|---------|----------|------|-----------------------|-------|
+| `vitest` (backend, direct) | critical | dev/test | No | Only affects the Vitest UI server locally; never shipped. |
+| `esbuild` (frontend, transitive) | critical | dev | No | Dev-server only; not part of the production bundle. |
+| `fastify` (backend, direct) | high | prod | Yes | DoS / `X-Forwarded-*` spoofing. Fix = `fastify@5.11.0` (major). |
+| `@fastify/static` (backend, direct) | high | prod | Yes | Auth bypass via path traversal. Fix = `@fastify/static@10.1.2` (major). |
+| `find-my-way`, `fast-uri`, `fast-json-stringify`, `glob`, `minimatch`, `brace-expansion`, `@fastify/*-compiler` (backend) | high | transitive | Via fastify | All resolved by the fastify major bump above. |
+| `uuid` (backend) | moderate | prod | Yes | Bounds check; low exploitability in current usage. |
+| remaining moderate (frontend/backend) | moderate | mixed | partial | See `npm audit` for detail. |
+
+**Impact on release gates:**
+
+- The two **critical** findings are confined to **development/test tooling**
+  and are **not present in any deployed artifact**, so they do not block
+  publishing the `main` branch.
+- The **production-rated high** findings (`fastify`, `@fastify/static`) are
+  real and must be remediated (major bumps + regression tests) **before** the
+  `v1.0.0` release is cut. The `v1.0.0` tag/Release remains **withheld** until
+  then (independent of the production server rotation gate).
+- Maintainers should subscribe to the linked advisories and re-run `npm audit`
+  after each dependency change.

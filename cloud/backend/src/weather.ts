@@ -98,11 +98,13 @@ class WeatherService {
     // Hydrate from the last successful cache immediately so /api/weather/current
     // returns data even before the first live fetch completes (and across restarts).
     this.snapshot = snapshotFromCacheRow(getWeatherCache(config.WEATHER_CITY));
+    // Clear any prior timer before (re)starting to avoid leaked/duplicate intervals.
+    if (this.timer) { clearInterval(this.timer); this.timer = null; }
     // Kick an immediate refresh (fire-and-forget; does not block startup).
     this.refresh().catch(() => {});
     this.timer = setInterval(() => {
       this.refresh().catch(() => {});
-    }, config.WEATHER_REFRESH_MS);
+    }, config.WEATHER_REFRESH_MS).unref();
     log.info('weather service started', { refresh_ms: config.WEATHER_REFRESH_MS });
   }
 

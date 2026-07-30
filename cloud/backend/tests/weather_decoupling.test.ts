@@ -4,7 +4,7 @@
 // weather snapshot (and the /api/weather/current endpoint) is available even when the
 // device is offline / has never reported, and that a failed live fetch preserves the
 // last good snapshot instead of going blank.
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import { initDb, setWeatherCache } from '../src/db';
@@ -12,6 +12,10 @@ import { config } from '../src/config';
 import { weatherService } from '../src/weather';
 import { registerAuthRoutes } from '../src/routes/auth';
 import { registerWeatherRoutes } from '../src/routes/weather';
+
+// The WeatherService owns a refresh timer; stop it after the suite so vitest
+// exits cleanly (no lingering interval keeping the event loop alive).
+afterAll(() => weatherService.stop());
 
 const VALID_ORIGIN = (config.ALLOWED_ORIGINS || 'https://ac.example.com').split(',')[0].trim();
 

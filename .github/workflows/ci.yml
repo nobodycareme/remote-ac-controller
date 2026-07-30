@@ -38,7 +38,7 @@ jobs:
   firmware-ci:
     name: firmware-ci
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     defaults:
       run:
         shell: pwsh
@@ -98,11 +98,25 @@ jobs:
           }
           Write-Output "OK  dev.ps1 profile 'public'"
 
-      - name: Note on full firmware compilation
+      - name: Setup Python for PlatformIO
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PlatformIO Core
         run: |
-          Write-Output 'Full firmware compilation requires a local PlatformIO Core installation.'
-          Write-Output 'Run locally:  pwsh tools/build-all.ps1'
-          Write-Output 'See firmware/docs/06_environment-and-build for setup.'
+          python -m pip install --upgrade pip
+          pip install platformio
+          pio --version
+
+      - name: dev.ps1 verify (public profile)
+        run: pwsh firmware/tools/dev.ps1 verify -Profile public
+
+      - name: dev.ps1 test (public profile)
+        run: pwsh firmware/tools/dev.ps1 test -Profile public
+
+      - name: dev.ps1 build (public profile, artifact secret-scanned)
+        run: pwsh firmware/tools/dev.ps1 build -Profile public
 
   # ---------------------------------------------------------------------------
   # cloud-ci
