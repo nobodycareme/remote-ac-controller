@@ -152,12 +152,17 @@ jobs:
           arduino-cli lib install "PubSubClient@2.8.0"
           arduino-cli lib install "ArduinoJson@6.21.5"
 
+      - name: Install shared library
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/Arduino/libraries"
+          ln -s "$(pwd)/firmware/shared/RemoteACCore" "$HOME/Arduino/libraries/RemoteACCore"
+
       - name: Compile Arduino sketch
         working-directory: firmware/arduino-ide/Remote_AC_Controller
         run: |
           set -euo pipefail
           arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 \
-            --libraries ../../shared \
             --build-path build
 
   # ---------------------------------------------------------------------------
