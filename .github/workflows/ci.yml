@@ -158,27 +158,17 @@ jobs:
           arduino-cli lib install "ArduinoJson@6.21.5"
 
       - name: Compile Arduino sketch (structural verification)
-        working-directory: firmware/arduino-ide/Remote_AC_Controller
         run: |
           set -euo pipefail
-          # Use a minimal stub instead of the full shared library for CI.
-          # The full firmware requires PlatformIO build environment (cloud_secrets.h, etc.).
-          # This CI step verifies the Arduino sketch structure, includes, and build chain.
-          mkdir -p build_libs/RemoteACCore/src
-          cat > build_libs/RemoteACCore/src/RemoteACApp.h << 'STUB'
-          #pragma once
-          #include <Arduino.h>
-          void appSetup(void);
-          void appLoop(void);
-          STUB
-          cat > build_libs/RemoteACCore/src/RemoteACApp.cpp << 'STUB'
-          #include "RemoteACApp.h"
-          void appSetup(void) { Serial.begin(115200); }
-          void appLoop(void) { delay(100); }
-          STUB
-          arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 \
-            --libraries build_libs \
-            --build-path build
+          # Verify the Arduino sketch can be parsed by the compiler.
+          # Create minimal stub library to satisfy RemoteACApp.h include.
+          mkdir -p /tmp/arduino_libs/RemoteACCore
+          printf '#pragma once\n#include <Arduino.h>\nvoid appSetup(void);\nvoid appLoop(void);\n' > /tmp/arduino_libs/RemoteACCore/RemoteACApp.h
+          printf '#include "RemoteACApp.h"\nvoid appSetup(void){}\nvoid appLoop(void){}\n' > /tmp/arduino_libs/RemoteACCore/RemoteACApp.cpp
+          arduino-cli compile \
+            --fqbn esp8266:esp8266:nodemcuv2 \
+            --libraries /tmp/arduino_libs \
+            firmware/arduino-ide/Remote_AC_Controller
 
   # ---------------------------------------------------------------------------
   # cloud-ci
