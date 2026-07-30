@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""确定性红外状态注册表生成器（2026-07-28 全量集成轮）。
+"""确定性红外状态注册表生成器。
 
-输入（全部私有，不入Git）：
-  Private/Firmware/IR/CAPTURE_002.bin                 —— 原固定基线（418B，SHA固定）
-  Private/Firmware/IR/Learned/<stateId>/canonical.bin —— 10个用户选定canonical
+输入（本地捕获数据，均为 gitignored，不随仓库发布）：
+  Private/Firmware/IR/CAPTURE_BASELINE.bin            —— 可选基线帧（长度/SHA 由 state.json 声明）
+  Private/Firmware/IR/Learned/<stateId>/canonical.bin —— 每个状态选定的 canonical 帧
   Private/Firmware/IR/Learned/<stateId>/canonical.json
   Private/Firmware/IR/Learned/<stateId>/state.json
 
+  红外帧与空调机型强相关，需自行捕获，流程见 docs/ir-learning.md。
+  项目根目录由本文件位置推导，可用环境变量 IR_PROJECT_ROOT 覆盖。
+
 输出（gitignored）：
-  src/private_ir_codes/generated/ir_library_generated.inc  —— 11条 PrivateIrCode PROGMEM 表
+  src/private_ir_codes/generated/ir_library_generated.inc  —— PrivateIrCode PROGMEM 表
 
 规则：
   - 全部结构校验（存在/长度/SHA256/帧头/AFN=22H/校验和/帧尾/与sourceCapture逐字节一致）失败即退出非零；
@@ -19,15 +22,30 @@
 """
 import hashlib, json, os, re, sys
 
-ROOT = r"C:\example\remote-ac"
-IR_DIR = os.path.join(ROOT, "Private", "Firmware", "IR")
+# Repository root is derived from this file's location:
+#   <repo>/firmware/tools/gen_ir_state_registry.py
+# Override with IR_PROJECT_ROOT when running from outside the tree.
+ROOT = os.environ.get("IR_PROJECT_ROOT") or os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
+IR_DIR = os.environ.get("IR_DATA_ROOT") or os.path.join(ROOT, "Private", "Firmware", "IR")
 LEARNED = os.path.join(IR_DIR, "Learned")
-OUT = os.path.join(ROOT, "Firmware", "Remote_AC_Controller",
+OUT = os.path.join(ROOT, "firmware",
                    "src", "private_ir_codes", "generated", "ir_library_generated.inc")
 
-FIXED_ID = "hisense_cool_24_quiet_swing_v_on_swing_h_on_power_on_v1"
-FIXED_SHA = "e9ab43feca71acde248df5729d0cb0d228bdbcfb69f8513d43ea4b942cb6ac7e"
-FIXED_LEN = 418
+# Baseline frame identity. These describe one specific captured frame and are
+# meaningless for other air conditioners — override them for your own capture,
+# or set IR_BASELINE_FILE='' to skip the baseline entry entirely.
+BASELINE_FILE = os.environ.get("IR_BASELINE_FILE", "CAPTURE_002.bin")
+FIXED_ID = os.environ.get(
+    "IR_BASELINE_CODE_ID",
+    "hisense_cool_24_quiet_swing_v_on_swing_h_on_power_on_v1",
+)
+FIXED_SHA = os.environ.get(
+    "IR_BASELINE_SHA256",
+    "e9ab43feca71acde248df5729d0cb0d228bdbcfb69f8513d43ea4b942cb6ac7e",
+)
+FIXED_LEN = int(os.environ.get("IR_BASELINE_LENGTH", "418"))
 
 STATES = [
     "hisense_power_off_v1",
@@ -87,21 +105,23 @@ def validate_frame(b, name):
 
 def load_entries():
     entries = []
-    # 1) fixed baseline CAPTURE_002
-    p = os.path.join(IR_DIR, "CAPTURE_002.bin")
-    if not os.path.exists(p):
-        fail("CAPTURE_002.bin missing")
-    data = open(p, "rb").read()
-    sha = hashlib.sha256(data).hexdigest()
-    if len(data) != FIXED_LEN or sha != FIXED_SHA:
-        fail("CAPTURE_002 baseline mismatch len=%d sha=%s" % (len(data), sha))
-    validate_frame(data, "CAPTURE_002")
-    entries.append({
-        "codeId": FIXED_ID, "data": data, "sha": sha,
-        "desc": "海信制冷24℃ 静音 上下扫风开启 左右扫风开启",
-        "mode": "cool", "temp": 24, "fan": "quiet",
-        "swingV": True, "swingH": True, "powerOn": True,
-    })
+    # 1) Optional baseline frame. Skipped when IR_BASELINE_FILE is empty.
+    if BASELINE_FILE:
+        p = os.path.join(IR_DIR, BASELINE_FILE)
+        if not os.path.exists(p):
+            fail("%s missing (set IR_BASELINE_FILE='' to skip the baseline)" % BASELINE_FILE)
+        data = open(p, "rb").read()
+        sha = hashlib.sha256(data).hexdigest()
+        if len(data) != FIXED_LEN or sha != FIXED_SHA:
+            fail("baseline mismatch len=%d sha=%s (override IR_BASELINE_LENGTH / IR_BASELINE_SHA256)"
+                 % (len(data), sha))
+        validate_frame(data, BASELINE_FILE)
+        entries.append({
+            "codeId": FIXED_ID, "data": data, "sha": sha,
+            "desc": "制冷24℃ 静音 上下扫风开启 左右扫风开启",
+            "mode": "cool", "temp": 24, "fan": "quiet",
+            "swingV": True, "swingH": True, "powerOn": True,
+        })
     # 2) 10 learned canonical states
     for sid in STATES:
         d = os.path.join(LEARNED, sid)

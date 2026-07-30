@@ -8,7 +8,7 @@
 """
 import sys, os, hashlib
 
-ROOT = r"C:\example\remote-ac"
+ROOT = os.environ.get("IR_PROJECT_ROOT") or os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CAP_BIN = os.path.join(ROOT, "References", "IR", "captures",
     "HISENSE_COOL_24_QUIET_SWING_V_ON_SWING_H_ON_POWER_ON_CAPTURE_002.bin")
 FW_BIN = os.path.join(ROOT, "Environment", "PlatformIO", "Build",

@@ -1,4 +1,4 @@
-﻿# Private data 鈥?never track
+﻿# Private data — never track
 Private/
 Evidence/
 Deliverables/
@@ -6,9 +6,10 @@ PackageValidation/
 ForensicSnapshots/
 
 # Build artifacts
+.build/
 .pio/
+.pio-core/
 build/
-Environment/
 *.bin
 *.elf
 *.map
@@ -33,7 +34,8 @@ venv/
 secrets.env
 secrets.h
 cloud_secrets.h
-secrets.env
+include/secrets.h
+include/cloud_secrets.h
 
 # SQLite databases
 *.sqlite3
@@ -65,7 +67,6 @@ logs/
 *.dmp
 *.core
 
-
 # Local working artifacts (not firmware sources)
 archive/
 reports/
@@ -73,3 +74,6 @@ review/
 setup-report.md
 tools/ir_simple_learner/dist/
 tools/ir_simple_learner/IR_Simple_Learner.spec
+
+# Per-user tool state written at runtime; may embed local filesystem paths.
+tools/**/user_settings.json

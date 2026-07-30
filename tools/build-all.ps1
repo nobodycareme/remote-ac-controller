@@ -1,0 +1,193 @@
+#Requires -Version 5.1
+<#
+.SYNOPSIS
+    Builds every buildable artefact in the remote-ac-controller monorepo.
+
+.DESCRIPTION
+    Single entry point for a full local build.
+
+    Scope, by design:
+      * Firmware  : delegated to firmware/tools/dev.ps1 with the public profile.
+                    This script never invokes pio.exe directly.
+      * Cloud     : backend TypeScript compilation and frontend Vite build.
+
+    Hard exclusions:
+      * Never uploads, flashes or opens a serial port.
+      * Never deploys to any server.
+      * Never touches production credentials, certificates or the broker.
+      * Never uses a non-public firmware profile.
+
+.PARAMETER SkipFirmware
+    Skip the firmware build (useful on a machine without PlatformIO Core).
+
+.PARAMETER SkipCloud
+    Skip the cloud build (useful on a machine without Node.js 24+).
+
+.PARAMETER Clean
+    Use dev.ps1 clean-build instead of build for the firmware.
+
+.EXAMPLE
+    pwsh tools/build-all.ps1
+
+.EXAMPLE
+    pwsh tools/build-all.ps1 -Clean
+#>
+[CmdletBinding()]
+param(
+    [switch] $SkipFirmware,
+    [switch] $SkipCloud,
+    [switch] $Clean
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+# --- constants ---------------------------------------------------------------
+$RepoRoot     = Split-Path -Parent $PSScriptRoot
+$FirmwareDir  = Join-Path $RepoRoot 'firmware'
+$DevScript    = Join-Path $FirmwareDir 'tools/dev.ps1'
+$CloudBackend = Join-Path $RepoRoot 'cloud/backend'
+$CloudFront   = Join-Path $RepoRoot 'cloud/frontend'
+$Profile      = 'public'   # public profile only. Never private / private-production / ir-lab.
+
+$script:Results = [System.Collections.Generic.List[object]]::new()
+
+# --- helpers -----------------------------------------------------------------
+function Write-Section {
+    param([Parameter(Mandatory)][string] $Title)
+    Write-Host ''
+    Write-Host ('=' * 72) -ForegroundColor DarkGray
+    Write-Host "  $Title" -ForegroundColor Cyan
+    Write-Host ('=' * 72) -ForegroundColor DarkGray
+}
+
+function Add-Result {
+    param(
+        [Parameter(Mandatory)][string] $Name,
+        [Parameter(Mandatory)][string] $Status,
+        [string] $Detail = ''
+    )
+    $script:Results.Add([pscustomobject]@{
+        Step   = $Name
+        Status = $Status
+        Detail = $Detail
+    })
+}
+
+function Invoke-Step {
+    param(
+        [Parameter(Mandatory)][string]      $Name,
+        [Parameter(Mandatory)][scriptblock] $Action
+    )
+    Write-Section $Name
+    try {
+        & $Action
+        if ($LASTEXITCODE -ne $null -and $LASTEXITCODE -ne 0) {
+            throw "exit code $LASTEXITCODE"
+        }
+        Add-Result -Name $Name -Status 'PASS'
+        Write-Host "PASS  $Name" -ForegroundColor Green
+    }
+    catch {
+        Add-Result -Name $Name -Status 'FAIL' -Detail $_.Exception.Message
+        Write-Host "FAIL  $Name : $($_.Exception.Message)" -ForegroundColor Red
+    }
+    finally {
+        $global:LASTEXITCODE = 0
+    }
+}
+
+function Invoke-NodeStep {
+    param(
+        [Parameter(Mandatory)][string]   $Name,
+        [Parameter(Mandatory)][string]   $WorkingDirectory,
+        [Parameter(Mandatory)][string]   $Executable,
+        [Parameter(Mandatory)][string[]] $Arguments
+    )
+    Invoke-Step -Name $Name -Action {
+        Push-Location -LiteralPath $WorkingDirectory
+        try {
+            & $Executable @Arguments
+            if ($LASTEXITCODE -ne 0) { throw "exit code $LASTEXITCODE" }
+        }
+        finally { Pop-Location }
+    }
+}
+
+# --- guards ------------------------------------------------------------------
+if (Test-Path -LiteralPath (Join-Path $RepoRoot 'Private')) {
+    throw 'GUARD_FAIL: a Private/ directory exists in the repository. It must never be present.'
+}
+
+Write-Host ''
+Write-Host 'remote-ac-controller :: build-all' -ForegroundColor White
+Write-Host "repository : $RepoRoot"
+Write-Host "profile    : $Profile (public only)"
+Write-Host "mode       : $(if ($Clean) { 'clean-build' } else { 'build' })"
+Write-Host "started    : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+
+# --- firmware ----------------------------------------------------------------
+if ($SkipFirmware) {
+    Add-Result -Name 'firmware' -Status 'SKIP' -Detail '-SkipFirmware'
+    Write-Host 'firmware: skipped by request' -ForegroundColor Yellow
+}
+elseif (-not (Test-Path -LiteralPath $DevScript)) {
+    Add-Result -Name 'firmware' -Status 'SKIP' -Detail 'firmware/tools/dev.ps1 not found'
+    Write-Host 'firmware: dev.ps1 not found, skipped' -ForegroundColor Yellow
+}
+else {
+    $firmwareCommand = if ($Clean) { 'clean-build' } else { 'build' }
+    Invoke-Step -Name "firmware :: dev.ps1 $firmwareCommand ($Profile)" -Action {
+        & $DevScript -Command $firmwareCommand -Profile $Profile
+        if ($LASTEXITCODE -ne 0) { throw "dev.ps1 $firmwareCommand exit code $LASTEXITCODE" }
+    }
+}
+
+# --- cloud -------------------------------------------------------------------
+if ($SkipCloud) {
+    Add-Result -Name 'cloud' -Status 'SKIP' -Detail '-SkipCloud'
+    Write-Host 'cloud: skipped by request' -ForegroundColor Yellow
+}
+else {
+    $npm = Get-Command npm -ErrorAction SilentlyContinue
+    if (-not $npm) {
+        Add-Result -Name 'cloud' -Status 'SKIP' -Detail 'npm not on PATH'
+        Write-Host 'cloud: npm not found on PATH, skipped' -ForegroundColor Yellow
+    }
+    else {
+        foreach ($pkg in @(
+            @{ Name = 'backend';  Path = $CloudBackend },
+            @{ Name = 'frontend'; Path = $CloudFront }
+        )) {
+            if (-not (Test-Path -LiteralPath $pkg.Path)) {
+                Add-Result -Name "cloud :: $($pkg.Name)" -Status 'SKIP' -Detail 'directory not found'
+                continue
+            }
+            if (-not (Test-Path -LiteralPath (Join-Path $pkg.Path 'node_modules'))) {
+                Invoke-NodeStep -Name "cloud :: $($pkg.Name) npm ci" `
+                                -WorkingDirectory $pkg.Path `
+                                -Executable 'npm' -Arguments @('ci')
+            }
+            Invoke-NodeStep -Name "cloud :: $($pkg.Name) build" `
+                            -WorkingDirectory $pkg.Path `
+                            -Executable 'npm' -Arguments @('run', 'build')
+        }
+    }
+}
+
+# --- summary -----------------------------------------------------------------
+Write-Section 'Summary'
+$script:Results | Format-Table -AutoSize | Out-String | Write-Host
+
+$failed  = @($script:Results | Where-Object { $_.Status -eq 'FAIL' })
+$passed  = @($script:Results | Where-Object { $_.Status -eq 'PASS' })
+$skipped = @($script:Results | Where-Object { $_.Status -eq 'SKIP' })
+
+Write-Host ("PASS={0}  FAIL={1}  SKIP={2}" -f $passed.Count, $failed.Count, $skipped.Count)
+
+if ($failed.Count -gt 0) {
+    Write-Host 'BUILD_ALL_RESULT=FAIL' -ForegroundColor Red
+    exit 1
+}
+Write-Host 'BUILD_ALL_RESULT=PASS' -ForegroundColor Green
+exit 0

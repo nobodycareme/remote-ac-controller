@@ -1,0 +1,43 @@
+version: 2
+
+updates:
+  # Cloud backend (Fastify / MQTT / node:sqlite)
+  - package-ecosystem: npm
+    directory: /cloud/backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps,backend)"
+    labels:
+      - dependencies
+      - cloud
+
+  # Cloud frontend (Vue 3 / Vite)
+  - package-ecosystem: npm
+    directory: /cloud/frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps,frontend)"
+    labels:
+      - dependencies
+      - cloud
+
+  # GitHub Actions used by the monorepo CI
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(deps,actions)"
+    labels:
+      - dependencies
+      - ci
+
+# Note: the firmware toolchain is pinned deliberately
+# (espressif8266@4.2.1, ArduinoJson 6.21.5, DHT sensor library 1.4.7).
+# Those versions are validated against real hardware and are NOT
+# auto-updated. See firmware/platformio.ini and CONTRIBUTING.md.

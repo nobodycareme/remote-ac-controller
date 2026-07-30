@@ -26,6 +26,10 @@ import { registerAcRoutes } from './routes/ac';
 import { registerIrDebugRoutes } from './routes/ir_debug';
 import { registerEventsRoutes } from './routes/events';
 
+// Reported by GET /api/version. Override with APP_VERSION at deploy time to
+// surface the exact artifact (Git tag, CI build id) that is running.
+const APP_VERSION = (process.env.APP_VERSION || '1.0.0').trim();
+
 // Allowed CORS origins (for browser fetches if served separately). Empty => same-origin only.
 const ALLOWED_ORIGINS = (config.ALLOWED_ORIGINS || '')
   .split(',')
@@ -89,7 +93,9 @@ async function buildServer() {
     try { getDb().prepare('SELECT 1').get(); return { status: 'ready', db: 'ok' }; }
     catch { return { status: 'not_ready', db: 'error' }; }
   });
-  fastify.get('/api/version', async () => ({ version: '0.5.0', node: process.version }));
+  // APP_VERSION lets deployments report the exact artifact they are running
+  // (e.g. a Git tag or CI build id) without rebuilding the source constant.
+  fastify.get('/api/version', async () => ({ version: APP_VERSION, node: process.version }));
 
   // Routes (registered before static so /api wins).
   await registerAuthRoutes(fastify);

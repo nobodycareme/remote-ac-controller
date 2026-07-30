@@ -27,8 +27,17 @@ import {
 import { dispatchIrAction, debugIrControlEnabled, mqttConnected } from '../mqtt_bridge';
 import { log } from '../logger';
 
-const FIXED_CODE_ID = 'hisense_cool_24_quiet_swing_v_on_swing_h_on_power_on_v1';
-const PUBLIC_ORIGIN = 'https://ac.example.com';
+// The debug transmit path is deliberately pinned to ONE explicitly configured
+// infrared code. Operators must set all three of
+// REAL_IR_DEBUG_ALLOWED_CODE_ID / _SHA256 / _LENGTH. An incomplete allow-list
+// is a configuration error and keeps the path closed — see
+// docs/security-model.md.
+//
+// The accepted browser origin is derived from PUBLIC_BASE_URL rather than
+// hard-coded, so the guard works for any deployment.
+function publicOrigin(): string {
+  return String(config.PUBLIC_BASE_URL || '').trim();
+}
 
 const transmitSchema = z.object({
   confirm: z.literal(true),
@@ -37,7 +46,7 @@ const transmitSchema = z.object({
 }).strict();
 
 function expectedCodeId(): string {
-  return config.REAL_IR_DEBUG_ALLOWED_CODE_ID || FIXED_CODE_ID;
+  return String(config.REAL_IR_DEBUG_ALLOWED_CODE_ID || '').trim();
 }
 
 function expectedCodeSha(): string {
@@ -45,7 +54,14 @@ function expectedCodeSha(): string {
 }
 
 function expectedCodeLength(): number {
-  return Number(config.REAL_IR_DEBUG_ALLOWED_CODE_LENGTH || 418);
+  return Number(config.REAL_IR_DEBUG_ALLOWED_CODE_LENGTH || 0);
+}
+
+// A usable debug allow-list requires all three components to be present.
+function debugCodeConfigComplete(): boolean {
+  return expectedCodeId().length > 0
+    && expectedCodeSha().length > 0
+    && expectedCodeLength() > 0;
 }
 
 function debugMaxCommands(): number {
@@ -70,7 +86,8 @@ function getOrigin(req: any): string {
 }
 
 function exactPublicOrigin(req: any): boolean {
-  return getOrigin(req) === PUBLIC_ORIGIN && config.PUBLIC_BASE_URL === PUBLIC_ORIGIN;
+  const expected = publicOrigin();
+  return expected.length > 0 && getOrigin(req) === expected;
 }
 
 function baseEnvelope(requestId: string, commandId: string | null = null) {
@@ -223,7 +240,7 @@ export async function registerIrDebugRoutes(fastify: FastifyInstance): Promise<v
     if (!config.REAL_IR_DEBUG_MODE) return sendDeny(reply, 403, 'DEBUG_MODE_DISABLED', 'debug mode disabled', requestId);
     if (!debugNotExpired()) return sendDeny(reply, 403, 'DEBUG_WINDOW_EXPIRED', 'debug window expired', requestId);
     if (status.remainingCommands !== null && status.remainingCommands <= 0) return sendDeny(reply, 429, 'DEBUG_COMMAND_LIMIT_REACHED', 'debug command limit reached', requestId);
-    if (!exactPublicOrigin(req)) return sendDeny(reply, 403, 'ORIGIN_DENIED', `origin must exactly match ${PUBLIC_ORIGIN}`, requestId);
+    if (!exactPublicOrigin(req)) return sendDeny(reply, 403, 'ORIGIN_DENIED', `origin must exactly match ${publicOrigin()}`, requestId);
 
     const session = validateDebugSession(req);
     if (!session.ok) return sendDeny(reply, 403, session.errorCode, session.message, requestId);
@@ -231,7 +248,7 @@ export async function registerIrDebugRoutes(fastify: FastifyInstance): Promise<v
     if (!debugIrControlEnabled()) return sendDeny(reply, 403, 'WEB_REAL_IR_DISABLED', 'web real IR disabled', requestId);
     const parsed = transmitSchema.safeParse(req.body);
     if (!parsed.success) return sendDeny(reply, 400, 'INVALID_DEBUG_TRANSMIT_BODY', 'invalid debug transmit body', requestId);
-    if (expectedCodeId() !== FIXED_CODE_ID) return sendDeny(reply, 403, 'DEBUG_CODE_CONFIG_INVALID', 'debug code config invalid', requestId);
+    if (!debugCodeConfigComplete()) return sendDeny(reply, 403, 'DEBUG_CODE_CONFIG_INVALID', 'debug code config invalid', requestId);
     if (!mqttConnected()) return sendDeny(reply, 409, 'MQTT_BACKEND_OFFLINE', 'mqtt backend offline', requestId);
     if (!status.deviceOnline) return sendDeny(reply, 409, 'DEVICE_OFFLINE', 'device offline', requestId);
     if (!status.deviceFresh) return sendDeny(reply, 409, 'DEVICE_STALE', 'device state stale', requestId);

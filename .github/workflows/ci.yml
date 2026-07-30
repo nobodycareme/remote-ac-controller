@@ -1,0 +1,190 @@
+name: CI
+
+# Monorepo CI for remote-ac-controller.
+#
+# Scope and safety rules (enforced by review, not by CI itself):
+#   - This workflow NEVER touches production, never deploys, never flashes hardware.
+#   - This workflow NEVER consumes repository/organization secrets.
+#   - Only the public build profile is exercised for firmware.
+#   - Real-IR transmission, private profiles and production credentials are out of scope.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege: read-only. No packages, no id-token, no write access.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # firmware-ci
+  # ---------------------------------------------------------------------------
+  # The firmware toolchain (PlatformIO Core + xtensa) is provisioned locally
+  # under Environment/PlatformIO and is intentionally NOT vendored into this
+  # public repository. A hosted runner therefore cannot produce a byte-identical
+  # firmware image. This job performs the checks that ARE reproducible in CI:
+  #   1. static repository hygiene (no secrets header committed)
+  #   2. firmware source/structure sanity
+  #   3. dev.ps1 contract check (the only supported entry point)
+  # Full compilation is performed locally via: tools/build-all.ps1
+  firmware-ci:
+    name: firmware-ci
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify firmware layout
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-StrictMode -Version Latest
+          $required = @(
+            'firmware/platformio.ini',
+            'firmware/src',
+            'firmware/include',
+            'firmware/tools/dev.ps1'
+          )
+          foreach ($p in $required) {
+            if (-not (Test-Path -LiteralPath $p)) {
+              Write-Error "FIRMWARE_LAYOUT_FAIL: missing $p"
+            }
+            Write-Output "OK  $p"
+          }
+
+      - name: Assert no firmware secrets are committed
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-StrictMode -Version Latest
+          $forbidden = @(
+            'firmware/include/secrets.h',
+            'firmware/include/cloud_secrets.h'
+          )
+          $bad = @()
+          foreach ($p in $forbidden) {
+            if (Test-Path -LiteralPath $p) { $bad += $p }
+          }
+          if ($bad.Count -gt 0) {
+            Write-Error "SECRETS_COMMITTED: $($bad -join ', ')"
+          }
+          Write-Output 'OK  no secrets header committed'
+
+      - name: Verify dev.ps1 exposes the documented contract
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-StrictMode -Version Latest
+          $src = Get-Content -LiteralPath 'firmware/tools/dev.ps1' -Raw
+          foreach ($cmd in @('build', 'verify', 'test', 'status')) {
+            if ($src -notmatch [regex]::Escape("'$cmd'")) {
+              Write-Error "DEVPS1_CONTRACT_FAIL: command '$cmd' not found in ValidateSet"
+            }
+            Write-Output "OK  dev.ps1 command '$cmd'"
+          }
+          if ($src -notmatch [regex]::Escape("'public'")) {
+            Write-Error "DEVPS1_CONTRACT_FAIL: profile 'public' not found"
+          }
+          Write-Output "OK  dev.ps1 profile 'public'"
+
+      - name: Note on full firmware compilation
+        run: |
+          Write-Output 'Full firmware compilation requires a local PlatformIO Core installation.'
+          Write-Output 'Run locally:  pwsh tools/build-all.ps1'
+          Write-Output 'See firmware/docs/06_environment-and-build for setup.'
+
+  # ---------------------------------------------------------------------------
+  # cloud-ci
+  # ---------------------------------------------------------------------------
+  cloud-ci:
+    name: cloud-ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [backend, frontend]
+    defaults:
+      run:
+        working-directory: cloud/${{ matrix.package }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: cloud/${{ matrix.package }}/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+  # ---------------------------------------------------------------------------
+  # repo-hygiene
+  # ---------------------------------------------------------------------------
+  # Fast, dependency-free guard against the classes of files that must never be
+  # published from this project.
+  repo-hygiene:
+    name: repo-hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Assert excluded directories are absent
+        run: |
+          set -euo pipefail
+          fail=0
+          for d in Private Evidence _QUARANTINE_ ; do
+            if [ -e "$d" ]; then
+              echo "EXCLUDED_DIR_PRESENT: $d"
+              fail=1
+            fi
+          done
+          [ "$fail" -eq 0 ] || exit 1
+          echo "OK  no excluded directories"
+
+      - name: Assert no key / certificate / database artefacts are tracked
+        run: |
+          set -euo pipefail
+          pattern='\.(pem|key|p12|pfx|db|sqlite|sqlite3|bundle)$'
+          if git ls-files | grep -Ei "$pattern" ; then
+            echo "FORBIDDEN_ARTEFACT_TRACKED"
+            exit 1
+          fi
+          echo "OK  no key/cert/database artefacts tracked"
+
+      - name: Assert LICENSE and NOTICE are present
+        run: |
+          set -euo pipefail
+          test -f LICENSE || { echo "LICENSE_MISSING"; exit 1; }
+          test -f NOTICE  || { echo "NOTICE_MISSING"; exit 1; }
+          grep -q 'Apache License' LICENSE || { echo "LICENSE_NOT_APACHE"; exit 1; }
+          echo "OK  Apache-2.0 LICENSE and NOTICE present"

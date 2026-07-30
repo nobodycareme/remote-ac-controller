@@ -14,7 +14,7 @@
 
 ### 1. 烧录固件
 ```powershell
-cd C:\example\remote-ac\Firmware\Remote_AC_Controller
+cd <repo>\firmware
 .\tools\dev.ps1 build -Profile ir-lab
 .\tools\dev.ps1 upload -Profile ir-lab
 ```
@@ -52,7 +52,7 @@ NodeMCU 通过 USB 连接电脑。Windows 应自动识别为 CH9102 串口。
 
 ### 9. 保存位置
 所有学习结果保存在:
-`C:\example\remote-ac\Private\Firmware\IR\Learned\`
+`<repo>\Private\Firmware\IR\Learned\`（可用环境变量 `IR_LEARNED_ROOT` 覆盖）
 
 ## 自测
 ```cmd

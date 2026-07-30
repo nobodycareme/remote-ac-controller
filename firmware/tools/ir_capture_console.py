@@ -15,9 +15,10 @@ ir_capture_console.py — 本地交互式 ZJ-IR-V2 海信空调红外 10 次重�
   仅允许白名单命令：ir extlearn / ir info / status。
 
 路径纪律：
-  唯一合法根目录：C:/example/remote-ac
+  项目根目录由本文件位置推导（<repo>/firmware/tools/ 的上两级），
+  也可用环境变量 IR_PROJECT_ROOT 覆盖；不使用任何硬编码绝对路径。
   样本保存目录：References/IR/captures/repeatability_10x（复用 capture_repeat.REPEAT_DIR）
-  不创建 SUBST R:、不创建 F:/PIO、不重烧固件。
+  本脚本只读串口、只写样本目录：不创建虚拟盘符、不改动构建目录、不重烧固件。
 """
 
 import sys
@@ -30,7 +31,7 @@ import tempfile
 import shutil
 
 # ---- 路径：把 References/IR 加入 sys.path，复用 capture_repeat 的解析/校验/落盘 ----
-PROJECT_ROOT = r"C:\example\remote-ac"
+PROJECT_ROOT = os.environ.get("IR_PROJECT_ROOT") or os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 REFERENCES_IR = os.path.join(PROJECT_ROOT, "References", "IR")
 if REFERENCES_IR not in sys.path:
     sys.path.insert(0, REFERENCES_IR)

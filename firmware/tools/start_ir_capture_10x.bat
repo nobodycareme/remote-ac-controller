@@ -2,7 +2,8 @@
 set "SCRIPT_DIR=%~dp0"
 set "PY="
 if exist "%SCRIPT_DIR%..\..\Environment\Python\python.exe" set "PY=%SCRIPT_DIR%..\..\Environment\Python\python.exe"
-if not defined PY if exist "C:\Users\user\.workbuddy\binaries\python\envs\default\Scripts\python.exe" set "PY=C:\Users\user\.workbuddy\binaries\python\envs\default\Scripts\python.exe"
+if not defined PY if defined IR_PYTHON if exist "%IR_PYTHON%" set "PY=%IR_PYTHON%"
+if not defined PY if exist "%SCRIPT_DIR%..\..\.venv\Scripts\python.exe" set "PY=%SCRIPT_DIR%..\..\.venv\Scripts\python.exe"
 if not defined PY set "PY=python"
 chcp 65001 >nul
 echo Using Python: %PY%

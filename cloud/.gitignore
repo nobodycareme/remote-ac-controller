@@ -1,44 +1,55 @@
-﻿# Infrastructure
+﻿# Cloud tier ignore rules.
+# The monorepo root .gitignore also applies; rules here take precedence for
+# paths under cloud/. Verify with:  git check-ignore -v <path>
+
+# ---- Environment files (templates are kept) ----
 .env
 .env.*
 *.local
+!.env.example
+!**/.env.example
 
-# Docker
+# ---- Docker ----
 docker-compose.override.yml
 infra/mosquitto/certs/*.key
 infra/mosquitto/certs/*.pem
 infra/mosquitto/certs/private/
 
-# Data
+# ---- Broker material: never commit keys or issued certificates ----
+broker/certs/*.key
+broker/certs/*.pem
+broker/certs/*.crt
+broker/run/
+broker/data/
+
+# ---- Data ----
 data/
 *.sqlite3
 *.sqlite3-*
 
-# Logs
+# ---- Logs ----
 logs/
 *.log
 
-# Node
+# ---- Node ----
 node_modules/
 dist/
+dist.static/
 .cache/
 
-# Frontend tools 鈥?keep scripts in repo, ignore local validation artifacts
+# Frontend tooling: keep the scripts, ignore local validation artifacts.
 frontend/tools/screenshots/
 frontend/dist/
 
-# IDE
+# ---- IDE ----
 .vscode/
 .idea/
 
-# OS
+# ---- OS ----
 .DS_Store
 Thumbs.db
 
-# Secrets
+# ---- Secrets ----
 *.secret
 private/
 deploy/secrets.env
-
-# Tool scripts with credentials
-tools/mqtt_verify.js

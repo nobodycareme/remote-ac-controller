@@ -61,13 +61,13 @@ const schema = z.object({
     }),
   // Empty string means the debug window is permanent when REAL_IR_DEBUG_MODE=true.
   REAL_IR_DEBUG_EXPIRES_AT: z.string().default(''),
-  REAL_IR_DEBUG_ALLOWED_CODE_ID: z
-    .string()
-    .default('hisense_cool_24_quiet_swing_v_on_swing_h_on_power_on_v1'),
-  REAL_IR_DEBUG_ALLOWED_CODE_SHA256: z
-    .string()
-    .default('e9ab43feca71acde248df5729d0cb0d228bdbcfb69f8513d43ea4b942cb6ac7e'),
-  REAL_IR_DEBUG_ALLOWED_CODE_LENGTH: z.coerce.number().default(418),
+  // Debug-path allow-list. Empty by default: the debug transmit route stays
+  // closed until an operator explicitly names one code id, its SHA-256 digest
+  // and its frame length. There is intentionally no appliance-specific
+  // fallback here.
+  REAL_IR_DEBUG_ALLOWED_CODE_ID: z.string().default(''),
+  REAL_IR_DEBUG_ALLOWED_CODE_SHA256: z.string().default(''),
+  REAL_IR_DEBUG_ALLOWED_CODE_LENGTH: z.coerce.number().default(0),
   // 0 (or less) means unlimited transmissions while the window remains open.
   REAL_IR_DEBUG_MAX_TOTAL_COMMANDS: z.coerce.number().default(3),
   // 0 disables the inter-shot cooldown.

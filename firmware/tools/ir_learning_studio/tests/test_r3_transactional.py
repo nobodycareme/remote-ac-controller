@@ -60,7 +60,7 @@ class TestWindowsMutex(unittest.TestCase):
 
     def test_a1_single_instance_acquire_release(self):
         """A.1: Basic acquire/release lifecycle."""
-        mutex = windows_mutex.WindowsNamedMutex(Path("C:/example/remote-ac"))
+        mutex = windows_mutex.WindowsNamedMutex(Path("C:/example/repo"))
         self.assertTrue(mutex.acquire())
         self.assertTrue(mutex.is_owned)
         mutex.release()
@@ -68,40 +68,40 @@ class TestWindowsMutex(unittest.TestCase):
 
     def test_a2_second_instance_blocked(self):
         """A.2: Second instance cannot acquire when first holds."""
-        m1 = windows_mutex.WindowsNamedMutex(Path("C:/example/remote-ac"))
+        m1 = windows_mutex.WindowsNamedMutex(Path("C:/example/repo"))
         self.assertTrue(m1.acquire())
         try:
-            m2 = windows_mutex.WindowsNamedMutex(Path("C:/example/remote-ac"))
+            m2 = windows_mutex.WindowsNamedMutex(Path("C:/example/repo"))
             self.assertFalse(m2.acquire())
         finally:
             m1.release()
 
     def test_a3_different_roots_different_mutexes(self):
         """A.3: Different project roots get different mutex names."""
-        m1 = windows_mutex.WindowsNamedMutex(Path("C:/example/remote-ac"))
+        m1 = windows_mutex.WindowsNamedMutex(Path("C:/example/repo"))
         m2 = windows_mutex.WindowsNamedMutex(Path("F:/other_project"))
         self.assertNotEqual(m1.mutex_name, m2.mutex_name)
 
     def test_a4_release_allows_next(self):
         """A.4: After release, next instance can acquire."""
-        m1 = windows_mutex.WindowsNamedMutex(Path("C:/example/remote-ac"))
+        m1 = windows_mutex.WindowsNamedMutex(Path("C:/example/repo"))
         self.assertTrue(m1.acquire())
         m1.release()
 
-        m2 = windows_mutex.WindowsNamedMutex(Path("C:/example/remote-ac"))
+        m2 = windows_mutex.WindowsNamedMutex(Path("C:/example/repo"))
         self.assertTrue(m2.acquire())
         m2.release()
 
     def test_a5_context_manager(self):
         """A.5: Context manager pattern."""
-        with windows_mutex.WindowsNamedMutex(Path("C:/example/remote-ac")) as m:
+        with windows_mutex.WindowsNamedMutex(Path("C:/example/repo")) as m:
             self.assertTrue(m.is_owned)
         self.assertFalse(m.is_owned)
 
     def test_a6_project_root_hash_deterministic(self):
         """A.6: Project root hash is deterministic."""
-        h1 = windows_mutex._compute_project_root_hash(Path("C:/example/remote-ac"))
-        h2 = windows_mutex._compute_project_root_hash(Path("C:/example/remote-ac"))
+        h1 = windows_mutex._compute_project_root_hash(Path("C:/example/repo"))
+        h2 = windows_mutex._compute_project_root_hash(Path("C:/example/repo"))
         self.assertEqual(h1, h2)
         self.assertEqual(len(h1), 32)
 
@@ -124,7 +124,7 @@ class TestMutexMultiprocess(unittest.TestCase):
 
     def test_multiprocess_20_concurrent_only_1_owner(self):
         """Start 20 processes, verify exactly 1 owner per round, for 200 rounds."""
-        project_root = str(Path("C:/example/remote-ac"))
+        project_root = str(Path("C:/example/repo"))
         multi_owner_rounds = 0
 
         for round_idx in range(self.ROUNDS):

@@ -27,6 +27,19 @@ import serial_client
 import protocol
 
 
+def _default_project_root() -> Path:
+    """Resolve the repository root from this file's location.
+
+    Layout: <repo>/firmware/tools/ir_learning_studio/composition_root.py
+    Override with the IR_PROJECT_ROOT environment variable when running the
+    tools from outside the repository tree.
+    """
+    override = os.environ.get("IR_PROJECT_ROOT")
+    if override:
+        return Path(override)
+    return Path(__file__).resolve().parents[3]
+
+
 @dataclass
 class ApplicationRuntime:
     """Complete runtime assembled by the composition root."""
@@ -115,7 +128,8 @@ def create_runtime(
     This is the SINGLE entry point for constructing all production dependencies.
 
     Args:
-        project_root: Validated canonical project root (C:\example\remote-ac)
+        project_root: Validated canonical repository root. Defaults to the
+            path derived from this file's location, or IR_PROJECT_ROOT.
         mode: "production", "demo", or "test"
         serial_factory: Optional factory for serial transport (for testing)
         allow_mock: Allow mock transport (test/demo only)
@@ -218,7 +232,7 @@ def create_runtime(
 
 def create_demo_runtime(project_root: Optional[Path] = None) -> ApplicationRuntime:
     """Create a read-only demo runtime (no serial, no write, no private)."""
-    root = project_root or Path("C:/example/remote-ac")
+    root = project_root or _default_project_root()
     return ApplicationRuntime(
         project_root=root,
         mode="demo",

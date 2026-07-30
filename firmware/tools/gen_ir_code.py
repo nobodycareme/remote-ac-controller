@@ -21,7 +21,7 @@ import json
 import hashlib
 import csv
 
-PROJECT_ROOT = r"C:\example\remote-ac"
+PROJECT_ROOT = os.environ.get("IR_PROJECT_ROOT") or os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 REF_IR = os.path.join(PROJECT_ROOT, "References", "IR")
 CAPTURES = os.path.join(REF_IR, "captures")
 IR_CODES_DIR = os.path.join(PROJECT_ROOT, "Firmware", "Remote_AC_Controller", "src", "private_ir_codes")

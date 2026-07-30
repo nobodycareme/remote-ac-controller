@@ -4,7 +4,7 @@ REM ============================================================
 REM  红外学习采集台 — ZJ-IR-V2 启动器
 REM  双击本文件即可打开 GUI（异常时保留窗口，不静默关闭）
 REM ============================================================
-cd /d "C:\example\remote-ac\Firmware\Remote_AC_Controller\tools"
+cd /d "%~dp0"
 set "TOOL_DIR=%CD%\ir_capture_studio"
 
 REM ---- 1. 选择 Python 解释器（优先 py 启动器，其次 python）----

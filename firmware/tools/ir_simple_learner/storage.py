@@ -2,8 +2,20 @@
 import hashlib, json, os, tempfile
 from pathlib import Path
 
-LEARNED_ROOT = Path("C:/example/remote-ac/Private/Firmware/IR/Learned")
-DEFAULT_ROOT = Path("C:/example/remote-ac/Private/Firmware/IR/Learned")
+# Captured IR frames are private data and must never be committed.
+# The default location is `<repo>/Private/Firmware/IR/Learned`, which is
+# git-ignored. Override it with the IR_LEARNED_ROOT environment variable or
+# via set_learned_root().
+#
+# This file lives at <repo>/firmware/tools/ir_simple_learner/storage.py,
+# so the repository root is three levels up.
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+DEFAULT_ROOT = Path(
+    os.environ.get("IR_LEARNED_ROOT")
+    or (_REPO_ROOT / "Private" / "Firmware" / "IR" / "Learned")
+)
+LEARNED_ROOT = DEFAULT_ROOT
 CONFIG_PATH = Path(os.path.expanduser("~/.ir_simple_learner.json"))
 
 

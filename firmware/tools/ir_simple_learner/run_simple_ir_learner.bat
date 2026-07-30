@@ -2,12 +2,17 @@
 chcp 65001 >nul
 cd /d "%~dp0"
 set "PYTHON="
-:: Try project managed Python first (has pyserial installed)
-if exist "C:\Users\user\.workbuddy\binaries\python\versions\3.13.12\python.exe" (
-    set "PYTHON=C:\Users\user\.workbuddy\binaries\python\versions\3.13.12\python.exe"
+:: 1. Explicit interpreter via the IR_PYTHON environment variable
+if defined IR_PYTHON if exist "%IR_PYTHON%" (
+    set "PYTHON=%IR_PYTHON%"
     goto :found
 )
-:: Try system Python
+:: 2. Repository-local virtual environment, if one was created
+if exist "%~dp0..\..\..\.venv\Scripts\python.exe" (
+    set "PYTHON=%~dp0..\..\..\.venv\Scripts\python.exe"
+    goto :found
+)
+:: 3. Try system Python
 for %%p in (python3.exe python.exe) do (
     where %%p >nul 2>&1 && set "PYTHON=%%p" && goto :found
 )

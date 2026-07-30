@@ -1,12 +1,36 @@
 #!/usr/bin/env bash
-# cert-monitor.sh — checks expiry of the two public TLS certs and warns if < N days.
-#   - ac.example.com:443      (Let's Encrypt YE1 web cert, DNS-01)
-#   - mqtt.example.com:443    (local-CA broker leaf cert via nginx stream SNI passthrough)
-# Exit code 0 = all OK; 2 = at least one cert within WARNING window; 3 = expired.
-# Intended to run from a systemd timer / cron daily. Low-risk, read-only (no server changes).
+# cert-monitor.sh — check TLS certificate expiry for the public endpoints and
+# warn before they lapse. Read-only: performs TLS handshakes only, never
+# modifies the server.
+#
+# Endpoints are supplied by the operator via environment variables so that this
+# script contains no deployment-specific host names:
+#
+#   WEB_HOST    hostname of the web app          (default: unset -> skipped)
+#   WEB_PORT    port for the web app             (default: 443)
+#   MQTT_HOST   hostname of the MQTT endpoint    (default: unset -> skipped)
+#   MQTT_PORT   port for the MQTT endpoint       (default: 8883)
+#   WARN_DAYS   warn when fewer days remain      (default: 30)
+#   CRIT_DAYS   critical when fewer days remain  (default: 14)
+#
+# If your broker is published behind a TLS-passthrough reverse proxy on 443
+# (SNI routing), set MQTT_PORT=443 — the SNI name still selects the broker
+# certificate, so the check remains valid.
+#
+# Usage:
+#   WEB_HOST=ac.example.com MQTT_HOST=mqtt.example.com ./cert-monitor.sh
+#
+# Exit codes: 0 = all OK, 2 = at least one cert inside the warning window,
+#             3 = at least one cert expired or unreachable.
+# Intended to run daily from a systemd timer or cron.
 set -u
+
 WARN_DAYS="${WARN_DAYS:-30}"
 CRIT_DAYS="${CRIT_DAYS:-14}"
+WEB_HOST="${WEB_HOST:-}"
+WEB_PORT="${WEB_PORT:-443}"
+MQTT_HOST="${MQTT_HOST:-}"
+MQTT_PORT="${MQTT_PORT:-8883}"
 
 check() {
   local host="$1" port="$2" sni="$3" label="$4"
@@ -26,16 +50,26 @@ check() {
   return 0
 }
 
+if [ -z "$WEB_HOST" ] && [ -z "$MQTT_HOST" ]; then
+  echo "CERT_MONITOR_SKIPPED: set WEB_HOST and/or MQTT_HOST" >&2
+  exit 0
+fi
+
 rc=0
-check ac.example.com 443 ac.example.com WEB;   r1=$?
-# 2026-07-29: public 8883 closed (security hardening 2026-07-20); probe production path 443 (nginx stream SNI passthrough)
-check mqtt.example.com 443 mqtt.example.com MQTT; r2=$?
 
-for r in "$r1" "$r2"; do
-  if [ "$r" -gt "$rc" ]; then rc="$r"; fi
-done
+if [ -n "$WEB_HOST" ]; then
+  check "$WEB_HOST" "$WEB_PORT" "$WEB_HOST" WEB
+  r=$?; [ "$r" -gt "$rc" ] && rc="$r"
+fi
 
-if [ "$rc" -eq 0 ]; then echo "CERT_MONITOR_OK"; fi
-if [ "$rc" -eq 2 ]; then echo "CERT_MONITOR_WARN: at least one cert within ${WARN_DAYS}d window"; fi
-if [ "$rc" -eq 3 ]; then echo "CERT_MONITOR_CRIT: at least one cert expired or < ${CRIT_DAYS}d"; fi
+if [ -n "$MQTT_HOST" ]; then
+  check "$MQTT_HOST" "$MQTT_PORT" "$MQTT_HOST" MQTT
+  r=$?; [ "$r" -gt "$rc" ] && rc="$r"
+fi
+
+case "$rc" in
+  0) echo "CERT_MONITOR_OK" ;;
+  2) echo "CERT_MONITOR_WARN: at least one cert within ${WARN_DAYS}d window" ;;
+  3) echo "CERT_MONITOR_CRIT: at least one cert expired, unreachable, or < ${CRIT_DAYS}d" ;;
+esac
 exit "$rc"

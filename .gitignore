@@ -1,0 +1,117 @@
+# ============================================================
+# Remote AC Controller - Monorepo .gitignore
+# Consolidated from firmware (PlatformIO/ESP8266) and cloud
+# (Node.js/TypeScript) ignore rules. Review with:
+#   git check-ignore -v <path>
+#   git status --ignored
+# ============================================================
+
+# ---- Never publish (safety) ----
+Private/
+Evidence/
+_QUARANTINE_/
+*.bundle
+*.zip
+*.7z
+*.tar.gz
+*.rar
+*.bak
+
+# ---- Firmware (PlatformIO / ESP8266) ----
+firmware/.pio/
+firmware/.vscode/
+firmware/*.bin
+firmware/*.elf
+firmware/*.map
+firmware/*.hex
+firmware/firmware.*.bin
+firmware/build/
+firmware/include/secrets.h
+firmware/include/cloud_secrets.h
+firmware/include/config_local.h
+# Private IR capture / learned provider outputs
+firmware/private_ir/
+firmware/ir_capture/
+firmware/learned_provider/
+# Serial & build logs
+*.log
+serial_logs/
+build_logs/
+
+# ---- Cloud (Node.js / TypeScript) ----
+cloud/**/node_modules/
+cloud/**/.pnp/
+cloud/**/.pnp.js
+cloud/**/dist/
+cloud/**/dist.static/
+cloud/**/coverage/
+cloud/**/.vite/
+cloud/**/*.tsbuildinfo
+cloud/**/.eslintcache
+cloud/**/npm-debug.log*
+cloud/**/yarn-debug.log*
+cloud/**/yarn-error.log*
+cloud/backend/.turbo/
+cloud/frontend/.turbo/
+# Env files (keep examples)
+cloud/**/.env
+cloud/**/.env.*
+!cloud/**/.env.example
+!cloud/backend/.env.example
+!cloud/frontend/.env.example
+# Local deploy artifacts
+cloud/**/deploy/secrets.env
+cloud/**/deploy/*.local
+cloud/broker/certs/*.key
+cloud/broker/certs/*.pem
+cloud/broker/certs/ca.key
+cloud/broker/certs/server.key
+
+# ---- Databases / secrets ----
+*.db
+*.sqlite
+*.sqlite3
+*-wal
+*-shm
+*.db-journal
+
+# ---- Certificates / private keys / backups ----
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+secrets/
+keys/
+backups/
+server_backup/
+serverside_backup/
+
+# ---- Cookies / sessions / tokens ----
+*cookie*
+*session*
+*.token
+gh_token*
+GITHUB_TOKEN
+GH_TOKEN
+
+# ---- Editor / OS ----
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ---- Python (tooling) ----
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# ---- Monorepo CI artifacts ----
+.github/ci-artifacts/
+dist-tmp/
+build-out/

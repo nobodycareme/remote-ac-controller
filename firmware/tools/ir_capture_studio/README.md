@@ -1,6 +1,6 @@
 # 红外学习采集台 — ZJ-IR-V2
 
-本地 Windows 红外交互式采集工具，服务于 `C:\example\remote-ac`。
+本地 Windows 红外交互式采集工具，作用于本仓库（路径由脚本自身位置推导，可用环境变量 `IR_PROJECT_ROOT` 覆盖）。
 
 硬件链路：**NodeMCU ESP8266** →（UART）→ **ZJ-IR-V2 红外学习/回放模块**。
 本工具仅通过 ESP8266 的串口 CLI 执行 `ir extlearn` 学习并读取**不透明外部红外波形**，

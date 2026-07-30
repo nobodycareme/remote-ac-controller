@@ -28,7 +28,7 @@ import json
 import hashlib
 import argparse
 
-PROJECT_ROOT = r"C:\example\remote-ac"
+PROJECT_ROOT = os.environ.get("IR_PROJECT_ROOT") or os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 REFERENCES_IR = os.path.join(PROJECT_ROOT, "References", "IR")
 REPEAT_DIR = os.path.join(REFERENCES_IR, "captures", "repeatability_10x")
 ORIG_DIR = os.path.join(REFERENCES_IR, "captures")
