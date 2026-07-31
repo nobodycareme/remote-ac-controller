@@ -323,37 +323,64 @@ function Invoke-Pio {
     param([string[]]$PioArgs, [string]$LogName)
 
     Assert-Pio
+
     $log = Join-Path $LogsDir ("{0}_{1}.log" -f $LogName, $PID)
-    $prev = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
-    & $PioExe @PioArgs 2>&1 | Tee-Object -FilePath $log
-    $rc = $LASTEXITCODE
-    $ErrorActionPreference = $prev
-    Write-Output "PIO_LOG=$log"
-    return $rc
+    $previousPreference = $ErrorActionPreference
+
+    try {
+        # Native stdout/stderr are merged, written to the log file, and mirrored to
+        # the host (console) stream only. They are deliberately kept OFF the success
+        # stream so the function's return value stays a single, strongly-typed result
+        # object. Letting build output flow into the return value previously produced an
+        # Object[] whose element-wise `-ne 0` comparison always evaluated as FAIL
+        # (false negative) even when the native process exited 0.
+        $ErrorActionPreference = 'Continue'
+        & $PioExe @PioArgs 2>&1 |
+            Tee-Object -FilePath $log |
+            ForEach-Object { Write-Host $_ }
+        $nativeExitCode = [int]$LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousPreference
+    }
+
+    return [pscustomobject]@{
+        ExitCode = $nativeExitCode
+        LogPath  = $log
+    }
 }
 
+# Publishes its exit code via $script:LastRc instead of returning it: the
+# BUILD_RESULT=/FIRMWARE_SHA256= contract lines go to the success stream, so an
+# `$rc = Invoke-Build` assignment would swallow them into the return value.
 function Invoke-Build {
     param([switch]$Clean)
 
+    $script:LastRc = 0
     Assert-NoTrackedSecrets
     Assert-NoHardcodedPort
 
     if ($Clean) {
         Write-Output "CLEAN [$Profile]"
-        $rc = Invoke-Pio -PioArgs @('run', '-e', 'nodemcuv2', '-t', 'clean', '--project-dir', $FirmwareRoot) -LogName 'pio_clean'
-        if ($rc -ne 0) { Write-Output "CLEAN_RESULT=FAIL"; return $rc }
+        $result = Invoke-Pio -PioArgs @('run', '-e', 'nodemcuv2', '-t', 'clean', '--project-dir', $FirmwareRoot) -LogName 'pio_clean'
+        Write-Output ("PIO_LOG=" + $result.LogPath)
+        $rc = [int]$result.ExitCode
+        if ($rc -ne 0) { Write-Output "CLEAN_RESULT=FAIL"; $script:LastRc = $rc; return }
     }
 
     Write-Output "BUILD [$Profile]"
-    $rc = Invoke-Pio -PioArgs @('run', '-e', 'nodemcuv2', '--project-dir', $FirmwareRoot) -LogName 'pio_build'
+    $result = Invoke-Pio -PioArgs @('run', '-e', 'nodemcuv2', '--project-dir', $FirmwareRoot) -LogName 'pio_build'
+    Write-Output ("PIO_LOG=" + $result.LogPath)
+    $rc = [int]$result.ExitCode
     if ($rc -ne 0) {
         Write-Output 'BUILD_RESULT=FAIL'
-        return $rc
+        $script:LastRc = $rc
+        return
     }
     if (-not (Invoke-SecretScan)) {
         Write-Output 'BUILD_RESULT=FAIL_SECRET_SCAN'
-        return 5
+        $script:LastRc = 5
+        return
     }
     $bin = Join-Path $BuildDir 'nodemcuv2\firmware.bin'
     if (Test-Path $bin) {
@@ -362,13 +389,14 @@ function Invoke-Build {
         Write-Output "FIRMWARE_SHA256=$sha"
     }
     Write-Output 'BUILD_RESULT=PASS'
-    return 0
+    $script:LastRc = 0
 }
 
 # ------------------------------------------------------------
 # Commands
 # ------------------------------------------------------------
 $exitCode = 0
+$script:LastRc = 0
 try {
     switch ($Command) {
 
@@ -402,6 +430,11 @@ try {
             Write-Output ("PLATFORMIO_INI_PRESENT=" + (Test-Path $ini))
             if (-not (Test-Path $ini)) { $exitCode = 6 }
             Write-Output ("PIO_AVAILABLE=" + [bool]$PioExe)
+            # This command is a STATIC safety gate only: it confirms the config file
+            # exists, PlatformIO is discoverable, no secret headers are tracked, and no
+            # serial port is hardcoded. It does NOT recompile the firmware or run it on
+            # a device, so it must not be reported as a runtime/dynamic verification.
+            Write-Output ("PLATFORMIO_VERIFY_STATIC_GATE_PASS=" + $(if ($exitCode -eq 0) { 'True' } else { 'False' }))
             Write-Output ("VERIFY_RESULT=" + $(if ($exitCode -eq 0) { 'PASS' } else { 'FAIL' }))
         }
 
@@ -411,15 +444,23 @@ try {
             $testDir = Join-Path $FirmwareRoot 'test'
             if (-not (Test-Path $testDir)) {
                 Write-Output 'TEST_RESULT=SKIP_NO_TESTS'
+                Write-Output "PLATFORMIO_TEST_BUILD_PASS=False"
+                Write-Output "PLATFORMIO_HARDWARE_TEST_EXECUTION=NOT_RUN"
                 break
             }
             Assert-Pio
-            $exitCode = Invoke-Pio -PioArgs @('test', '-e', 'nodemcuv2', '--without-uploading', '--without-testing', '--project-dir', $FirmwareRoot) -LogName 'pio_test'
+            $result = Invoke-Pio -PioArgs @('test', '-e', 'nodemcuv2', '--without-uploading', '--without-testing', '--project-dir', $FirmwareRoot) -LogName 'pio_test'
+            Write-Output ("PIO_LOG=" + $result.LogPath)
+            $exitCode = [int]$result.ExitCode
+            # --without-uploading --without-testing means the test *firmware* is
+            # compiled and linked; the test cases are NOT executed on any device.
+            Write-Output ("PLATFORMIO_TEST_BUILD_PASS=" + $(if ($exitCode -eq 0) { 'True' } else { 'False' }))
+            Write-Output "PLATFORMIO_HARDWARE_TEST_EXECUTION=NOT_RUN"
             Write-Output ("TEST_RESULT=" + $(if ($exitCode -eq 0) { 'PASS' } else { 'FAIL' }))
         }
 
-        'build'       { $exitCode = Invoke-Build }
-        'clean-build' { $exitCode = Invoke-Build -Clean }
+        'build'       { Invoke-Build;        $exitCode = $script:LastRc }
+        'clean-build' { Invoke-Build -Clean; $exitCode = $script:LastRc }
 
         'upload' {
             $com = Resolve-SerialPort
@@ -438,7 +479,9 @@ try {
             }
             Write-Output "UPLOAD [$Profile] -> $com"
             $env:PLATFORMIO_UPLOAD_PORT = $com
-            $exitCode = Invoke-Pio -PioArgs @('run', '-e', 'nodemcuv2', '-t', 'upload', '--upload-port', $com, '--project-dir', $FirmwareRoot) -LogName 'pio_upload'
+            $result = Invoke-Pio -PioArgs @('run', '-e', 'nodemcuv2', '-t', 'upload', '--upload-port', $com, '--project-dir', $FirmwareRoot) -LogName 'pio_upload'
+            Write-Output ("PIO_LOG=" + $result.LogPath)
+            $exitCode = [int]$result.ExitCode
             Write-Output ("UPLOAD_RESULT=" + $(if ($exitCode -eq 0) { 'PASS' } else { 'FAIL' }))
         }
 
@@ -449,7 +492,9 @@ try {
                 $exitCode = 7
                 break
             }
-            $exitCode = Invoke-Pio -PioArgs @('device', 'monitor', '--port', $com, '--baud', '115200') -LogName 'pio_monitor'
+            $result = Invoke-Pio -PioArgs @('device', 'monitor', '--port', $com, '--baud', '115200') -LogName 'pio_monitor'
+            Write-Output ("PIO_LOG=" + $result.LogPath)
+            $exitCode = [int]$result.ExitCode
         }
 
         default {
