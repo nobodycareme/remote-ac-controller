@@ -41,6 +41,41 @@ static_assert(__builtin_strcmp(BUILD_PROFILE_NET, "offline") == 0,
               "profile should be offline when nothing enabled");
 #endif
 
+// ---- Campus authentication is DECOUPLED from the cloud ----------------------
+// Regression guard for the pre-1.0 defect described at the top of
+// feature_gates.h: Wi-Fi and campus authentication used to be chained to
+// ENABLE_CLOUD, so a device could not authenticate to a campus network without
+// also speaking MQTT. Each assertion below must hold for its flag set no matter
+// what ENABLE_CLOUD is.
+
+#if ENABLE_CAMPUS_AUTH && ENABLE_AUTO_CAMPUS_AUTH
+static_assert(CAMPUS_AUTH_IS_AUTOMATIC,
+              "automatic campus auth must not require ENABLE_CLOUD");
+static_assert(WIFI_AUTOCONNECT_ON_BOOT,
+              "unattended campus auth must bring the link up without the cloud");
+#endif
+
+#if ENABLE_CLOUD
+static_assert(WIFI_AUTOCONNECT_ON_BOOT,
+              "cloud builds autoconnect regardless of campus authentication");
+#endif
+
+#if !ENABLE_CLOUD && !ENABLE_AUTO_CAMPUS_AUTH
+static_assert(!WIFI_AUTOCONNECT_ON_BOOT,
+              "offline-first default: no autoconnect without cloud or auto-auth");
+#endif
+
+#if ENABLE_CAMPUS_AUTH && !ENABLE_CLOUD
+static_assert(__builtin_strcmp(BUILD_PROFILE_NET, "campus") == 0,
+              "a campus-only build must not report itself as a cloud build");
+static_assert(ENABLE_NETWORK_STACK,
+              "campus-only build still needs the network stack");
+#endif
+
+// The network stack belongs to Wi-Fi, never to the cloud.
+static_assert(ENABLE_NETWORK_STACK == ENABLE_WIFI,
+              "ENABLE_NETWORK_STACK must not depend on ENABLE_CLOUD");
+
 int main() {
   // All checks are static_asserts; reaching here means they passed.
   return 0;

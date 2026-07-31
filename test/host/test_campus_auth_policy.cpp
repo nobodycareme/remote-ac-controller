@@ -71,14 +71,14 @@ static void test_backoff_ladder() {
   p.noteAttempt(t + 30000 + 60000 + 120000);
   p.noteRetryableFailure(t + 30000 + 60000 + 120000);
 
-  // failStreak=4 -> 300s, then 5 -> 600s (cap)
-  CHECK(p.evaluate(t + 30000 + 60000 + 120000 + 300000) == CAMPUS_GATE_ALLOW,
-        "backoff: allow after 300s");
-  p.noteAttempt(t + 30000 + 60000 + 120000 + 300000);
-  p.noteRetryableFailure(t + 30000 + 60000 + 120000 + 300000);
-  CHECK(p.evaluate(t + 30000 + 60000 + 120000 + 300000 + 600000) ==
+  // failStreak=4 and beyond -> 120s (cap; the ladder never grows past 120s)
+  CHECK(p.evaluate(t + 30000 + 60000 + 120000 + 120000) == CAMPUS_GATE_ALLOW,
+        "backoff: allow after capped 120s (streak4)");
+  p.noteAttempt(t + 30000 + 60000 + 120000 + 120000);
+  p.noteRetryableFailure(t + 30000 + 60000 + 120000 + 120000);
+  CHECK(p.evaluate(t + 30000 + 60000 + 120000 + 120000 + 120000) ==
             CAMPUS_GATE_ALLOW,
-        "backoff: allow after 600s (cap)");
+        "backoff: allow after capped 120s (streak5)");
 }
 
 static void test_quota() {
