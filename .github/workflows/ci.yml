@@ -35,8 +35,8 @@ jobs:
   #   2. firmware source/structure sanity
   #   3. dev.ps1 contract check (the only supported entry point)
   # Full compilation is performed locally via: tools/build-all.ps1
-  firmware-ci:
-    name: firmware-ci
+  firmware-platformio-public:
+    name: firmware-platformio-public
     runs-on: windows-latest
     timeout-minutes: 45
     defaults:
@@ -124,34 +124,66 @@ jobs:
   # ---------------------------------------------------------------------------
   # arduino-ide-ci
   # ---------------------------------------------------------------------------
-  # Compiles the Arduino IDE sketch with the public (non-production) build
-  # configuration. ENABLE_CLOUD=0 and ENABLE_CAMPUS_AUTH=0 — no real credentials,
-  # no real IR, no private data required.
-  arduino-ide-ci:
-    name: arduino-ide-ci (${{ matrix.name }})
+  # Compiles the Arduino IDE sketch EXACTLY the way an ordinary user does, so a
+  # green run is real evidence that the documented workflow works:
+  #
+  #   1. install the two repository libraries with the documented script
+  #      (firmware/arduino-ide/tools/install-arduino-libraries.sh)
+  #   2. cp Remote_AC_Controller.ino.globals.example.h
+  #         Remote_AC_Controller.ino.globals.h
+  #   3. edit the switches inside that globals header
+  #   4. arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 <sketch dir>
+  #
+  # Explicitly FORBIDDEN in this job (asserted below, not merely avoided):
+  #   - no `-include` on the command line
+  #   - no `--build-property build.extra_flags=...`
+  #   - no `/tmp/ci_stubs.h` or any other CI-only stub header
+  #   - no `compile: extra_flags:` in sketch.yaml
+  # The ESP8266 core force-includes <sketch>.ino.globals.h into every
+  # compilation unit by itself (prebuild hook mkbuildoptglobals.py).
+  #
+  # No credentials, no real IR, no live campus authentication, no private data.
+  firmware-arduino-public:
+    name: firmware-arduino-public (${{ matrix.name }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: offline
-            extra: "-DENABLE_WIFI=0"
+            switches: "ENABLE_WIFI=0"
           - name: wifi-only
-            extra: "-DENABLE_WIFI=1"
+            switches: "ENABLE_WIFI=1"
           - name: xidian-campus-example
-            extra: "-DENABLE_WIFI=1 -DENABLE_CAMPUS_AUTH=1"
+            switches: "ENABLE_WIFI=1 ENABLE_CAMPUS_AUTH=1 ENABLE_AUTO_CAMPUS_AUTH=1"
             profile: "profiles/xidian.example.h"
           - name: generic-srun-example
-            extra: "-DENABLE_WIFI=1 -DENABLE_CAMPUS_AUTH=1"
+            switches: "ENABLE_WIFI=1 ENABLE_CAMPUS_AUTH=1 ENABLE_AUTO_CAMPUS_AUTH=1"
             profile: "profiles/generic_srun.example.h"
           - name: wifi-cloud-example
-            extra: "-DENABLE_WIFI=1 -DENABLE_CLOUD=1"
+            switches: "ENABLE_WIFI=1 ENABLE_CLOUD=1"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+
+      - name: Assert the sketch carries no build-flag escape hatch
+        run: |
+          set -euo pipefail
+          SKETCH_DIR=firmware/arduino-ide/Remote_AC_Controller
+          if grep -qE 'extra_flags' "$SKETCH_DIR/sketch.yaml"; then
+            echo "SKETCH_YAML_EXTRA_FLAGS_PRESENT=True (the user workflow must not need it)"
+            exit 1
+          fi
+          if grep -qE '#include[[:space:]]+"?Remote_AC_Controller\.ino\.globals' "$SKETCH_DIR/Remote_AC_Controller.ino"; then
+            echo "GLOBALS_MANUALLY_INCLUDED=True (the core includes it automatically)"
+            exit 1
+          fi
+          test -f "$SKETCH_DIR/Remote_AC_Controller.ino.globals.example.h"
+          echo 'SKETCH_YAML_EXTRA_FLAGS_PRESENT=False'
+          echo 'GLOBALS_MANUALLY_INCLUDED=False'
 
       - name: Setup Arduino CLI
         run: |
@@ -163,7 +195,7 @@ jobs:
           arduino-cli core update-index
           arduino-cli core install esp8266:esp8266@3.1.2
 
-      - name: Install dependencies
+      - name: Install Library Manager dependencies (documented versions)
         run: |
           set -euo pipefail
           arduino-cli lib install "DHT sensor library@1.4.7"
@@ -171,57 +203,58 @@ jobs:
           arduino-cli lib install "PubSubClient@2.8.0"
           arduino-cli lib install "ArduinoJson@6.21.5"
 
-      - name: Assemble Arduino-compatible srun-c library
+      - name: Install repository libraries with the documented script
         run: |
           set -euo pipefail
-          SRCDIR=firmware/agent-platformio/lib/srun-c
-          DST="$HOME/Arduino/libraries/srun-c"
-          rm -rf "$DST"
-          mkdir -p "$DST/src"
-          cp "$SRCDIR/include/"*.h "$DST/src/"
-          cp "$SRCDIR/src/"* "$DST/src/"
-          # Arduino CLI will not compile the PlatformIO (include/ + src/) layout, so
-          # we flatten headers + sources into a single src/ and add the metadata it
-          # requires. This copy lives only in the runner, never in the repository.
-          cat > "$DST/library.properties" << 'EOF'
-          name=srun-c
-          version=1.0.0
-          author=upstream
-          maintainer=remote-ac-controller
-          sentence=srun/drcom campus auth adapter.
-          paragraph=Bundled ESP8266 srun-c adapter for RemoteACCore.
-          category=Communication
-          url=https://github.com/example/remote-ac-controller
-          architectures=esp8266
-          includes=srun.h
-          EOF
-          echo "srun-c assembled at $DST"
+          bash firmware/arduino-ide/tools/install-arduino-libraries.sh
+          # The documented script delegates the srun-c flattening to
+          # tools/prepare_srun_arduino_library.py, which must have emitted a
+          # complete library: licence, third-party notice and SHA256 manifest.
+          LIB="$HOME/Arduino/libraries/srun-c"
+          for f in library.properties LICENSE THIRD_PARTY_NOTICE MANIFEST.json \
+                   src/srun.h src/compat.h src/srun.c src/md.c ; do
+            test -f "$LIB/$f" || { echo "SRUN_ARDUINO_LIB_INCOMPLETE: $f"; exit 1; }
+          done
+          echo "SRUN_ARDUINO_LIB_GENERATED=True"
 
-      - name: Compile Arduino IDE public sketch (${{ matrix.name }})
+      - name: Configure globals.h like a first-time user (${{ matrix.name }})
+        run: |
+          set -euo pipefail
+          SKETCH_DIR=firmware/arduino-ide/Remote_AC_Controller
+          G="$SKETCH_DIR/Remote_AC_Controller.ino.globals.h"
+
+          # Documented step 1: copy the example to the real (git-ignored) name.
+          cp "$SKETCH_DIR/Remote_AC_Controller.ino.globals.example.h" "$G"
+
+          # Documented step 2: edit the switches. A human edits them in the
+          # editor; CI performs the same edits in place so the file stays an
+          # ordinary globals header - no command-line flag is ever added.
+          for kv in ${{ matrix.switches }} ; do
+            k="${kv%%=*}"; v="${kv#*=}"
+            sed -i -E "s|^#define[[:space:]]+${k}[[:space:]]+[0-9]+|#define ${k} ${v}|" "$G"
+            grep -qE "^#define ${k} ${v}\$" "$G" || { echo "GLOBALS_EDIT_FAIL: $k"; exit 1; }
+            echo "globals.h: $k = $v"
+          done
+
+          # Documented step 2b: campus builds also select a profile header here.
+          if [ -n "${{ matrix.profile }}" ]; then
+            sed -i "s|^#endif // REMOTE_AC_CONTROLLER_INO_GLOBALS_H|#define CAMPUS_PROFILE_HEADER \"${{ matrix.profile }}\"\n&|" "$G"
+            grep -q 'CAMPUS_PROFILE_HEADER "${{ matrix.profile }}"' "$G" || { echo 'GLOBALS_PROFILE_FAIL'; exit 1; }
+            echo 'globals.h: CAMPUS_PROFILE_HEADER = ${{ matrix.profile }}'
+          fi
+
+          echo '--- effective globals.h (defines only) ---'
+          grep -E '^#define' "$G"
+
+      - name: Compile as an ordinary user (${{ matrix.name }})
         run: |
           set -euo pipefail
           SKETCH_DIR="$(pwd)/firmware/arduino-ide/Remote_AC_Controller"
-          GLOBALS="$SKETCH_DIR/Remote_AC_Controller.ino.globals.example.h"
-          PROFILE_INC=""
-          # Campus groups select a profile header via CAMPUS_PROFILE_HEADER. It is
-          # written to a generated override header (not a -D string) to avoid
-          # shell-quoting the quoted path inside the compiler flag.
-          if [ -n "${{ matrix.profile }}" ]; then
-            cat > "$SKETCH_DIR/ci_campus_profile.h" << 'EOF'
-          #pragma once
-          #define CAMPUS_PROFILE_HEADER "${{ matrix.profile }}"
-          EOF
-            PROFILE_INC="-include $SKETCH_DIR/ci_campus_profile.h -I$SKETCH_DIR"
-          fi
-          mkdir -p "$HOME/Arduino/libraries"
-          ln -sf "$(pwd)/firmware/shared/RemoteACCore" "$HOME/Arduino/libraries/RemoteACCore"
-          # The committed globals example replaces the old /tmp/ci_stubs.h; per-group
-          # -D flags (matrix.extra) override individual switches as needed.
           OUT="$SKETCH_DIR/build"
+          # No -include. No build.extra_flags. No stub header. No sketch.yaml flags.
           arduino-cli compile \
             --fqbn esp8266:esp8266:nodemcuv2 \
             --output-dir "$OUT" \
-            --build-property "build.extra_flags=-include $GLOBALS $PROFILE_INC -Ifirmware/agent-platformio/lib/srun-c/include ${{ matrix.extra }}" \
             "$SKETCH_DIR"
           ELF=$(find "$OUT" -name "*.elf" 2>/dev/null | head -1)
           BIN=$(find "$OUT" -name "*.bin" 2>/dev/null | head -1)
@@ -231,7 +264,35 @@ jobs:
           size "$ELF" || true
           echo "ARDUINO_BIN_EXISTS=True ($(wc -c < "$BIN") bytes)"
           echo "ARDUINO_BIN_SHA256=$(sha256sum "$BIN" | cut -d' ' -f1)"
-          echo "ARDUINO_CLI_COMPILE_PASS=True"
+          echo "ARDUINO_USER_WORKFLOW_COMPILE_PASS=True"
+
+      - name: NEGATIVE — campus auth without a profile must fail to compile
+        if: matrix.name == 'offline'
+        run: |
+          set -euo pipefail
+          SKETCH_DIR="$(pwd)/firmware/arduino-ide/Remote_AC_Controller"
+          G="$SKETCH_DIR/Remote_AC_Controller.ino.globals.h"
+          cp "$SKETCH_DIR/Remote_AC_Controller.ino.globals.example.h" "$G"
+          sed -i -E 's|^#define[[:space:]]+ENABLE_WIFI[[:space:]]+[0-9]+|#define ENABLE_WIFI 1|'          "$G"
+          sed -i -E 's|^#define[[:space:]]+ENABLE_CAMPUS_AUTH[[:space:]]+[0-9]+|#define ENABLE_CAMPUS_AUTH 1|' "$G"
+          # Deliberately do NOT define CAMPUS_PROFILE_HEADER.
+          rm -rf "$SKETCH_DIR/build/negative"
+          set +e
+          LOG=$(arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 \
+                  --output-dir "$SKETCH_DIR/build/negative" "$SKETCH_DIR" 2>&1)
+          rc=$?
+          set -e
+          rm -f "$G"
+          if [ "$rc" -eq 0 ]; then
+            echo 'CAMPUS_WITHOUT_PROFILE_REJECTED=False (build silently picked a portal)'
+            exit 1
+          fi
+          if ! printf '%s' "$LOG" | grep -q 'requires CAMPUS_PROFILE_HEADER'; then
+            echo 'CAMPUS_WITHOUT_PROFILE_REJECTED=False (failed for an unrelated reason)'
+            printf '%s\n' "$LOG" | tail -40
+            exit 1
+          fi
+          echo 'CAMPUS_WITHOUT_PROFILE_REJECTED=True'
 
   # ---------------------------------------------------------------------------
   # host-tests — pure-logic unit tests on the host toolchain (no hardware, no CI secrets)
@@ -243,8 +304,8 @@ jobs:
   #   - feature_gates.h derived predicates: compile-time invariants under several
   #     legal flag combinations, PLUS NEGATIVE tests asserting that illegal flag
   #     combinations fail to compile (the #error guards in feature_gates.h).
-  host-tests:
-    name: host-tests
+  firmware-host-tests:
+    name: firmware-host-tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -303,20 +364,67 @@ jobs:
           done
           [ "$fail" -eq 0 ] || exit 1
 
+      - name: Campus profile contract (public parameters, no credentials)
+        run: |
+          set -euo pipefail
+          INC="-I firmware/shared/RemoteACCore/src"
+          BASE="-std=c++11 -Wall $INC -DENABLE_WIFI=1 -DENABLE_CAMPUS_AUTH=1"
+
+          echo '== profiles/xidian.example.h (verified public parameters) =='
+          g++ $BASE '-DCAMPUS_PROFILE_HEADER="profiles/xidian.example.h"' \
+            -DEXPECT_XIDIAN=1 test/host/test_campus_profiles.cpp -o /tmp/test_profile_xidian
+          /tmp/test_profile_xidian
+
+          echo '== profiles/generic_srun.example.h (portable template) =='
+          g++ $BASE '-DCAMPUS_PROFILE_HEADER="profiles/generic_srun.example.h"' \
+            test/host/test_campus_profiles.cpp -o /tmp/test_profile_generic
+          /tmp/test_profile_generic
+
+      - name: NEGATIVE — campus auth without a profile must fail to compile
+        run: |
+          set -euo pipefail
+          INC="-I firmware/shared/RemoteACCore/src"
+          printf '#include "config/campus_config.h"\nint main() { return 0; }\n' \
+            > /tmp/campus_no_profile.cpp
+          set +e
+          g++ -std=c++11 $INC -DENABLE_WIFI=1 -DENABLE_CAMPUS_AUTH=1 \
+            /tmp/campus_no_profile.cpp -o /tmp/campus_no_profile 2>/tmp/campus_err.txt
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo 'CAMPUS_WITHOUT_PROFILE_REJECTED=False (the build silently picked a portal)'
+            exit 1
+          fi
+          if ! grep -q 'requires CAMPUS_PROFILE_HEADER' /tmp/campus_err.txt; then
+            echo 'CAMPUS_WITHOUT_PROFILE_REJECTED=False (failed for an unrelated reason)'
+            cat /tmp/campus_err.txt
+            exit 1
+          fi
+          echo 'CAMPUS_WITHOUT_PROFILE_REJECTED=True'
+
+          # Positive control: the exact same TU compiles once a profile is chosen.
+          g++ -std=c++11 $INC -DENABLE_WIFI=1 -DENABLE_CAMPUS_AUTH=1 \
+            '-DCAMPUS_PROFILE_HEADER="profiles/xidian.example.h"' \
+            /tmp/campus_no_profile.cpp -o /tmp/campus_with_profile
+          echo 'CAMPUS_WITH_PROFILE_COMPILES=True'
+
+          # Path (B): all four macros supplied externally is also accepted.
+          g++ -std=c++11 $INC -DENABLE_WIFI=1 -DENABLE_CAMPUS_AUTH=1 \
+            '-DCAMPUS_SSID="external-ssid"' '-DCAMPUS_PORTAL_HOST="portal.example.edu"' \
+            -DCAMPUS_AC_ID=1 '-DCAMPUS_DOMAIN=""' \
+            /tmp/campus_no_profile.cpp -o /tmp/campus_external
+          echo 'CAMPUS_EXTERNAL_CONFIG_COMPILES=True'
+
   # ---------------------------------------------------------------------------
   # cloud-ci
   # ---------------------------------------------------------------------------
-  cloud-ci:
-    name: cloud-ci
+  cloud-backend-build-test:
+    name: cloud-backend-build-test
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    strategy:
-      fail-fast: false
-      matrix:
-        package: [backend, frontend]
     defaults:
       run:
-        working-directory: cloud/${{ matrix.package }}
+        working-directory: cloud/backend
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -328,7 +436,39 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-          cache-dependency-path: cloud/${{ matrix.package }}/package-lock.json
+          cache-dependency-path: cloud/backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+  cloud-frontend-build-test:
+    name: cloud-frontend-build-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: cloud/frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: cloud/frontend/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -387,3 +527,196 @@ jobs:
           test -f NOTICE  || { echo "NOTICE_MISSING"; exit 1; }
           grep -q 'Apache License' LICENSE || { echo "LICENSE_NOT_APACHE"; exit 1; }
           echo "OK  Apache-2.0 LICENSE and NOTICE present"
+
+      - name: Assert srun-c has exactly one authoritative source tree
+        run: |
+          set -euo pipefail
+          # Every tracked srun-c translation unit must live under the single
+          # canonical directory. A second tracked copy (e.g. a flattened Arduino
+          # duplicate) would create two divergent authorities for one protocol.
+          CANON='firmware/agent-platformio/lib/srun-c'
+          stray=$(git ls-files -- '*srun*' \
+                  | grep -E '\.(c|h|cpp)$' \
+                  | grep -v "^${CANON}/" || true)
+          if [ -n "$stray" ]; then
+            echo "SRUN_DUPLICATE_TRACKED_SOURCE:"
+            printf '%s\n' "$stray"
+            exit 1
+          fi
+          count=$(git ls-files -- "${CANON}" | grep -cE '\.(c|h|cpp)$')
+          echo "SRUN_CANONICAL_SOURCE_PATH=${CANON}"
+          echo "SRUN_CANONICAL_TRANSLATION_UNITS=${count}"
+          echo "SRUN_DUPLICATE_TRACKED_SOURCE_COUNT=0"
+          echo "SRUN_SINGLE_SOURCE_PASS=True"
+          test -f "${CANON}/LICENSE" || { echo "SRUN_LICENSE_MISSING"; exit 1; }
+          echo "SRUN_LICENSE_PRESERVED=True"
+
+      - name: srun-c Arduino adapter is deterministic and fails closed
+        run: |
+          set -euo pipefail
+          OUT=$(mktemp -d)
+          python3 tools/prepare_srun_arduino_library.py --output "$OUT" --verify-deterministic
+
+          # The generated library must never be written into the working tree.
+          python3 tools/prepare_srun_arduino_library.py --output . 2>/dev/null \
+            && { echo 'ADAPTER_WROTE_INTO_REPO=True'; exit 1; } \
+            || echo 'ADAPTER_REFUSES_TO_WRITE_INTO_REPO=True'
+
+          # Fail-closed: an unreviewed source file must abort the generation.
+          echo '/* stray */' > firmware/agent-platformio/lib/srun-c/src/unreviewed.c
+          set +e
+          python3 tools/prepare_srun_arduino_library.py --output "$OUT" 2>/dev/null
+          rc=$?
+          set -e
+          rm -f firmware/agent-platformio/lib/srun-c/src/unreviewed.c
+          [ "$rc" -ne 0 ] || { echo 'ADAPTER_ACCEPTED_UNKNOWN_SOURCE=True'; exit 1; }
+          echo 'ADAPTER_REJECTS_UNKNOWN_SOURCE=True'
+          git diff --quiet -- firmware/agent-platformio/lib/srun-c
+          echo 'SRUN_ADAPTER_DETERMINISTIC_PASS=True'
+
+  # ---------------------------------------------------------------------------
+  # docs-check — bilingual first-party documentation structure and links
+  # ---------------------------------------------------------------------------
+  doc-parity:
+    name: doc-parity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Documentation parity (every first-party doc paired CN<->EN)
+        run: python3 tools/check-doc-parity.py
+
+      - name: Cross-language link hygiene
+        run: python3 tools/check-doc-language-links.py
+
+  doc-links:
+    name: doc-links
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: No broken first-party relative links
+        run: python3 tools/check-doc-links.py
+
+  version-consistency:
+    name: version-consistency
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Unified version 1.2.0 across root/firmware/cloud
+        run: python3 tools/check-version.py
+
+  # ---------------------------------------------------------------------------
+  # secret-scan — pattern scan across the whole tracked tree
+  # ---------------------------------------------------------------------------
+  # Complements repo-hygiene (which checks file classes) by scanning file
+  # CONTENT for credential-shaped material. Placeholder values used by the
+  # *.example.h templates are explicitly allowed.
+  repository-secret-scan:
+    name: repository-secret-scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Scan tracked content for credential-shaped material
+        run: |
+          set -euo pipefail
+          fail=0
+
+          # Documentation and templates legitimately show the SHAPE of a
+          # credential using obvious placeholders. Only a value that is neither
+          # empty nor an obvious placeholder counts as a real secret.
+          PLACEHOLDER='"(|<[^"]*>|\$\{[^"]*\}|(your|YOUR|my|MY)[_A-Za-z0-9]*|[Cc]hange[Mm]e|CHANGEME|[Pp]laceholder|PLACEHOLDER|[Ee]xample[_A-Za-z0-9]*|EXAMPLE[_A-Za-z0-9]*|x{3,}|X{3,}|\.{3}|TODO|REPLACE[_A-Za-z0-9]*|20[0-9]{8,}|student_id|password|username)"'
+
+          scan() {
+            local label="$1" pattern="$2" allow="${3:-}"
+            local hits
+            hits=$(git grep -nIE "$pattern" -- . \
+                   ':(exclude)tools/check-doc-*.mjs' \
+                   ':(exclude)*.example.h' \
+                   ':(exclude).github/workflows/ci.yml' || true)
+            if [ -n "$hits" ] && [ -n "$allow" ]; then
+              hits=$(printf '%s\n' "$hits" | grep -vE "$allow" || true)
+            fi
+            if [ -n "$hits" ]; then
+              echo "SECRET_SCAN_HIT [$label]:"
+              printf '%s\n' "$hits" | head -20
+              fail=1
+            else
+              echo "OK  no hits: $label"
+            fi
+          }
+
+          scan 'private key block'    'BEGIN (RSA |EC |OPENSSH |PGP )?PRIVATE KEY'
+          scan 'authorization header' 'Authorization:[[:space:]]*(Bearer|Basic)[[:space:]]+[A-Za-z0-9._-]{16,}'
+          # *.example.h templates are excluded above; any remaining
+          # CAMPUS_PASSWORD / CAMPUS_USERNAME definition must resolve to an
+          # empty string or an obvious placeholder, never a real account.
+          scan 'hardcoded campus credential' \
+               '#define[[:space:]]+CAMPUS_(PASSWORD|USERNAME)[[:space:]]+"' \
+               "$PLACEHOLDER"
+          scan 'campus credential assignment' \
+               '(CAMPUS_(PASSWORD|USERNAME)|campus_(password|username))[[:space:]]*[:=][[:space:]]*"' \
+               "$PLACEHOLDER"
+          scan 'mqtt production url'  'mqtts?://[A-Za-z0-9.-]*\.zmytxylove\.cn'
+          scan 'windows user path'    '[A-Za-z]:\\\\Users\\\\[A-Za-z0-9_.-]+'
+          [ "$fail" -eq 0 ] || exit 1
+          echo 'MONOREPO_SECRET_SCAN_PASS=True'
+          echo 'CANONICAL_CURRENT_TREE_SECRET_HITS=0'
+          echo 'CANONICAL_PRIVATE_KEY_HITS=0'
+
+  real-ir-exclusion:
+    name: real-ir-exclusion
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Assert no real IR frame data is published
+        run: |
+          set -euo pipefail
+          # Learned IR frames are long uint16 raw-timing arrays. The public repo
+          # ships the learning TOOL, never a captured frame from a real remote.
+          hits=$(git grep -nIE 'rawData\[[0-9]{3,}\]|uint16_t[[:space:]]+ir_(frame|raw)_[a-z0-9_]+\[' -- . || true)
+          if [ -n "$hits" ]; then
+            echo 'REAL_IR_EXCLUSION_PASS=False'
+            printf '%s\n' "$hits" | head -20
+            exit 1
+          fi
+          echo 'REAL_IR_EXCLUSION_PASS=True'
+          echo 'CANONICAL_REAL_IR_HITS=0'
