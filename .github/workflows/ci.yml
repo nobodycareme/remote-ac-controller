@@ -164,9 +164,11 @@ jobs:
           cp firmware/arduino-ide/Remote_AC_Controller/config.example.h \
              firmware/arduino-ide/Remote_AC_Controller/config.h
 
-          # Install shared library for Arduino CLI
+          # Install shared library and vendored srun-c for Arduino CLI
           mkdir -p "$HOME/Arduino/libraries"
           ln -sf "$(pwd)/firmware/shared/RemoteACCore" "$HOME/Arduino/libraries/RemoteACCore"
+          # srun-c is a vendored campus network auth library needed by wifi_manager
+          cp -r firmware/agent-platformio/lib/srun-c "$HOME/Arduino/libraries/srun-c"
 
           echo "=== Compiling (ENABLE_CLOUD=0, ENABLE_CAMPUS_AUTH=0) ==="
           arduino-cli compile \
