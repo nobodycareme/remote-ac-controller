@@ -9,8 +9,9 @@
  * Detection method (extracted from the proven portal_probe_test.cpp logic):
  *   - Plain-HTTP probes to >= 2 targets, redirects NOT followed.
  *   - 3xx with a Location -> captive (parse host / ac_id from Location).
- *   - HTTP 200 + transparent-intercept page mentioning portal.campus.example.edu ->
- *     captive (parse the auto-submit form action).
+ *   - HTTP 200 + transparent-intercept page carrying an srun marker (or the
+ *     configured campus portal host) -> captive (parse the auto-submit form
+ *     action).
  *   - HTTP 204 / plain 200 -> already online / not a captive portal.
  *   - NEVER sends credentials. Query strings are stripped before logging.
  *
@@ -21,7 +22,7 @@
 
 struct PortalResult {
   bool   captive    = false;                 // a campus captive portal was seen
-  String portalHost = String(CAMPUS_PORTAL_HOST); // always portal.campus.example.edu when captive
+  String portalHost = String(CAMPUS_PORTAL_HOST); // configured portal host ("" when campus auth is off)
   String portalUrl  = "";                     // sanitized login URL (no query)
   String acId       = "";                     // extracted ac_id (string)
   int    method     = 0;                      // 0 none, 1 3xx, 2 200-intercept, 3 already-online(204)

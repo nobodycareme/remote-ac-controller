@@ -98,6 +98,15 @@
 #error "feature_gates: ENABLE_AUTO_CAMPUS_AUTH=1 requires ENABLE_CAMPUS_AUTH=1 (there is no authenticator to drive)."
 #endif
 
+// Unattended authentication must never run against placeholder credentials or
+// a public build: AUTO_CAMPUS_AUTH is only meaningful when real credentials may
+// be compiled in (ENABLE_CONTROLLED_LIVE_AUTH). A public build that flips
+// ENABLE_AUTO_CAMPUS_AUTH by accident must fail loudly instead of looping
+// against CampusCredentials::ready()==false forever.
+#if ENABLE_AUTO_CAMPUS_AUTH && !ENABLE_CONTROLLED_LIVE_AUTH
+#error "feature_gates: ENABLE_AUTO_CAMPUS_AUTH=1 requires ENABLE_CONTROLLED_LIVE_AUTH=1 (unattended auth must never target placeholder credentials; set it in a PRIVATE build only)."
+#endif
+
 #if ENABLE_CLOUD && !ENABLE_WIFI
 #error "feature_gates: ENABLE_CLOUD=1 requires ENABLE_WIFI=1 (MQTT needs a station-mode link)."
 #endif

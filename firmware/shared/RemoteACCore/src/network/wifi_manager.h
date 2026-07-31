@@ -39,6 +39,7 @@
 #if ENABLE_CAMPUS_AUTH
 #include "network/campus_auth_vendor.h"
 #include "network/campus_auth_policy.h"
+#include "network/auto_auth_epoch.h"
 #endif
 #include "network/portal_detector.h"
 #include "config/campus_config.h"
@@ -138,6 +139,8 @@ private:
 #if ENABLE_CAMPUS_AUTH
   CampusAuthVendor _auth;            // vendored srun-c wrapper (tlsPinValid/login/logout)
   CampusAuthPolicy _authPolicy;      // rate limit / backoff / quota / hard block
+  AutoAuthEpoch     _autoAuth;       // per-portal-cycle first-attempt latch + auth IP memory
+  bool _authInProgress = false;      // observable "authentication running" latch
   bool _authRequested = false;
   CampusAuthResult _lastAuth = CAMPUS_AUTH_UNSET;
   bool _authBlockedReported = false;  // one-shot AUTH_BLOCKED marker for no-cred gate

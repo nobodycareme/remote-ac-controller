@@ -4,17 +4,25 @@
 //
 // Before compiling:
 // 1. Install the RemoteACCore library (see README.md)
-// 2. Copy config.example.h -> config.h and fill in your settings
+// 2. Install dependencies via Library Manager:
+//    - DHT sensor library by Adafruit   (always)
+//    - Adafruit Unified Sensor          (always, DHT dependency)
+//    - ArduinoJson by Benoit Blanchon   (only with ENABLE_CAMPUS_AUTH=1)
+//    - PubSubClient by Nick O'Leary     (only with ENABLE_CLOUD=1)
+//    Do NOT install a "Crypto" library: Crypto.h / base64.h ship with the
+//    ESP8266 core and are referenced only under ENABLE_IR_LAB_LEARNING_COMMANDS.
 // 3. (Optional, for custom feature switches) copy
 //    Remote_AC_Controller.ino.globals.example.h -> Remote_AC_Controller.ino.globals.h
-//    and point sketch.yaml's compile.extra_flags at your globals.h. The committed
-//    .example.h already has safe public defaults, so this step can be skipped.
-// 4. Install required dependencies via Library Manager:
-//    - DHT sensor library by Adafruit
-//    - Adafruit Unified Sensor
-//    - ArduinoJson by Benoit Blanchon
-//    - PubSubClient by Nick O'Leary
-//    - Crypto by Rhys Weatherley (for SHA256/BLAKE2s)
+//    The ESP8266 core force-includes that file into every compilation unit
+//    automatically — no `-include` flag and no sketch.yaml editing needed. The
+//    committed .example.h already has safe public defaults, so you can skip this
+//    step for a basic Wi-Fi build.
+//    globals.h is the ONLY place that reaches every compilation unit; a header
+//    #included from this .ino would not affect the library's own .cpp files.
+// 4. Runtime values are NOT set in this sketch folder:
+//    - Wi-Fi SSID   -> `wifi connect <ssid>` over serial (no auto-connect)
+//    - Campus portal-> the profile selected by CAMPUS_PROFILE_HEADER
+//    - MQTT broker  -> cloud_secrets.h (git-ignored, see README.md)
 
 #include "RemoteACApp.h"
 

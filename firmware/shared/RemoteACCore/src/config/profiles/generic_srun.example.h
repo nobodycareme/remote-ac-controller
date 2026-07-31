@@ -27,3 +27,27 @@
 // Operator/domain suffix — usually EMPTY. Some campuses use @lt/@yd/@dx; only
 // set this if your srun server actually requires it.
 #define CAMPUS_DOMAIN       ""
+
+// ---------------------------------------------------------------------------
+// Portal TLS leaf-certificate pin — INTENTIONALLY ABSENT in this example.
+//
+// The ESP8266 pins the leaf certificate (BearSSL setFingerprint); a full CA
+// chain does not fit in 80KB of RAM. Because this template has no pin,
+// config/campus_tls_pin.h leaves CAMPUS_CERT_SHA1 empty and the firmware
+// FAIL-CLOSES: live authentication is refused and no credential is ever sent.
+//
+// To enable live auth on your campus, extract YOUR portal's fingerprint over a
+// trusted network and add the five macros below to your private profile copy:
+//
+//   openssl s_client -connect <host>:443 -servername <host> -showcerts \
+//     </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha1 -dates
+//
+// Require "Verify return code: 0 (ok)" in the s_client output — otherwise you
+// may be pinning an interception proxy instead of the portal.
+//
+//   #define CAMPUS_CERT_SHA1       "AA:BB:...:FF"   // 20 bytes, colon-separated
+//   #define CAMPUS_CERT_NOT_BEFORE "YYYY-MM-DD"
+//   #define CAMPUS_CERT_NOT_AFTER  "YYYY-MM-DD"
+//   #define CAMPUS_CERT_ISSUER     "<issuer CN>"
+//   #define CAMPUS_CERT_SUBJECT    "<subject CN>"
+// ---------------------------------------------------------------------------

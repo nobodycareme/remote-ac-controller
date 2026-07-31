@@ -1,4 +1,4 @@
-﻿/*
+/*
  * wifi_manager.cpp - campus Wi-Fi + srun auth state machine (see header)
  * v0.3.5: Base WiFi (begin/connect/disconnect/scan/update/state/localIp) ALWAYS
  *         compiled. Campus-auth-specific members (doAuth/campusLogin/campusLogout/
@@ -30,6 +30,11 @@ void WifiManager::begin(const char* ssid) {
   if (ssid && *ssid) _cfgSsid = ssid;
   WiFi.persistent(false);
   WiFi.setAutoReconnect(true);
+#if ENABLE_CAMPUS_AUTH
+  _autoAuth.resetAll();
+  _authInProgress = false;
+#endif
+  _lastLocalIp = "";
   enterState(WIFI_DISCONNECTED);
 }
 
@@ -111,8 +116,25 @@ void WifiManager::serviceAuthReady() {
       _authBlockedReported = true;
     }
     _authRequested = false;
+#if ENABLE_AUTO_CAMPUS_AUTH
+    Serial.println(F("AUTO_CAMPUS_AUTH_ELIGIBLE=NO AUTO_CAMPUS_AUTH_SKIPPED_REASON=NO_CREDENTIALS"));
+#endif
     return;
   }
+
+#if ENABLE_AUTO_CAMPUS_AUTH
+  // Unattended decision point (task §十三): eligibility + per-epoch first
+  // attempt latch, with desensitized logging.
+  Serial.print(F("AUTO_CAMPUS_AUTH_ELIGIBLE=YES AUTO_CAMPUS_AUTH_EPOCH="));
+  Serial.println(_autoAuth.epoch());
+  if (!_autoAuth.mayStartAuth()) {
+    Serial.println(F("AUTO_CAMPUS_AUTH_DUPLICATE_SUPPRESSED=True AUTO_CAMPUS_AUTH_SKIPPED_REASON=EPOCH_ALREADY_TRIGGERED"));
+    // Retries after a failed first attempt are paced by CampusAuthPolicy and
+    // do NOT consume the epoch latch; this guard only stops a SECOND
+    // independent trigger while one decision is still pending.
+    return;
+  }
+#endif
 
   const uint32_t now = millis();
   const CampusAuthGateDecision gate = _authPolicy.evaluate(now);
@@ -132,6 +154,12 @@ void WifiManager::serviceAuthReady() {
   _lastGateReported = 0xFF;
   _authRequested = false;
   _authPolicy.noteAttempt(now);
+  _autoAuth.markAuthTriggered();
+#if ENABLE_AUTO_CAMPUS_AUTH
+  Serial.print(F("AUTO_CAMPUS_AUTH_TRIGGERED=True AUTO_CAMPUS_AUTH_EPOCH="));
+  Serial.println(_autoAuth.epoch());
+#endif
+  _authInProgress = true;
   enterState(WIFI_AUTHENTICATING);
 }
 
@@ -139,11 +167,13 @@ void WifiManager::serviceAuthReady() {
 // reached through serviceAuthReady(), so the policy has already authorised the
 // attempt and counted it.
 void WifiManager::doAuth() {
+  _authInProgress = true;
   if (!_auth.tlsPinValid()) {
     Serial.println(F("TLS_PIN_MISMATCH"));
     _tlsOk = false;
     _lastAuth = CAMPUS_AUTH_TLS_PIN_MISMATCH;
     _authPolicy.noteHardFailure(millis());
+    _authInProgress = false;
     enterState(WIFI_BLOCKED);
     return;
   }
@@ -156,6 +186,8 @@ void WifiManager::doAuth() {
   if (r == CAMPUS_AUTH_SUCCESS) {
     Serial.println(F("CAMPUS_AUTH_PASS"));
     _authPolicy.noteSuccess(millis());
+    _autoAuth.markAuthSuccess((uint32_t)WiFi.localIP());
+    _authInProgress = false;
     enterState(WIFI_VERIFYING_INTERNET);
     return;
   }
@@ -173,6 +205,7 @@ void WifiManager::doAuth() {
   if (r == CAMPUS_AUTH_BAD_CREDENTIALS || r == CAMPUS_AUTH_WRONG_DOMAIN ||
       r == CAMPUS_AUTH_TLS_PIN_MISMATCH) {
     _authPolicy.noteHardFailure(millis());
+    _authInProgress = false;
     enterState(WIFI_BLOCKED);
     return;
   }
@@ -180,6 +213,7 @@ void WifiManager::doAuth() {
   // Retryable class (timeout, transient server/portal error). The policy owns
   // the wait; AUTH_READY re-evaluates it on every tick.
   _authPolicy.noteRetryableFailure(millis());
+  _authInProgress = false;
   Serial.print(F("AUTH_BACKOFF ms="));
   Serial.print(CampusAuthPolicy::backoffMs(_authPolicy.failStreak()));
   Serial.print(F(" fail_streak="));
@@ -316,6 +350,15 @@ void WifiManager::doVerifyRound() {
   _nextVerifyMs = millis() + VERIFY_GAP_MS;   // schedule next independent round
 }
 
+// True only when a NON-EMPTY portal host is configured AND the body mentions it.
+// The sizeof() guard matters: with campus auth disabled CAMPUS_PORTAL_HOST is "",
+// and String::indexOf("") returns 0 (>= 0), which would fake a captive portal on
+// every probe. Compile-time short-circuit keeps the literal out of the binary too.
+static bool bodyMentionsConfiguredPortalHost(const String& body) {
+  if (sizeof(CAMPUS_PORTAL_HOST) <= 1) return false;
+  return body.indexOf(F(CAMPUS_PORTAL_HOST)) >= 0;
+}
+
 bool WifiManager::probeInternet() {
   unsigned long t0 = millis();
   WiFiClient client;
@@ -328,9 +371,9 @@ bool WifiManager::probeInternet() {
   if (code > 0) {
     String body = http.getString();
     bool intercepted =
-        (body.indexOf("portal.campus.example.edu") >= 0) ||
-        (body.indexOf("srun_portal") >= 0) ||
-        (body.indexOf("index_8.html") >= 0);
+        bodyMentionsConfiguredPortalHost(body) ||
+        (body.indexOf(F("srun_portal")) >= 0) ||
+        (body.indexOf(F("index_8.html")) >= 0);
     ok = !intercepted && (code == 200);
   }
   http.end();
@@ -345,6 +388,13 @@ void WifiManager::update() {
   if (_state != WIFI_DISCONNECTED && _state != WIFI_ASSOCIATING && _state != WIFI_BLOCKED) {
     if (WiFi.status() != WL_CONNECTED) {
       Serial.println(F("WIFI_LINK_LOST re-associate"));
+#if ENABLE_CAMPUS_AUTH
+      // Task §十三.5/6: the old auth cycle is stale after a drop; re-association
+      // must be allowed to re-detect and re-authenticate.
+      _autoAuth.onLinkReassociated();
+      Serial.print(F("AUTO_CAMPUS_AUTH_EPOCH_INVALIDATED reason=LINK_LOST epoch="));
+      Serial.println(_autoAuth.epoch());
+#endif
       connect();   // -> ASSOCIATING
       return;
     }
@@ -352,6 +402,12 @@ void WifiManager::update() {
     String ip = localIp();
     if (ip != _lastLocalIp) {
       _lastLocalIp = ip;
+#if ENABLE_CAMPUS_AUTH
+      // Task §十三.7: a new lease invalidates the old authenticated context.
+      _autoAuth.onDhcpIpChanged((uint32_t)WiFi.localIP());
+      Serial.print(F("AUTO_CAMPUS_AUTH_EPOCH_INVALIDATED reason=DHCP_IP_CHANGED epoch="));
+      Serial.println(_autoAuth.epoch());
+#endif
       if (_state != WIFI_PORTAL_CHECK) {
         Serial.println(F("DHCP_IP_CHANGED re-detect portal"));
         enterState(WIFI_PORTAL_CHECK);
@@ -370,6 +426,11 @@ void WifiManager::update() {
         Serial.print(F("DNS_IP="));
         Serial.println(WiFi.dnsIP().toString());
         _lastLocalIp = localIp();
+#if ENABLE_CAMPUS_AUTH
+        // Fresh association: the previous cycle (if any) must not block a new
+        // portal detection + authentication decision.
+        _autoAuth.onLinkReassociated();
+#endif
         enterState(WIFI_DHCP_WAIT);
       } else if (now - _stateEnterMs > 15000) {
         Serial.println(F("WIFI_ASSOC_TIMEOUT -> BACKOFF"));
@@ -390,6 +451,15 @@ void WifiManager::update() {
         _portalChecked = true;
       }
       if (_portalDetected) {
+#if ENABLE_CAMPUS_AUTH
+        // Task §十三.1/8: each portal detection cycle may trigger at most one
+        // FIRST attempt; a re-detected portal opens a new cycle.
+        _autoAuth.beginEpoch();
+        Serial.print(F("AUTO_CAMPUS_AUTH_EPOCH="));
+        Serial.print(_autoAuth.epoch());
+        Serial.print(F(" portal_gen="));
+        Serial.println(_autoAuth.portalGeneration());
+#endif
         enterState(WIFI_AUTH_READY);
       } else if (now - _stateEnterMs > 500) {
         // No captive portal detected - verify internet before going online

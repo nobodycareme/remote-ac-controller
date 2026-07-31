@@ -1,25 +1,54 @@
 #pragma once
+#include "config/campus_config.h"
 /*
- * Campus portal TLS certificate pin (public information only — no secrets).
+ * Campus portal TLS certificate pin.
  *
- * Host:        portal.campus.example.edu  (Xidian University campus network portal)
- * Extracted:   2026-07-17 via system-trusted TLS from a PC on the open internet
- *              (CONNECT tunnel through the local HTTP proxy; the leaf cert is
- *               issued by a public CA and is NOT a proxy re-signed certificate).
- * Leaf cert:   CN=*.campus.example.edu, O=西安电子科技大学, C=CN, ST=陕西省, L=西安市
- * Issuer:      GlobalSign RSA OV SSL CA 2018  (public CA, NOT a MITM proxy CA)
- * Verify:      "Verify return code: 0 (ok)" — system trust chain validated.
+ * PUBLIC INFORMATION ONLY. A server certificate — and therefore its SHA-1
+ * fingerprint, subject, issuer and validity window — is presented to every
+ * client that opens a TLS connection to the portal. None of it is a secret and
+ * none of it is a credential.
  *
- * The ESP8266 uses BearSSL setFingerprint(CAMPUS_CERT_SHA1). If the server
- * ever presents a different leaf certificate, the handshake fails and campus
- * login is aborted with TLS_PIN_MISMATCH (credentials are NEVER sent).
+ * SOURCING
+ *   A pin describes one campus, so it is supplied by the campus profile
+ *   selected through CAMPUS_PROFILE_HEADER (see config/campus_config.h), or by
+ *   an external config.h / globals.h. This header only supplies the defaults.
  *
- * ROTATION: when NotAfter (2026-11-17) approaches, re-extract the certificate
- * (docs/03_协议与接口/TLS证书固定与更新.md) and update CAMPUS_CERT_SHA1 below.
- * Do NOT auto-trust a changed certificate.
+ * FAIL-CLOSED DEFAULT
+ *   With no pin supplied, CAMPUS_CERT_SHA1 is the empty string.
+ *   CampusAuthVendor::tlsPinValid() requires at least 40 characters, so an
+ *   unpinned build REFUSES to authenticate: credentials are never transmitted
+ *   over a channel whose server identity was not verified. There is deliberately
+ *   no fallback to setInsecure().
+ *
+ * ENFORCEMENT
+ *   The ESP8266 calls BearSSL::WiFiClientSecure::setFingerprint(CAMPUS_CERT_SHA1)
+ *   before the portal handshake. If the server presents any other leaf
+ *   certificate the handshake fails and login aborts with TLS_PIN_MISMATCH.
+ *
+ * ROTATION
+ *   A pin expires with the certificate it identifies. Re-extract it over a
+ *   trusted channel before CAMPUS_CERT_NOT_AFTER and update the profile — never
+ *   auto-trust a certificate that changed:
+ *
+ *     openssl s_client -connect <host>:443 -servername <host> -showcerts \
+ *       </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha1 -dates
+ *
+ *   "Verify return code: 0 (ok)" must appear in the s_client output, otherwise
+ *   the fingerprint may belong to an interception proxy rather than the portal.
  */
-#define CAMPUS_CERT_SHA1        "F4:BD:59:32:8E:77:8C:CB:AD:6E:AE:85:86:59:36:FD:0D:28:47:F9"
-#define CAMPUS_CERT_NOT_BEFORE  "2025-10-16"
-#define CAMPUS_CERT_NOT_AFTER   "2026-11-17"
-#define CAMPUS_CERT_ISSUER      "GlobalSign RSA OV SSL CA 2018"
-#define CAMPUS_CERT_SUBJECT     "CN=*.campus.example.edu, O=Xidian University"
+
+#ifndef CAMPUS_CERT_SHA1
+#  define CAMPUS_CERT_SHA1       ""
+#endif
+#ifndef CAMPUS_CERT_NOT_BEFORE
+#  define CAMPUS_CERT_NOT_BEFORE ""
+#endif
+#ifndef CAMPUS_CERT_NOT_AFTER
+#  define CAMPUS_CERT_NOT_AFTER  ""
+#endif
+#ifndef CAMPUS_CERT_ISSUER
+#  define CAMPUS_CERT_ISSUER     ""
+#endif
+#ifndef CAMPUS_CERT_SUBJECT
+#  define CAMPUS_CERT_SUBJECT    ""
+#endif

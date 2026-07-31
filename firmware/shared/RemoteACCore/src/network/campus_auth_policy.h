@@ -19,8 +19,8 @@
  * POLICY
  * ------
  *   - Minimum spacing between two attempts: MIN_ATTEMPT_INTERVAL_MS.
- *   - Consecutive failures escalate the wait: 30s, 60s, 120s, 300s, then 600s
- *     for every further failure (no unbounded growth, no silent give-up).
+ *   - Consecutive failures escalate the wait: 30s, 60s, 120s, then 120s for
+ *     every further failure (no unbounded growth, no silent give-up).
  *   - No more than MAX_ATTEMPTS_PER_WINDOW attempts inside ROLLING_WINDOW_MS.
  *     The window is a simple counter with a reset timestamp: a ring buffer of
  *     timestamps would be more precise and is not worth the RAM here, because
@@ -49,12 +49,16 @@ class CampusAuthPolicy {
   static const uint32_t MIN_ATTEMPT_INTERVAL_MS = 15000UL;        // 15 s
   static const uint32_t ROLLING_WINDOW_MS       = 3600000UL;      // 1 h
   static const uint8_t  MAX_ATTEMPTS_PER_WINDOW = 12;
-  static const uint8_t  BACKOFF_STEPS           = 5;
+  static const uint8_t  BACKOFF_STEPS           = 3;
 
   static uint32_t backoffMs(uint8_t failStreak) {
     // failStreak is 1-based on entry (1 == first failure).
+    // Backoff ladder: 30s -> 60s -> 120s, then 120s caps every further failure.
+    // The 120s ceiling is a project requirement (task §十三.9 / T10): an
+    // unattended device must keep recovering without ever hammering the
+    // campus RADIUS server with a tighter loop.
     static const uint32_t kTable[BACKOFF_STEPS] = {
-        30000UL, 60000UL, 120000UL, 300000UL, 600000UL};
+        30000UL, 60000UL, 120000UL};
     if (failStreak == 0) return 0;
     const uint8_t idx = (failStreak - 1 < BACKOFF_STEPS) ? (uint8_t)(failStreak - 1)
                                                          : (uint8_t)(BACKOFF_STEPS - 1);

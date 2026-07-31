@@ -75,12 +75,24 @@ String PortalDetector::fetchAcIdHttpOnly(const String& url) {
   return "";
 }
 
+// True when the CONFIGURED campus portal host appears in `s`.
+//
+// Guard rationale: with campus auth compiled out, CAMPUS_PORTAL_HOST is the
+// inert empty string, and String::indexOf("") returns 0 — i.e. it matches every
+// page. Without this guard a Wi-Fi-only build would report a captive portal for
+// any HTTP 200 it ever received. sizeof() on a string literal is compile-time,
+// so the check costs nothing at run time.
+static bool mentionsConfiguredPortalHost(const String& s) {
+  if (sizeof(CAMPUS_PORTAL_HOST) <= 1) return false;
+  return s.indexOf(F(CAMPUS_PORTAL_HOST)) >= 0;
+}
+
 // Detect a campus captive-portal marker inside a 200 body.
 // Multiple INDEPENDENT markers joined by OR — never the brittle
-// "must contain BOTH portal.campus.example.edu AND srun_portal" condition (task 一.4).
+// "must contain BOTH the portal host AND srun_portal" condition (task 一.4).
 // The real Xidian captive portal returns HTTP 200 (NOT a 3xx) with a
 // <meta http-equiv="refresh" ... url=srun_portal_pc?ac_id=8> page that does
-// NOT literally contain "portal.campus.example.edu", so that single-string test failed.
+// NOT literally contain the portal host, so that single-string test failed.
 static bool bodyHasCaptiveMarker(const String& body) {
   // meta-refresh to a campus login (the real Xidian intercept shape).
   int mi = body.indexOf(F("http-equiv=\"refresh\""));
@@ -91,19 +103,19 @@ static bool bodyHasCaptiveMarker(const String& body) {
       int q2 = (q1 >= 0) ? body.indexOf('"', q1 + 1) : -1;
       if (q1 >= 0 && q2 > q1) {
         String c = body.substring(q1 + 1, q2);
-        if (c.indexOf(F("srun_portal")) >= 0 || c.indexOf(F("portal.campus.example.edu")) >= 0 ||
+        if (c.indexOf(F("srun_portal")) >= 0 || mentionsConfiguredPortalHost(c) ||
             c.indexOf(F("ac_id="))      >= 0 || c.indexOf(F("index_8")) >= 0) {
           return true;
         }
       }
     }
   }
-  // Auto-submit form action pointing at the campus portal host.
-  if (body.indexOf(F("action=\"https://portal.campus.example.edu")) >= 0) return true;
-  if (body.indexOf(F("action=\"http://portal.campus.example.edu"))  >= 0) return true;
   // Well-known campus portal tokens / hostnames (each independent).
+  // A dedicated "action=\"http(s)://<host>" probe used to sit here; it is
+  // strictly subsumed by the host check below, which matches the host anywhere
+  // in the body, so it was removed rather than duplicated.
   if (body.indexOf(F("srun_portal"))     >= 0) return true;
-  if (body.indexOf(F("portal.campus.example.edu")) >= 0) return true;
+  if (mentionsConfiguredPortalHost(body))      return true;
   if (body.indexOf(F("index_8.html"))    >= 0) return true;
   if (body.indexOf(F("\xe6\xa0\xa1\xe5\x9b\xad\xe7\xbd\x91")) >= 0) return true; // 校园网
   return false;
@@ -137,13 +149,15 @@ bool PortalDetector::classifyResponse(int httpCode, const String& location,
       int ae = body.indexOf('"', a + 8);
       if (ae > a) {
         String act = body.substring(a + 8, ae);
-        if (act.indexOf(F("srun_portal")) >= 0 || act.indexOf(F("portal.campus.example.edu")) >= 0 ||
+        if (act.indexOf(F("srun_portal")) >= 0 || mentionsConfiguredPortalHost(act) ||
             act.indexOf(F("index_8")) >= 0) {
           out.portalUrl = sanitizeLocation(act);
         }
       }
     }
-    if (out.portalUrl.length() == 0) {
+    // Last-resort login URL. Only synthesizable when a portal host is compiled
+    // in; otherwise leave it empty rather than emit "https:///index_8.html".
+    if (out.portalUrl.length() == 0 && sizeof(CAMPUS_PORTAL_HOST) > 1) {
       out.portalUrl = String(F("https://")) + CAMPUS_PORTAL_HOST + F("/index_8.html");
     }
     // Prefer ac_id extracted from the body (covers meta-refresh to
@@ -194,12 +208,14 @@ bool PortalDetector::detect(PortalResult& out) {
 
   if (captive) out = best;
 
-  // ac_id forensics only if not already extracted.
+  // ac_id forensics only if not already extracted, and only when we have a URL
+  // to fetch (an empty portal host yields no synthesizable fallback).
   if (captive && out.acId.length() == 0) {
-    String url = out.portalUrl.length()
-        ? out.portalUrl
-        : String("https://") + CAMPUS_PORTAL_HOST + "/index_8.html";
-    out.acId = fetchAcIdHttpOnly(url);
+    String url = out.portalUrl;
+    if (url.length() == 0 && sizeof(CAMPUS_PORTAL_HOST) > 1) {
+      url = String("https://") + CAMPUS_PORTAL_HOST + "/index_8.html";
+    }
+    if (url.length() > 0) out.acId = fetchAcIdHttpOnly(url);
   }
 
   Serial.println(F("PORTAL_DETECT_RESULT captive=") + String(captive ? "YES" : "NO"));
@@ -230,13 +246,16 @@ bool PortalDetector::unitTest() {
   Fixture fx[] = {
     // 1) 3xx redirect to campus portal gateway with ac_id in query
     { 302, "http://10.254.0.1/srun_portal.php?ac_id=8&url=http://www.baidu.com/", "", true, "8" },
-    // 2) 200 transparent-intercept page with auto-submit form to portal.campus.example.edu
+    // 2) 200 transparent-intercept page with an auto-submit form whose action
+    //    points at a srun portal. Detection here fires on the profile-independent
+    //    "srun_portal" marker, so this fixture behaves identically whether or not
+    //    a campus host is compiled in.
     { 200, "",
-      "<html><body><form action=\"https://portal.campus.example.edu/srun_portal.php\" method=\"post\">"
+      "<html><body><form action=\"https://w.xidian.edu.cn/srun_portal.php\" method=\"post\">"
       "<input type=\"hidden\" name=\"ac_id\" value=\"8\"></form></body></html>", true, "8" },
     // 2b) 200 transparent-intercept with META-REFRESH to srun_portal_pc?ac_id=8
-    //     (THE real Xidian captive-portal shape; body has NO literal
-    //      portal.campus.example.edu — only "srun_portal_pc?ac_id=8"). This is the case
+    //     (THE real Xidian captive-portal shape; the body contains NO portal
+    //      hostname at all — only "srun_portal_pc?ac_id=8"). This is the case
     //     the old single-string test missed (task 一.1 / 一.6).
     { 200, "",
       "<!DOCTYPE html><html><head><meta http-equiv=\"Content-Type\" "

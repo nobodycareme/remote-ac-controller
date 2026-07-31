@@ -68,7 +68,8 @@ private:
   void doNet(const char* arg);
 #endif
 #if ENABLE_CAMPUS_AUTH
-  // Campus-auth subcommands (status / login / logout) — gated on campus auth.
+  // Campus-auth subcommands (status / login / logout / unblock) — gated on
+  // campus auth.
   void doCampus(const char* arg);
 #endif
 
