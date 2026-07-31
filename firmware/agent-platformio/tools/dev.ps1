@@ -74,21 +74,29 @@ Set-Content -Path $LockFile -Value "$PID|$(Get-Date -Format o)" -Encoding ASCII
 #   3. pio / platformio on PATH
 # ------------------------------------------------------------
 function Resolve-PioExecutable {
+    # Each candidate carries the Core directory it belongs to, so that the caller
+    # can pin $env:PLATFORMIO_CORE_DIR to the same installation. Without this the
+    # resolved executable would still fall back to the user-global ~/.platformio
+    # Core and re-download every toolchain package.
     $candidates = @()
+    $addCore = {
+        param($coreDir)
+        foreach ($rel in @('penv\Scripts\pio.exe', 'penv\Scripts\pio.bat', 'penv\Scripts\pio.ps1', 'penv/bin/pio')) {
+            $script:PioCandidates += [pscustomobject]@{
+                Path    = (Join-Path $coreDir $rel)
+                CoreDir = $coreDir
+            }
+        }
+    }
+    $script:PioCandidates = @()
 
     if ($env:PLATFORMIO_CORE_DIR -and (Test-Path $env:PLATFORMIO_CORE_DIR)) {
-        $candidates += (Join-Path $env:PLATFORMIO_CORE_DIR 'penv\Scripts\pio.exe')
-        $candidates += (Join-Path $env:PLATFORMIO_CORE_DIR 'penv\Scripts\pio.bat')
-        $candidates += (Join-Path $env:PLATFORMIO_CORE_DIR 'penv\Scripts\pio.ps1')
-        $candidates += (Join-Path $env:PLATFORMIO_CORE_DIR 'penv/bin/pio')
+        & $addCore (Resolve-Path $env:PLATFORMIO_CORE_DIR).Path
     }
 
     $localCore = Join-Path $FirmwareRoot '.pio-core'
     if (Test-Path $localCore) {
-        $candidates += (Join-Path $localCore 'penv\Scripts\pio.exe')
-        $candidates += (Join-Path $localCore 'penv\Scripts\pio.bat')
-        $candidates += (Join-Path $localCore 'penv\Scripts\pio.ps1')
-        $candidates += (Join-Path $localCore 'penv/bin/pio')
+        & $addCore (Resolve-Path $localCore).Path
     }
 
     # Project-local config: .pio-core-dir in the firmware root (one-line path,
@@ -98,25 +106,26 @@ function Resolve-PioExecutable {
     if (Test-Path $configFile) {
         $corePath = (Get-Content -Path $configFile -TotalCount 1 -Encoding UTF8).Trim()
         if ($corePath -and (Test-Path $corePath)) {
-            $candidates += (Join-Path $corePath 'penv\Scripts\pio.exe')
-            $candidates += (Join-Path $corePath 'penv\Scripts\pio.bat')
-            $candidates += (Join-Path $corePath 'penv\Scripts\pio.ps1')
-            $candidates += (Join-Path $corePath 'penv/bin/pio')
+            & $addCore (Resolve-Path $corePath).Path
         }
     }
 
+    $candidates = $script:PioCandidates
     foreach ($c in $candidates) {
-        if ($c -and (Test-Path $c)) {
-            $resolved = (Resolve-Path $c).Path
+        if ($c.Path -and (Test-Path $c.Path)) {
             # Skip the broken pio.exe stub (some PlatformIO Core installs ship a
             # placeholder that always fails with "not valid for this OS").
-            if ($c -like '*pio.exe') { continue }
+            if ($c.Path -like '*pio.exe') { continue }
+            $resolved = (Resolve-Path $c.Path).Path
             # Validate that the discovered executable actually runs.
             $ErrorActionPreference = 'Continue'
             $null = & $resolved --version 2>&1
             $rc = $LASTEXITCODE
             $ErrorActionPreference = 'Stop'
-            if ($rc -eq 0) { return $resolved }
+            if ($rc -eq 0) {
+                $script:ResolvedPioCoreDir = $c.CoreDir
+                return $resolved
+            }
         }
     }
 
@@ -128,6 +137,7 @@ function Resolve-PioExecutable {
     return $null
 }
 
+$script:ResolvedPioCoreDir = $null
 $PioExe = Resolve-PioExecutable
 
 function Assert-Pio {
@@ -153,6 +163,12 @@ or create a repository-local Core at firmware/.pio-core (git-ignored).
 # ------------------------------------------------------------
 # PlatformIO environment (process-local only; never persisted)
 # ------------------------------------------------------------
+# Pin the Core directory to the installation the executable was discovered in.
+# Otherwise PlatformIO silently falls back to the user-global ~/.platformio and
+# re-downloads every toolchain package on the first build.
+if ($script:ResolvedPioCoreDir) {
+    $env:PLATFORMIO_CORE_DIR = $script:ResolvedPioCoreDir
+}
 $env:PLATFORMIO_BUILD_DIR   = $BuildDir
 $env:PLATFORMIO_LIBDEPS_DIR = $LibDepsDir
 $env:PLATFORMIO_CACHE_DIR   = $CacheDir
@@ -367,6 +383,7 @@ try {
                 Write-Output "PIO_EXE=$PioExe"
                 $v = (& $PioExe --version 2>&1) -join ' '
                 Write-Output "PIO_VERSION=$v"
+                Write-Output "PIO_CORE_DIR=$env:PLATFORMIO_CORE_DIR"
             }
             foreach ($h in $SecretHeaders) {
                 $p = Join-Path (Join-Path $FirmwareRoot 'include') $h
