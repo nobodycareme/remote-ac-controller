@@ -78,7 +78,7 @@ pwsh ./tools/dev.ps1 build -Profile public
 ### Firmware (Arduino IDE)
 
 Open `firmware/arduino-ide/Remote_AC_Controller/Remote_AC_Controller.ino`
-in Arduino IDE and follow [`firmware/arduino-ide/README.md`](../../firmware/arduino-ide/README.md).
+in Arduino IDE and follow [`firmware/arduino-ide/Remote_AC_Controller/README.md`](../../firmware/arduino-ide/Remote_AC_Controller/README.md).
 
 ### Cloud
 

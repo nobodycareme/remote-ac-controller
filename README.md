@@ -74,7 +74,7 @@ pwsh ./tools/dev.ps1 build -Profile public
 
 ### 固件（Arduino IDE 模式）
 
-在 Arduino IDE 中打开 `firmware/arduino-ide/Remote_AC_Controller/Remote_AC_Controller.ino`，按 [`firmware/arduino-ide/README.md`](./firmware/arduino-ide/README.md) 配置开发板与依赖即可编译。
+在 Arduino IDE 中打开 `firmware/arduino-ide/Remote_AC_Controller/Remote_AC_Controller.ino`，按 [`firmware/arduino-ide/Remote_AC_Controller/README.md`](./firmware/arduino-ide/Remote_AC_Controller/README.md) 配置开发板与依赖即可编译。
 
 ### 云端
 
