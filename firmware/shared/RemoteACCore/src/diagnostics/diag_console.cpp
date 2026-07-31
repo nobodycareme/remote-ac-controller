@@ -12,10 +12,12 @@
 #include "ir_module.h"
 #include "network/wifi_manager.h"
 #include "network/portal_detector.h"
+#if ENABLE_CAMPUS_AUTH
 #include "network/campus_auth_vendor.h"
 #include "config/campus_credentials.h"
 #include "config/campus_tls_pin.h"
 #include <srun.h>
+#endif
 
 // ---- Compile-time security policy ----
 #ifndef ENABLE_CONTROLLED_LIVE_AUTH
@@ -63,10 +65,14 @@ void DiagConsole::cmdStatus() {
   Serial.print(F("RESET_REASON=")); Serial.println(ESP.getResetReason());
   Serial.print(F("IR_LEARN_ENABLED=NO\nIR_EMIT_ENABLED=NO\n"));
   Serial.print(F("LOGOUT_ENABLED=NO\n"));
+#if ENABLE_CAMPUS_AUTH
   Serial.print(F("CAMPUS_CREDS_READY="));
   Serial.println(CampusCredentials::ready() ? F("YES") : F("NO"));
   Serial.print(F("REAL_AUTH_REQUEST_ALLOWED="));
   Serial.println(isLiveAuthAllowed() ? F("YES") : F("NO"));
+#else
+  Serial.println(F("CAMPUS_CREDS_READY=DISABLED REAL_AUTH_REQUEST_ALLOWED=BLOCKED_BY_BUILD_POLICY"));
+#endif
 }
 
 void DiagConsole::cmdDhtTest() {
@@ -147,6 +153,7 @@ void DiagConsole::cmdPortalProbe() {
   }
 }
 
+#if ENABLE_CAMPUS_AUTH
 void DiagConsole::cmdTlsPinCheck() {
   Serial.println(F("\n--- TLS PIN CHECK ---"));
   Serial.print(F("CAMPUS_CERT_SHA1=")); Serial.println(CAMPUS_CERT_SHA1);
@@ -201,6 +208,7 @@ void DiagConsole::cmdAuthDryRun() {
   Serial.println(isLiveAuthAllowed() ? F("YES") : F("NO"));
   Serial.println(F("AUTH_DRY_RUN_PASS"));
 }
+#endif  // ENABLE_CAMPUS_AUTH
 
 void DiagConsole::cmdHeapStatus() {
   Serial.println(F("\n--- HEAP STATUS ---"));
@@ -215,6 +223,7 @@ void DiagConsole::cmdResetReason() {
   Serial.println(ESP.getResetReason());
 }
 
+#if ENABLE_CAMPUS_AUTH
 void DiagConsole::cmdLoginConfirmOnce() {
   Serial.println(F("\n--- CAMPUS LOGIN-CONFIRM-ONCE ---"));
   if (!isLiveAuthAllowed()) {
@@ -255,6 +264,7 @@ void DiagConsole::cmdLoginConfirmOnce() {
   }
   Serial.println(F("LOGIN_COMPLETE"));
 }
+#endif  // ENABLE_CAMPUS_AUTH
 
 // ---- RUN_ALL_SAFE: maintains connection, no disconnect between steps ----
 void DiagConsole::cmdRunAllSafe() {
@@ -288,14 +298,20 @@ void DiagConsole::cmdRunAllSafe() {
     cmdPortalProbe();
 
     // 8. TLS pin check (same connection)
+#if ENABLE_CAMPUS_AUTH
     cmdTlsPinCheck();
+#endif
   }
 
   // 9. Srun vector (offline, no WiFi needed)
+#if ENABLE_CAMPUS_AUTH
   cmdSrunVector();
+#endif
 
   // 10. Auth dry run
+#if ENABLE_CAMPUS_AUTH
   cmdAuthDryRun();
+#endif
 
   // 11-12. Heap + reset
   cmdHeapStatus();

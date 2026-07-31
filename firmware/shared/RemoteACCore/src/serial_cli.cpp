@@ -1,14 +1,16 @@
 // ============================================================
 // serial_cli.cpp - CLI implementation (DHT11 + ZJ-IR-V2 IR module)
 // ============================================================
-// Public Arduino build (ENABLE_CLOUD=0): skipped — depends on wifi_manager.
-#if !defined(ENABLE_CLOUD) || ENABLE_CLOUD
+// Always compiled — the CLI is a local feature independent of cloud
+// connectivity. Network commands stay gated behind ENABLE_WIFI/ENABLE_CLOUD.
 #include "serial_cli.h"
 #include <Arduino.h>
+#if ENABLE_IR_LAB_LEARNING_COMMANDS
 #include <Crypto.h>
 #include <base64.h>
+#endif
 #include <cstring>
-#ifdef ENABLE_WIFI
+#if ENABLE_WIFI
 #include <ESP8266WiFi.h>
 #endif
 #include "app_config.h"
@@ -18,9 +20,11 @@
 #include "private_ir_codes/ir_code_registry.h"
 #endif
 
+#if ENABLE_IR_LAB_LEARNING_COMMANDS
 using experimental::crypto::SHA256;
 
 static const uint16_t IR_LAB_EXPORT_RAW_CHUNK = 60;  // multiple of 3 -> concat-safe Base64
+#endif
 
 static bool isLabSessionIdSafe(const char* sid) {
   if (!sid || !*sid) return false;
@@ -50,6 +54,7 @@ static bool nextLabToken(const char*& p, char* out, size_t outSize) {
   return n > 0 && isLabSessionIdSafe(out);
 }
 
+#if ENABLE_IR_LAB_LEARNING_COMMANDS
 static uint16_t base64EncodedLength(uint16_t rawLen) {
   return (uint16_t)(((uint32_t)rawLen + 2U) / 3U * 4U);
 }
@@ -64,6 +69,7 @@ static void sha256Hex(const uint8_t* data, uint16_t len, char out[65]) {
   }
   out[64] = '\0';
 }
+#endif  // ENABLE_IR_LAB_LEARNING_COMMANDS
 
 void Cli::begin() {
   Serial.begin(USB_SERIAL_BAUD);
@@ -81,7 +87,7 @@ void Cli::banner() {
   Serial.println(F(" IR lab JSONL: ir_learn_begin/status/cancel/export/clear (capture-only)"));
 #endif
   Serial.println(F(" ON BOOT no IR command is sent automatically."));
-#ifdef ENABLE_WIFI
+#if ENABLE_WIFI
   Serial.println(F(" Wi-Fi/campus: wifi connect [ssid] | wifi disconnect | wifi scan | wifi status"));
   Serial.println(F("               net check | campus status | campus login | campus logout"));
   Serial.println(F(" Wi-Fi does NOT auto-connect; issue `wifi connect` to associate."));
@@ -114,7 +120,7 @@ void Cli::help() {
   Serial.println(F("  ir_learn_export <session_id>- Base64 export captured AFN=22H frame"));
   Serial.println(F("  ir_learn_clear              - clear temporary captured frame"));
 #endif
-#ifdef ENABLE_WIFI
+#if ENABLE_WIFI
   Serial.println(F("  wifi connect [ssid] - associate with OPEN campus SSID (default stu-xdwlan)"));
   Serial.println(F("  wifi disconnect - drop Wi-Fi association"));
   Serial.println(F("  wifi scan       - list nearby APs (read-only)"));
@@ -165,7 +171,7 @@ void Cli::printStatus() {
   Serial.print(F(" ir_code_sha256="));
   Serial.println(code ? code->sha256 : "");
 #endif
-#ifdef ENABLE_WIFI
+#if ENABLE_WIFI
   if (_net) {
     Serial.print(F(" net_state="));
     Serial.print(WifiManager::stateStr(_net->state()));
@@ -293,7 +299,7 @@ void Cli::dispatch(const char* line) {
       doIrLearnClear(); return;
   }
 
-#ifdef ENABLE_WIFI
+#if ENABLE_WIFI
   if (strcmp(t1, "wifi") == 0)   { doWifi(rest); return; }
   if (strcmp(t1, "net") == 0)    { doNet(rest); return; }
   // login-confirm-once must be checked BEFORE generic campus dispatch
@@ -421,9 +427,11 @@ void Cli::dispatch(const char* line) {
   if (strcmp(t1, "wifi_assoc") == 0)         { DiagConsole::cmdWifiAssoc(); return; }
   if (strcmp(t1, "dhcp_info") == 0)          { DiagConsole::cmdDhcpInfo(); return; }
   if (strcmp(t1, "portal_probe") == 0)       { DiagConsole::cmdPortalProbe(); return; }
+#if ENABLE_CAMPUS_AUTH
   if (strcmp(t1, "tls_pin_check") == 0)      { DiagConsole::cmdTlsPinCheck(); return; }
   if (strcmp(t1, "srun_vector") == 0)        { DiagConsole::cmdSrunVector(); return; }
   if (strcmp(t1, "auth_dry_run") == 0)       { DiagConsole::cmdAuthDryRun(); return; }
+#endif
   if (strcmp(t1, "heap_status") == 0)        { DiagConsole::cmdHeapStatus(); return; }
   if (strcmp(t1, "reset_reason") == 0)       { DiagConsole::cmdResetReason(); return; }
 
@@ -844,6 +852,10 @@ void Cli::doIrLearnBegin(const char* arg) {
 }
 
 void Cli::doIrLearnStatus() {
+#if !ENABLE_IR_LAB_LEARNING_COMMANDS
+  Serial.println(F("{\"event\":\"ir.learn.error\",\"reason\":\"build_policy\"}"));
+  return;
+#else
   uint8_t frame[IR_MAX_FRAME];
   uint16_t n = _ir.extLearnFrame(frame, sizeof(frame));
   char sha[65] = "";
@@ -902,7 +914,7 @@ void Cli::doIrLearnStatus() {
   Serial.print(_irReady ? F("true") : F("false"));
   Serial.print(F(",\"learningProtocolVersion\":\"2\",\"irUartBaud\":"));
   Serial.print(_ir.baud());
-#ifdef ENABLE_WIFI
+#if ENABLE_WIFI
   Serial.print(F(",\"mac\":\""));
   Serial.print(_net ? _net->macMasked() : "");
   Serial.print(F("\",\"deviceMac\":\""));
@@ -910,6 +922,7 @@ void Cli::doIrLearnStatus() {
   Serial.print(F("\""));
 #endif
   Serial.println(F("}"));
+#endif  // ENABLE_IR_LAB_LEARNING_COMMANDS
 }
 
 void Cli::doIrLearnCancel(const char* arg) {
@@ -1104,7 +1117,7 @@ void Cli::pollLearn() {
   // An ack (AFN=01) here is just the enter-learn echo; keep waiting for the report.
 }
 
-#ifdef ENABLE_WIFI
+#if ENABLE_WIFI
 void Cli::doWifi(const char* arg) {
   if (!_net) { Serial.println(F("ERR wifi manager not attached")); return; }
   // Split arg into sub + subarg.
@@ -1240,7 +1253,7 @@ void Cli::handle() {
     pollLabLearn();
   }
 
-#ifdef ENABLE_WIFI
+#if ENABLE_WIFI
   // 3) Wi-Fi state machine tick (no-op until `wifi connect` is issued).
   if (_net) {
     _net->update();
@@ -1285,4 +1298,3 @@ void Cli::handle() {
   }
 #endif
 }
-#endif // ENABLE_CLOUD guard

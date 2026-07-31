@@ -13,8 +13,8 @@
 #include "app_config.h"
 #include "sensors/dht11_sensor.h"
 #include "ir_module.h"
-#if ENABLE_CLOUD
 #include "serial_cli.h"
+#if ENABLE_CLOUD
 #include "network/wifi_manager.h"
 #endif
 
@@ -27,11 +27,12 @@
 #endif
 
 // ---- Global instances ----
-static Dht11Sensor dht(DHT11_DATA_PIN);
-static IrModule    ir;
-static Cli         gCli(dht, ir);
+// Not static: the Arduino IDE sketch references these across translation units.
+Dht11Sensor dht(DHT11_DATA_PIN);
+IrModule    ir;
+Cli         gCli(dht, ir);
 #if ENABLE_CLOUD
-static WifiManager net;
+WifiManager net;
 #endif
 
 uint32_t gBootId = 0;

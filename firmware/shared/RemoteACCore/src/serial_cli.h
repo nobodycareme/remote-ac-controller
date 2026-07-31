@@ -7,7 +7,7 @@
 #include "sensors/dht11_sensor.h"
 #endif
 #include "ir_module.h"
-#ifdef ENABLE_WIFI
+#if ENABLE_WIFI
 #include "network/wifi_manager.h"
 #endif
 
@@ -41,7 +41,7 @@ public:
   void banner();
   void handle();   // call every loop: process input + periodic DHT reads + IR state
 
-#ifdef ENABLE_WIFI
+#if ENABLE_WIFI
   // Attach the Wi-Fi/campus network manager (constructed in main.cpp).
   // Calls are no-ops if never attached. All network commands are gated here.
   void attachNetwork(WifiManager& net) { _net = &net; }
@@ -59,7 +59,7 @@ private:
 #endif
   IrModule& _ir;
 
-#ifdef ENABLE_WIFI
+#if ENABLE_WIFI
   WifiManager* _net = nullptr;
 
   // Network commands (wifi / net / campus)
