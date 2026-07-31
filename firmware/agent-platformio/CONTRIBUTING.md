@@ -1,4 +1,4 @@
-﻿# Contributing to Remote AC Controller
+# Contributing to Remote AC Controller
 
 Thank you for your interest in contributing! This project is a mobile remote AC control system with ESP8266 firmware and a Node.js cloud backend.
 

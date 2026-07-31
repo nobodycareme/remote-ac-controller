@@ -1,4 +1,5 @@
 #pragma once
+#include "config/feature_gates.h"
 /*
  * campus_auth_vendor.h - thin C++ wrapper around the vendored srun-c client.
  *

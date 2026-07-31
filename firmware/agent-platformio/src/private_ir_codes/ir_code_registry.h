@@ -2,6 +2,7 @@
 // Maps a short codeId (sent by the web/backend) to a generated PROGMEM 22H frame.
 // Only compiled when ENABLE_IR_MUTATING_COMMANDS=1 (private / ir-lab build).
 #pragma once
+#include "config/feature_gates.h"
 
 #include <Arduino.h>
 

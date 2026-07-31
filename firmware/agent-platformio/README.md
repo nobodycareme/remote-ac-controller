@@ -1,84 +1,88 @@
-# Remote AC Controller — PlatformIO Build
+**简体中文** | [English](./README.en.md)
 
-PlatformIO-based firmware for the **Remote AC Controller** (ESP8266 NodeMCU v2).
+# Remote AC Controller — PlatformIO 构建指南
 
-## Project Structure
+**Remote AC Controller**（ESP8266 NodeMCU v2）的 PlatformIO 固件构建说明。
+
+---
+
+## 项目结构
 
 ```
 agent-platformio/
-├── platformio.ini          # PlatformIO configuration
+├── platformio.ini          # PlatformIO 配置
 ├── src/
-│   ├── main.cpp            # Thin entry point (→ appSetup/appLoop)
-│   └── private_ir_codes/   # Private IR code data (PlatformIO only)
+│   ├── main.cpp            # 薄入口层（→ appSetup/appLoop）
+│   └── private_ir_codes/   # 私有红外码数据（仅 PlatformIO 模式）
 ├── include/
-│   └── cloud_secrets.example.h  # MQTT credential template
-├── lib/                    # PlatformIO-managed libraries
-├── test/                   # Unit tests
+│   └── cloud_secrets.example.h  # MQTT 凭据模板
+├── lib/                    # PlatformIO 管理的库
+├── test/                   # 单元测试
 ├── tools/
-│   └── dev.ps1             # Main development entry point
-└── docs/                   # Project documentation
+│   └── dev.ps1             # 主要开发入口脚本
+└── docs/                   # 项目文档
 ```
 
-The shared business logic lives in `../shared/RemoteACCore/` and is compiled as a local library.
+共享业务逻辑位于 `../shared/RemoteACCore/`，作为本地库编译。
 
-## Quick Start
+## 快速开始
 
-### Prerequisites
+### 先决条件
 
-- [PlatformIO IDE](https://platformio.org/install) (VS Code extension or CLI)
-- ESP8266 board support (auto-installed by PlatformIO)
+- [PlatformIO IDE](https://platformio.org/install)（VS Code 扩展或 CLI）
+- ESP8266 开发板支持（PlatformIO 自动安装）
 
-### Building
+### 构建
 
-DO NOT run `pio` directly. Use the development script:
+**请勿直接运行 `pio`**。请使用开发脚本：
 
 ```powershell
-# Public build (safe defaults, no credentials)
+# 公开构建（安全默认，无凭据）
 .\tools\dev.ps1
 
-# With cloud features (requires cloud_secrets.h)
+# 启用云功能（需 cloud_secrets.h）
 .\tools\dev.ps1 -WithCloud
 ```
 
-### Configuration
+### 配置
 
-1. **Cloud credentials** (for MQTT connectivity):
+1. **云凭据**（MQTT 连接）：
    ```bash
    cp include/cloud_secrets.example.h include/cloud_secrets.h
-   # Edit include/cloud_secrets.h with your MQTT broker details
+   # 编辑 include/cloud_secrets.h 填入你的 MQTT Broker 信息
    ```
 
-2. **Campus network** (for srun authentication):
-   Edit `shared/RemoteACCore/src/config/campus_credentials.h`
+2. **校园网认证**（srun 认证）：
+   编辑 `shared/RemoteACCore/src/config/campus_credentials.h`
 
-3. **Private IR codes**:
-   IR mutating commands require `src/private_ir_codes/`. Generated codes go in `src/private_ir_codes/generated/`.
+3. **私有红外码**：
+   红外发射命令需要 `src/private_ir_codes/` 目录。生成的红外码放入 `src/private_ir_codes/generated/`。
 
-### Building Profiles
+### 构建配置
 
-| Profile    | ENABLE_CLOUD | ENABLE_IR_MUTATING | Use Case              |
+| Profile    | ENABLE_CLOUD | ENABLE_IR_MUTATING | 用途                  |
 |-----------|-------------|-------------------|-----------------------|
-| Public    | 1           | 0                 | Safe default build    |
-| Private   | 1           | 1                 | IR lab / full feature |
+| Public    | 1           | 0                 | 安全默认构建          |
+| Private   | 1           | 1                 | 红外实验室 / 全功能   |
 
-Set via `dev.ps1 -Profile Public|Private`.
+通过 `dev.ps1 -Profile Public|Private` 设置。
 
-### Upload
+### 上传
 
 ```powershell
 .\tools\dev.ps1 -Upload
 ```
 
-## Testing
+## 测试
 
 ```bash
 pio test -e nodemcuv2
 ```
 
-## Dependencies
+## 依赖
 
-Libraries in `lib/` are vendored. PlatformIO will auto-download missing dependencies.
+`lib/` 中的库为 vendored 方式管理。PlatformIO 会自动下载缺失的依赖项。
 
-## Version
+## 版本
 
-See `VERSION` file. Current: v0.4.0-cloud-foundation.
+参见 `VERSION` 文件。当前版本：v0.4.0-cloud-foundation。

@@ -3,8 +3,13 @@
 // ============================================================
 #pragma once
 
+// Compile-time feature switches (defaults, dependency rules, illegal-combo
+// diagnostics). Must be first: everything below and every consumer of this
+// header may test ENABLE_* macros.
+#include "config/feature_gates.h"
+
 // Firmware version (printed at boot, used by `version` CLI command)
-#define FIRMWARE_VERSION "v0.4.0-cloud-foundation"
+#define FIRMWARE_VERSION "v1.2.0"
 
 // USB debug serial baud rate (NOT the IR module baud rate)
 #define USB_SERIAL_BAUD 115200
@@ -16,10 +21,6 @@
 // Max characters for a single CLI input line (hard cap, no growth).
 // IR Learning Studio session ids include a timestamp plus a full codeId.
 #define CLI_LINE_MAX 192U
-
-#ifndef ENABLE_IR_LAB_LEARNING_COMMANDS
-#define ENABLE_IR_LAB_LEARNING_COMMANDS 0
-#endif
 
 // IR module addresses (v0.4.0 — separated per manufacturer spec):
 //   IR_MODULE_ADDRESS   = 0x00  — confirmed module address (downlink for mutating commands)

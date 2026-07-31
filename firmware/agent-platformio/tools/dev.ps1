@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 # ============================================================
 # dev.ps1 - Remote AC Controller firmware development entry (public edition)
 #
@@ -10,8 +10,9 @@
 # Portable by design: the project root is derived from this script's location,
 # so the repository can be cloned anywhere.
 #
-# Only the `public` profile exists in the public repository. Private profiles
-# (real credentials, real IR emission) are intentionally not shipped here.
+# The public repository ships the `public` profile plus two open example
+# profiles. Private profiles (real credentials, real IR emission) are
+# intentionally not shipped here.
 # ============================================================
 
 param(
@@ -20,7 +21,7 @@ param(
     [string]$Command = 'help',
 
     [Parameter()]
-    [ValidateSet('public')]
+    [ValidateSet('public', 'local-campus-example', 'public-cloud-example')]
     [string]$Profile = 'public',
 
     [Parameter()]
@@ -178,7 +179,30 @@ $env:PYTHONUNBUFFERED = '1'
 
 # Public profile: cloud module is compiled, but credentials, live campus auth
 # and IR-mutating commands are all disabled at compile time.
-$env:BUILD_FLAGS_PUBLIC  = '-DENABLE_CONTROLLED_LIVE_AUTH=0 -DENABLE_IR_MUTATING_COMMANDS=0 -DENABLE_CLOUD=1 -DENABLE_CLOUD_CREDENTIALS=0'
+switch ($Profile) {
+  'local-campus-example' {
+    # Open example of the Xidian campus profile: compiles campus auth + srun-c,
+    # but live auth is OFF (no credentials) and IR emission is disabled. The
+    # profile is the public, non-secret Xidian example (profiles/xidian.example.h).
+    # ENABLE_AUTO_CAMPUS_AUTH stays 0 in every PUBLIC build (v1.2.0 feature-gate
+    # rule): unattended auth is only legal in a PRIVATE build with
+    # ENABLE_CONTROLLED_LIVE_AUTH=1, and feature_gates.h turns the AUTO=1+LIVE=0
+    # combination into a hard #error rather than a silent no-op.
+    # CAMPUS_PROFILE_HEADER is consumed by `#include CAMPUS_PROFILE_HEADER`, so
+    # the macro body must still carry its double quotes when it reaches the
+    # compiler. PlatformIO strips one level of quoting from build_flags, hence
+    # the backslash escapes (the documented -D NAME=\"VALUE\" idiom). Without
+    # them the preprocessor reports: #include expects "FILENAME" or <FILENAME>.
+    $env:BUILD_FLAGS_PUBLIC  = '-DENABLE_CONTROLLED_LIVE_AUTH=0 -DENABLE_IR_MUTATING_COMMANDS=0 -DENABLE_CLOUD=0 -DENABLE_CLOUD_CREDENTIALS=0 -DENABLE_CAMPUS_AUTH=1 -DENABLE_AUTO_CAMPUS_AUTH=0 -DCAMPUS_PROFILE_HEADER=\"profiles/xidian.example.h\"'
+  }
+  'public-cloud-example' {
+    $env:BUILD_FLAGS_PUBLIC  = '-DENABLE_CONTROLLED_LIVE_AUTH=0 -DENABLE_IR_MUTATING_COMMANDS=0 -DENABLE_CLOUD=1 -DENABLE_CLOUD_CREDENTIALS=0'
+  }
+  default {
+    # public: cloud module compiled, credentials/live campus auth/IR-mutating off.
+    $env:BUILD_FLAGS_PUBLIC  = '-DENABLE_CONTROLLED_LIVE_AUTH=0 -DENABLE_IR_MUTATING_COMMANDS=0 -DENABLE_CLOUD=1 -DENABLE_CLOUD_CREDENTIALS=0'
+  }
+}
 $env:BUILD_FLAGS_PRIVATE = ''
 
 # ------------------------------------------------------------
@@ -510,9 +534,17 @@ try {
             Write-Output '  monitor       Open the serial monitor'
             Write-Output '  help          Show this message'
             Write-Output ''
-            Write-Output 'Profiles:'
-            Write-Output '  public        The only profile in the public repository. No credentials are'
-            Write-Output '                compiled in, live campus auth is off, IR emission is disabled.'
+            Write-Output 'Profiles (public repository only - none of them compile in credentials):'
+            Write-Output '  public                  Default. Cloud transport on, credentials off, live campus'
+            Write-Output '                          auth off, IR emission disabled.'
+            Write-Output '  local-campus-example    Campus auth compiled against the public Xidian example'
+            Write-Output '                          profile (profiles/xidian.example.h). Cloud off, live auth'
+            Write-Output '                          off, IR emission disabled. Compile-only demonstration.'
+            Write-Output '  public-cloud-example    Same as public, kept as an explicit name for the cloud'
+            Write-Output '                          transport matrix entry.'
+            Write-Output ''
+            Write-Output 'All profiles keep ENABLE_CONTROLLED_LIVE_AUTH=0 and ENABLE_IR_MUTATING_COMMANDS=0.'
+            Write-Output 'Real credentials belong in an untracked campus_secrets.h, never in this repository.'
             Write-Output ''
             Write-Output 'Never call pio/platformio/esptool directly - this script owns the build'
             Write-Output 'environment and the safety gates.'

@@ -1,17 +1,26 @@
 #!/usr/bin/env node
 // Backend functional verification
+// Credentials MUST come from the environment — never hardcoded (consolidated
+// from the split remote-ac-cloud repository's env-var based verification).
 const mqtt = require('mqtt');
 const http = require('http');
 const { WebSocket } = require('ws'); // Note: may need to install 'ws' package
 
-const BACKEND_URL = 'http://127.0.0.1:3100';
-const MQTT_HOST = '127.0.0.1';
-const MQTT_PORT = 1883;
+const BACKEND_URL = process.env.BACKEND_URL || 'http://127.0.0.1:3100';
+const MQTT_HOST = process.env.MQTT_HOST || '127.0.0.1';
+const MQTT_PORT = Number(process.env.MQTT_PORT || 1883);
 
-const DEV_USER = 'remote-ac-device';
-const DEV_PASS = 'CHANGE_ME';
-const BACKEND_USER = 'remote-ac-backend';
-const BACKEND_PASS = 'CHANGE_ME';
+// MUST be provided via environment — never hardcoded.
+const DEV_USER = process.env.MQTT_DEVICE_USERNAME || 'remote-ac-device';
+const DEV_PASS = process.env.MQTT_DEVICE_PASSWORD || '';
+const BACKEND_USER = process.env.MQTT_BACKEND_USERNAME || 'remote-ac-backend';
+const BACKEND_PASS = process.env.MQTT_BACKEND_PASSWORD || '';
+
+if (!DEV_PASS || !BACKEND_PASS) {
+  console.error('ERROR: MQTT credentials not set via environment variables.');
+  console.error('Required: MQTT_DEVICE_PASSWORD, MQTT_BACKEND_PASSWORD (and, if non-default usernames are used, MQTT_DEVICE_USERNAME / MQTT_BACKEND_USERNAME).');
+  process.exit(1);
+}
 
 const results = [];
 let pass = 0, fail = 0;

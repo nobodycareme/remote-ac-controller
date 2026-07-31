@@ -1,6 +1,17 @@
 # Arduino CLI / IDE 2.x project configuration
 # https://arduino.github.io/arduino-cli/latest/sketch-project-file/
 
+# This file intentionally contains ONLY officially-supported sketch-project
+# settings. Feature switches (ENABLE_*) are NOT configured here.
+#
+# Global build options are provided by the ESP8266 core's "Global Build Options"
+# mechanism: copy
+#   Remote_AC_Controller.ino.globals.example.h -> Remote_AC_Controller.ino.globals.h
+# (the latter is git-ignored) and the ESP8266 prebuild step force-includes that
+# file into EVERY compilation unit automatically. No `-include` flag, no
+# sketch.yaml build flags, and no editing of this file are required to enable
+# features. See README.md for the full workflow.
+
 profiles:
   default:
     fqbn: esp8266:esp8266:nodemcuv2

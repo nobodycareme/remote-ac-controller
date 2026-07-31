@@ -91,10 +91,17 @@ void Cli::banner() {
 #if ENABLE_WIFI
   Serial.println(F(" Wi-Fi: wifi connect [ssid] | wifi disconnect | wifi scan | wifi status"));
   Serial.println(F("        net check - captive-portal + internet reachability probe"));
+#if WIFI_AUTOCONNECT_ON_BOOT
+  Serial.println(F(" Wi-Fi auto-connects on boot (cloud and/or auto campus auth build)."));
+#else
   Serial.println(F(" Wi-Fi does NOT auto-connect; issue `wifi connect` to associate."));
 #endif
+#endif
 #if ENABLE_CAMPUS_AUTH
-  Serial.println(F(" Campus auth: campus status | campus login | campus logout"));
+  Serial.println(F(" Campus auth: campus status | campus login | campus logout | campus unblock"));
+#if ENABLE_AUTO_CAMPUS_AUTH
+  Serial.println(F(" Campus auth is AUTOMATIC (rate-limited); manual login stays available."));
+#endif
 #endif
   Serial.println(F("=========================================="));
   Serial.println(F("APP_BOOT_OK"));
@@ -135,6 +142,7 @@ void Cli::help() {
   Serial.println(F("  campus status   - auth state (AUTH_BLOCKED if no creds)"));
   Serial.println(F("  campus login    - attempt srun login (needs creds in secrets.h)"));
   Serial.println(F("  campus logout   - best-effort srun logout"));
+  Serial.println(F("  campus unblock  - clear a latched hard block, re-detect portal"));
 #endif
   Serial.println(F("NOTE: learn/send require your explicit action & confirmation."));
 }
@@ -1220,7 +1228,14 @@ void Cli::doCampus(const char* arg) {
   }
   if (strcmp(arg, "login") == 0)  { _net->campusLogin(); return; }
   if (strcmp(arg, "logout") == 0) { _net->campusLogout(); return; }
-  Serial.println(F("ERR unknown campus subcommand (use: status|login|logout)"));
+  // Operator escape hatch for a latched hard block (BAD_CREDENTIALS /
+  // WRONG_DOMAIN / TLS_PIN_MISMATCH). `campus login` also clears the latch, but
+  // only when credentials are compiled in; without them it returns early, which
+  // would leave a blocked device with no software recovery path at all.
+  // `campus unblock` re-enters the pipeline at portal detection instead of
+  // forcing an immediate login attempt.
+  if (strcmp(arg, "unblock") == 0) { _net->campusUnblock(); return; }
+  Serial.println(F("ERR unknown campus subcommand (use: status|login|logout|unblock)"));
 }
 #endif  // ENABLE_CAMPUS_AUTH
 

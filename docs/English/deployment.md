@@ -206,14 +206,20 @@ including scheme and with no trailing slash. A mismatch produces
 On your build machine:
 
 ```bash
-cd firmware
-cp include/secrets.example.h include/secrets.h
-cp include/config.example.h  include/config_local.h
+cd firmware/agent-platformio
+cp include/cloud_secrets.example.h include/cloud_secrets.h   # MQTT host, account, CA cert
+cp include/secrets.example.h       include/secrets.h         # campus account (controlled live auth only)
 ```
 
-Fill in Wi-Fi credentials, MQTT host and account, and embed the CA
-certificate. Both files are git-ignored, and CI fails if they are ever
-committed.
+Fill in the MQTT host, port, device account/password and embed the CA
+certificate in `cloud_secrets.h`. Create `secrets.h` only if you genuinely need
+controlled live campus authentication (`ENABLE_CONTROLLED_LIVE_AUTH=1`). Both
+files are git-ignored, and CI fails if they are ever committed.
+
+> The Wi-Fi SSID is **not** configured in either file. The firmware is
+> offline-first: it does not associate at boot; use the serial command
+> `wifi connect <ssid>` for an open SSID. Campus parameters come from the
+> profile header selected via `CAMPUS_PROFILE_HEADER`.
 
 ```powershell
 ./tools/dev.ps1 verify

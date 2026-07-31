@@ -27,7 +27,20 @@
 #define ENABLE_IR_MUTATING_COMMANDS 0
 #endif
 
-#define WIFI_SSID "stu-xdwlan"
+// ---- Diagnostic-console Wi-Fi target -------------------------------------
+// There is deliberately NO hard-coded campus SSID here. When campus auth is
+// compiled in, the SSID comes from the campus profile the build selected;
+// otherwise the operator supplies DIAG_WIFI_SSID (globals.h or -D). A build
+// that configured neither reports WIFI_SSID_NOT_CONFIGURED instead of silently
+// associating with somebody else's network.
+#ifndef DIAG_WIFI_SSID
+#  if ENABLE_CAMPUS_AUTH && defined(CAMPUS_SSID)
+#    define DIAG_WIFI_SSID CAMPUS_SSID
+#  else
+#    define DIAG_WIFI_SSID ""
+#  endif
+#endif
+#define WIFI_SSID DIAG_WIFI_SSID
 
 extern Dht11Sensor dht;
 extern IrModule ir;
@@ -112,6 +125,10 @@ void DiagConsole::cmdWifiScan() {
 
 static bool ensureWifiConnected(unsigned long timeoutMs=30000UL) {
   if (WiFi.status()==WL_CONNECTED) return true;
+  if (WIFI_SSID[0] == '\0') {
+    Serial.println(F("WIFI_SSID_NOT_CONFIGURED"));
+    return false;
+  }
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID);
   unsigned long start=millis();
@@ -195,7 +212,8 @@ void DiagConsole::cmdAuthDryRun() {
   Serial.print(F("SSID=" WIFI_SSID "\n"));
   Serial.print(F("PORTAL_HOST=")); Serial.println(CAMPUS_PORTAL_HOST);
   Serial.print(F("AC_ID=")); Serial.println(CAMPUS_AC_ID);
-  Serial.println(F("DOMAIN=(empty)"));
+  Serial.print(F("DOMAIN="));
+  Serial.println(CAMPUS_DOMAIN[0] ? CAMPUS_DOMAIN : "(empty)");
   Serial.println(F("OPERATOR_SUFFIX=NONE"));
   Serial.println(F("SRUN_N=200 SRUN_TYPE=1"));
   Serial.print(F("CAMPUS_CERT_SHA1_CONFIGURED="));
@@ -236,6 +254,9 @@ void DiagConsole::cmdLoginConfirmOnce() {
 
   // Connect via raw WiFi (proven reliable)
   if (WiFi.status() != WL_CONNECTED) {
+    if (WIFI_SSID[0] == '\0') {
+      Serial.println(F("WIFI_SSID_NOT_CONFIGURED")); return;
+    }
     Serial.print(F("WIFI_CONNECT "));
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID);

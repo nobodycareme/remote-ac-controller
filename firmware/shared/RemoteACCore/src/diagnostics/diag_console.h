@@ -4,6 +4,7 @@
 //          provides only the implementation functions.
 // ============================================================
 #pragma once
+#include "config/feature_gates.h"
 #include <Arduino.h>
 
 struct DiagResult {

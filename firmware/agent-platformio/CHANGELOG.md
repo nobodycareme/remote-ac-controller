@@ -1,4 +1,4 @@
-﻿# Changelog
+# Changelog
 
 ## v0.4.0-cloud-foundation (2026-07-18)
 ### Security hardening

@@ -2,6 +2,7 @@
 // serial_cli.h - USB Serial text command interface
 // ============================================================
 #pragma once
+#include "config/feature_gates.h"
 #include <Arduino.h>
 #if !defined(DISABLE_DHT)
 #include "sensors/dht11_sensor.h"
@@ -67,7 +68,8 @@ private:
   void doNet(const char* arg);
 #endif
 #if ENABLE_CAMPUS_AUTH
-  // Campus-auth subcommands (status / login / logout) — gated on campus auth.
+  // Campus-auth subcommands (status / login / logout / unblock) — gated on
+  // campus auth.
   void doCampus(const char* arg);
 #endif
 

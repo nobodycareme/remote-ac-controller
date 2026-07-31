@@ -1,4 +1,4 @@
-﻿# Remote AC Cloud
+# Remote AC Cloud
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D24-green.svg)](https://nodejs.org/)

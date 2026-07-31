@@ -28,13 +28,33 @@ firmware/*.map
 firmware/*.hex
 firmware/firmware.*.bin
 firmware/build/
-firmware/include/secrets.h
-firmware/include/cloud_secrets.h
-firmware/include/config_local.h
-# Arduino IDE local build config (copied from config.example.h, may hold credentials)
+# Defensive guards: the real PlatformIO secret headers live under
+# firmware/agent-platformio/include/ and are covered by that project's own
+# .gitignore; these wildcards catch stray copies anywhere under firmware/.
+firmware/**/secrets.h
+firmware/**/cloud_secrets.h
+# Real campus profile / secret files (commit *.example.h, ignore the real ones)
+firmware/shared/RemoteACCore/src/config/campus_secrets.h
+# Arduino IDE puts cloud credentials on the shared library's include path
+firmware/shared/RemoteACCore/src/cloud_secrets.h
+firmware/shared/RemoteACCore/src/secrets.h
+firmware/shared/RemoteACCore/src/config/profiles/*
+!firmware/shared/RemoteACCore/src/config/profiles/*.example.h
+firmware/arduino-ide/**/profiles/*
+!firmware/arduino-ide/**/profiles/*.example.h
+# Legacy Arduino IDE local config (the config.h workflow was removed in v1.0.0;
+# the rule stays as a guard so a stray local copy can never be committed)
 firmware/arduino-ide/**/config.h
+# Arduino IDE global feature-switch header (copy of .example.h, may enable live auth)
+firmware/arduino-ide/**/Remote_AC_Controller.ino.globals.h
 # Arduino IDE compile output (arduino-cli --output-dir)
 firmware/arduino-ide/**/build/
+# Generated Arduino-layout srun-c library (tools/prepare_srun_arduino_library.py
+# writes it to a scratch/sketchbook directory outside the repository). These
+# guards make it impossible for a stray copy to become a second authority.
+**/srun-c-arduino/
+srun-c-generated/
+arduino-libraries-tmp/
 # PlatformIO local work dir (build/, libdeps/, cache/, logs/)
 firmware/agent-platformio/.build/
 firmware/.build/

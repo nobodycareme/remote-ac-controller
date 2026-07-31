@@ -1,3 +1,5 @@
+**简体中文** | [English](./README.en.md)
+
 # PCB 设计文档
 
 ## 概述

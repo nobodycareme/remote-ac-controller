@@ -1,4 +1,4 @@
-[简体中文](../中文/文档导航.md) | **English**
+[简体中文](../../README.md) | **English**
 
 <p align="center">
   <img src="../../docs/assets/logo.svg" alt="Remote AC Controller" width="240" />
@@ -30,7 +30,7 @@ frontend, and PCB design files are all open source.
   and mobile.
 - **11 preset discrete IR states** — covering off, cool, dry, heat, and common
   temperature/fan/swing combinations, each independently enabled. No real AC IR
-  frames are included; use the [IR learner tool](../../tools/ir-simple-learner/README.md)
+  frames are included; use the [IR learner tool](../../tools/ir-simple-learner/README.en.md)
   to capture your own.
 - **DHT11 temperature & humidity monitoring** — sensor on GPIO5.
 - **Scheduling & dual-threshold temperature automation** — weekly cron-style
@@ -39,6 +39,11 @@ frontend, and PCB design files are all open source.
   persistent trusted sessions and device fingerprinting.
 - **MQTT/TLS secure device link** — encrypted MQTT between ESP8266 and the
   cloud backend, with scoped credentials.
+- **Automatic Xidian campus-network authentication on ESP8266** — After joining
+  the campus open SSID, the device can automatically obtain DHCP configuration,
+  detect the captive portal, perform Srun authentication, verify Internet access,
+  and then continue to cloud connectivity. Authentication credentials remain in
+  local ignored files. **Disabled by default** — requires explicit user configuration.
 
 ---
 
@@ -50,6 +55,11 @@ graph LR
     B -->|MQTT TLS| C[🌐 MQTT Broker<br/>Mosquitto]
     C -->|MQTT TLS| D[🔌 ESP8266]
     D -->|IR| E[❄️ AC]
+
+    D -->|Campus Auth| P[📡 Campus Wi-Fi]
+    P -->|DHCP| Q[🌐 Captive Portal]
+    Q -->|Srun Auth| R[🌍 Internet]
+    R -->|After Auth| C
 
     B --> F[(SQLite)]
     B --> G[⏰ Scheduling]
@@ -78,7 +88,7 @@ pwsh ./tools/dev.ps1 build -Profile public
 ### Firmware (Arduino IDE)
 
 Open `firmware/arduino-ide/Remote_AC_Controller/Remote_AC_Controller.ino`
-in Arduino IDE and follow [`firmware/arduino-ide/Remote_AC_Controller/README.md`](../../firmware/arduino-ide/Remote_AC_Controller/README.md).
+in Arduino IDE and follow [`firmware/arduino-ide/Remote_AC_Controller/README.en.md`](../../firmware/arduino-ide/Remote_AC_Controller/README.en.md).
 
 ### Cloud
 
@@ -119,9 +129,10 @@ developer can use it.
 | PCB source (EasyEDA Pro) | [`hardware/pcb/source/`](../../hardware/pcb/source/) |
 | Gerber fabrication files | [`hardware/pcb/fabrication/gerber/`](../../hardware/pcb/fabrication/gerber/) |
 | BOM & pick-and-place | [`hardware/pcb/fabrication/`](../../hardware/pcb/fabrication/) |
-| PCB documentation | [`hardware/pcb/README.md`](../../hardware/pcb/README.md) |
+| PCB documentation | [`hardware/pcb/README.en.md`](../../hardware/pcb/README.en.md) |
 | Fabrication ZIP (JLCPCB pack) | [v1.0.0 Release](https://github.com/nobodycareme/remote-ac-controller/releases) |
-| Wiring guide | [`docs/中文/接线说明.md`](../中文/接线说明.md) |
+| Wiring guide | [`docs/English/wiring.md`](./wiring.md) |
+| Hardware guide | [`docs/English/hardware.md`](./hardware.md) |
 
 PCB design and fabrication files are released under Apache-2.0. The
 fabrication ZIP includes complete Gerber, drill, and pick-and-place files
@@ -138,8 +149,8 @@ USB-UART.
 |---|---|
 | Source code | [`tools/ir-simple-learner/`](../../tools/ir-simple-learner/) |
 | Windows EXE | [v1.0.0 Release](https://github.com/nobodycareme/remote-ac-controller/releases) |
-| Usage guide | [`tools/ir-simple-learner/README.md`](../../tools/ir-simple-learner/README.md) |
-| IR learning workflow | [`docs/中文/红外学习.md`](../中文/红外学习.md) |
+| Usage guide | [`tools/ir-simple-learner/README.en.md`](../../tools/ir-simple-learner/README.en.md) |
+| IR learning workflow | [`docs/English/ir-learning.md`](./ir-learning.md) |
 
 > The EXE contains no real AC IR frames, no production credentials, and no TLS
 > private keys. Requires a CH9102 USB-UART module connected to an IR receiver.
@@ -164,8 +175,8 @@ remote-ac-controller/
 │   ├── test-all.ps1
 │   └── build-all.ps1
 ├── docs/
-│   ├── 中文/                        # Chinese docs (21)
-│   └── English/                     # English docs (20)
+│   ├── 中文/                        # Chinese docs (24)
+│   └── English/                     # English docs (24)
 ├── .github/workflows/              # CI workflows
 ├── LICENSE  NOTICE  THIRD_PARTY_NOTICES.md
 └── CHANGELOG.md  CONTRIBUTING.md  SECURITY.md  SUPPORT.md
@@ -188,14 +199,18 @@ No Git submodules — a single `git clone` gives you everything.
 
 ## Documentation
 
-Full bilingual documentation in [`docs/`](../):
+Full bilingual documentation in [`docs/`](../) — see the complete
+[English documentation index](./documentation-index.md) or the
+[中文文档导航](documentation-index.md).
 
 | Getting Started | Understanding | Operations |
 |---|---|---|
-| [Architecture](../中文/系统架构.md) | [MQTT Protocol](../中文/MQTT协议.md) | [Deployment](../中文/部署指南.md) |
-| [Hardware](../中文/硬件说明.md) | [Security Model](../中文/安全模型.md) | [Ops Guide](../中文/运维指南.md) |
-| [Wiring](../中文/接线说明.md) | [Scheduling](../中文/定时任务.md) | [Troubleshooting](../中文/故障排查.md) |
-| [IR Learning](../中文/红外学习.md) | [Temp Automation](../中文/温度自动控制.md) | [Backup & Recovery](../中文/备份与恢复.md) |
+| [Architecture](./architecture.md) | [MQTT Protocol](./mqtt-protocol.md) | [Deployment](./deployment.md) |
+| [Hardware](./hardware.md) | [Security Model](./security-model.md) | [Ops Guide](./operations-guide.md) |
+| [Wiring](./wiring.md) | [Scheduling](./scheduling.md) | [Troubleshooting](./troubleshooting.md) |
+| [IR Learning](./ir-learning.md) | [Temp Automation](./temperature-automation.md) | [Backup & Recovery](./backup-and-recovery.md) |
+| [Arduino IDE Guide](./arduino-ide-guide.md) | [Xidian Campus Auth](./xidian-campus-network-authentication.md) | [Resource-Constrained Deployment](./resource-constrained-deployment.md) |
+| [Contributing](./contributing.md) | [Srun Porting Guide](./srun-campus-network-porting-guide.md) | [Support](./support.md) |
 
 ---
 

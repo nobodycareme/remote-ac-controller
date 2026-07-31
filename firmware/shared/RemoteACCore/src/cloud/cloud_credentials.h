@@ -1,4 +1,5 @@
 #pragma once
+#include "config/feature_gates.h"
 /*
  * cloud_credentials.h — isolated MQTT credential interface
  *
