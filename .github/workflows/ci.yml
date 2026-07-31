@@ -156,10 +156,13 @@ jobs:
           - name: wifi-only
             switches: "ENABLE_WIFI=1"
           - name: xidian-campus-example
-            switches: "ENABLE_WIFI=1 ENABLE_CAMPUS_AUTH=1 ENABLE_AUTO_CAMPUS_AUTH=1"
+            # Public example: campus auth compiles (srun-c + policy + epoch) but
+            # unattended auth stays OFF (ENABLE_AUTO_CAMPUS_AUTH=0); feature_gates
+            # hard-errors on AUTO=1 without ENABLE_CONTROLLED_LIVE_AUTH=1.
+            switches: "ENABLE_WIFI=1 ENABLE_CAMPUS_AUTH=1 ENABLE_AUTO_CAMPUS_AUTH=0"
             profile: "profiles/xidian.example.h"
           - name: generic-srun-example
-            switches: "ENABLE_WIFI=1 ENABLE_CAMPUS_AUTH=1 ENABLE_AUTO_CAMPUS_AUTH=1"
+            switches: "ENABLE_WIFI=1 ENABLE_CAMPUS_AUTH=1 ENABLE_AUTO_CAMPUS_AUTH=0"
             profile: "profiles/generic_srun.example.h"
           - name: wifi-cloud-example
             switches: "ENABLE_WIFI=1 ENABLE_CLOUD=1"
@@ -329,9 +332,9 @@ jobs:
             ""              # all defaults (offline build)
             "-DENABLE_WIFI=1"
             "-DENABLE_WIFI=1 -DENABLE_CAMPUS_AUTH=1"
-            "-DENABLE_WIFI=1 -DENABLE_CAMPUS_AUTH=1 -DENABLE_AUTO_CAMPUS_AUTH=1"
+            "-DENABLE_WIFI=1 -DENABLE_CAMPUS_AUTH=1 -DENABLE_AUTO_CAMPUS_AUTH=0"
             "-DENABLE_WIFI=1 -DENABLE_CLOUD=1"
-            "-DENABLE_WIFI=1 -DENABLE_CLOUD=1 -DENABLE_CAMPUS_AUTH=1 -DENABLE_AUTO_CAMPUS_AUTH=1"
+            "-DENABLE_WIFI=1 -DENABLE_CLOUD=1 -DENABLE_CAMPUS_AUTH=1 -DENABLE_AUTO_CAMPUS_AUTH=0"
             "-DENABLE_WIFI=1 -DENABLE_CLOUD=1 -DENABLE_CLOUD_CREDENTIALS=1"
           )
           for s in "${sets[@]}"; do
@@ -350,6 +353,8 @@ jobs:
             "-DENABLE_CLOUD=1"                     # cloud without wifi
             "-DENABLE_CLOUD_CREDENTIALS=1"          # cloud creds without cloud
             "-DENABLE_CONTROLLED_LIVE_AUTH=1"       # live auth without campus
+            "-DENABLE_AUTO_CAMPUS_AUTH=1"           # auto auth without campus/live
+            "-DENABLE_WIFI=1 -DENABLE_CAMPUS_AUTH=1 -DENABLE_AUTO_CAMPUS_AUTH=1"  # auto without live auth
             "-DENABLE_IR_LAB_LEARNING_COMMANDS=1"   # lab IR without IR mutating
           )
           fail=0
@@ -537,7 +542,8 @@ jobs:
           CANON='firmware/agent-platformio/lib/srun-c'
           stray=$(git ls-files -- '*srun*' \
                   | grep -E '\.(c|h|cpp)$' \
-                  | grep -v "^${CANON}/" || true)
+                  | grep -v "^${CANON}/" \
+                  | grep -v '\.example\.h$' || true)
           if [ -n "$stray" ]; then
             echo "SRUN_DUPLICATE_TRACKED_SOURCE:"
             printf '%s\n' "$stray"
