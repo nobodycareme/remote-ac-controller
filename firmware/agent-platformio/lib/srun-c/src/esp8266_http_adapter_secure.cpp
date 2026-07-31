@@ -14,7 +14,13 @@
  *
  * See docs/03_协议与接口/TLS证书固定与更新.md for rationale and rotation.
  */
-#if ARDUINO && ESP8266 && !defined(SRUN_C_VECTOR_TEST)
+// The secure (certificate-pinning) adapter is part of the OPTIONAL campus-auth
+// feature and depends on BearSSL/WiFiClientSecure. When campus auth is disabled
+// (ENABLE_CAMPUS_AUTH not defined or 0), it must not be compiled: it is never
+// referenced, and its TLS dependency is unavailable in that profile's build/test
+// dependency graph (notably under `pio test`, whose LDF resolution differs from a
+// regular build). This keeps the public profile free of the BearSSL dependency.
+#if ARDUINO && ESP8266 && !defined(SRUN_C_VECTOR_TEST) && defined(ENABLE_CAMPUS_AUTH) && ENABLE_CAMPUS_AUTH
 
 #include "compat.h"
 

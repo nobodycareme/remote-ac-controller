@@ -165,34 +165,43 @@ jobs:
           mkdir -p "$HOME/Arduino/libraries"
           ln -sf "$(pwd)/firmware/shared/RemoteACCore" "$HOME/Arduino/libraries/RemoteACCore"
 
-          # Minimal stubs: disable cloud/campus/IR-mutate, stub CampusCredentials
+          # Feature macros only. The sketch's own config.h reaches the .ino, but not
+          # the RemoteACCore library translation units, so the public configuration
+          # is forced into every TU with -include.
+          #
+          # Deliberately NO CampusCredentials / CloudCredentials stubs here: both
+          # already ship a real public implementation that returns empty/unready
+          # when these macros are 0 (campus_credentials.h inline, cloud_credentials.cpp).
+          # Stubbing them re-declared the same symbols and broke the build with
+          # "redefinition of 'bool CloudCredentials::available()'".
           cat > /tmp/ci_stubs.h << 'EOF'
           #pragma once
           #define ENABLE_CLOUD 0
           #define ENABLE_CLOUD_CREDENTIALS 0
           #define ENABLE_CAMPUS_AUTH 0
           #define ENABLE_IR_MUTATING_COMMANDS 0
-          #define CLOUD_CREDENTIALS_AVAILABLE 0
-          namespace CampusCredentials { static inline bool ready() { return false; } }
-          namespace CloudCredentials {
-            static inline bool available() { return false; }
-            static inline bool ready() { return false; }
-          }
           EOF
 
           echo "=== Compiling ==="
+          # --output-dir is required: without it arduino-cli writes the artifacts to a
+          # temporary sketch directory, the ELF/BIN lookup below silently finds nothing
+          # and the artifact check degrades into a no-op that can never fail.
+          OUT=firmware/arduino-ide/Remote_AC_Controller/build
           arduino-cli compile \
             --fqbn esp8266:esp8266:nodemcuv2 \
+            --output-dir "$OUT" \
             --build-property "build.extra_flags=-include /tmp/ci_stubs.h -Ifirmware/agent-platformio/lib/srun-c/include" \
             firmware/arduino-ide/Remote_AC_Controller
-          RC=$?
 
-          [ $RC -ne 0 ] && { echo "COMPILE_FAILED"; exit $RC; }
-
-          ELF=$(find firmware/arduino-ide/Remote_AC_Controller/build -name "*.elf" 2>/dev/null | head -1)
-          BIN=$(find firmware/arduino-ide/Remote_AC_Controller/build -name "*.bin" 2>/dev/null | head -1)
-          [ -n "$ELF" ] && { echo "ARDUINO_ELF_EXISTS=True"; size "$ELF" || true; }
-          [ -n "$BIN" ] && echo "ARDUINO_BIN_EXISTS=True ($(wc -c < "$BIN") bytes)"
+          # set -e already aborts on a non-zero arduino-cli exit; these are real gates.
+          ELF=$(find "$OUT" -name "*.elf" 2>/dev/null | head -1)
+          BIN=$(find "$OUT" -name "*.bin" 2>/dev/null | head -1)
+          if [ -z "$ELF" ]; then echo "ARDUINO_ELF_EXISTS=False"; exit 1; fi
+          if [ -z "$BIN" ]; then echo "ARDUINO_BIN_EXISTS=False"; exit 1; fi
+          echo "ARDUINO_ELF_EXISTS=True"
+          size "$ELF" || true
+          echo "ARDUINO_BIN_EXISTS=True ($(wc -c < "$BIN") bytes)"
+          echo "ARDUINO_BIN_SHA256=$(sha256sum "$BIN" | cut -d' ' -f1)"
           echo "ARDUINO_CLI_COMPILE_PASS=True"
 
   # ---------------------------------------------------------------------------

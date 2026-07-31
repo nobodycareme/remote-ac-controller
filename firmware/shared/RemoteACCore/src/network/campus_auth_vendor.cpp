@@ -1,3 +1,4 @@
+#if ENABLE_CAMPUS_AUTH
 #if !defined(ENABLE_CLOUD) || ENABLE_CLOUD
 // ============================================================
 // campus_auth_vendor.cpp - wrapper around vendored srun-c (see header)
@@ -334,3 +335,5 @@ const char* CampusAuthVendor::resultStr(CampusAuthResult r) {
   }
 }
 #endif // ENABLE_CLOUD guard
+
+#endif  // ENABLE_CAMPUS_AUTH

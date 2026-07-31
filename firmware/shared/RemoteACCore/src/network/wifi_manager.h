@@ -24,7 +24,9 @@
  */
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
+#if ENABLE_CAMPUS_AUTH
 #include "network/campus_auth_vendor.h"
+#endif
 #include "network/portal_detector.h"
 #include "config/campus_config.h"
 
@@ -54,11 +56,13 @@ public:
   void scan();                    // list nearby APs (read-only)
   void update();                  // non-blocking state-machine tick; call every loop
 
+#if ENABLE_CAMPUS_AUTH
   void campusLogin();             // protected, one-shot request (gated)
   void campusLogout();
   CampusAuthResult executeLogin(); // direct login for controlled-auth (raw WiFi connect first)
   const char* authLastError()  const { return _auth.lastErrMsg(); }
   const char* authLastSuccess() const { return _auth.lastSucMsg(); }
+#endif
 
   WifiState       state() const { return _state; }
   static const char* stateStr(WifiState s);
@@ -77,19 +81,25 @@ public:
   bool internetUp() const { return _state == WIFI_ONLINE; }
   bool tlsPinValid() const { return _tlsOk; }
 
+#if ENABLE_CAMPUS_AUTH
   const char* lastAuthResultStr() const {
     return CampusAuthVendor::resultStr(_lastAuth);
   }
+#endif
 
 private:
   void enterState(WifiState s);
   void doPortalDetect();          // uses shared PortalDetector (no creds)
+#if ENABLE_CAMPUS_AUTH
   void doAuth();                  // perform srun login (blocking, with retries)
+#endif
   void doVerifyRound();           // ONE internet-verification round
   bool probeInternet();           // one plain-HTTP external probe (with telemetry)
 
   void schedulePortalBackoff();   // 30s, reason=PORTAL_UNKNOWN
+#if ENABLE_CAMPUS_AUTH
   void scheduleAuthBackoff();     // 30/60/120s, reason=AUTH_RETRY
+#endif
 
   String  _cfgSsid = CAMPUS_SSID;
   WifiState _state = WIFI_DISCONNECTED;
@@ -105,11 +115,13 @@ private:
   String _acId = "";
   bool _tlsOk = false;
 
+#if ENABLE_CAMPUS_AUTH
   CampusAuthVendor _auth;            // vendored srun-c wrapper (tlsPinValid/login/logout)
   bool _authRequested = false;
   uint8_t _authRetry = 0;
   CampusAuthResult _lastAuth = CAMPUS_AUTH_UNSET;
   bool _authBlockedReported = false;  // one-shot AUTH_BLOCKED marker for no-cred gate
+#endif
 
   uint8_t  _verifyRound = 0;
   uint8_t  _verifyOkCount = 0;

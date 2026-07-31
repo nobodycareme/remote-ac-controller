@@ -19,6 +19,8 @@ _QUARANTINE_/
 
 # ---- Firmware (PlatformIO / ESP8266) ----
 firmware/.pio/
+firmware/.pio-core/
+firmware/.pio-core-dir
 firmware/.vscode/
 firmware/*.bin
 firmware/*.elf
@@ -29,6 +31,13 @@ firmware/build/
 firmware/include/secrets.h
 firmware/include/cloud_secrets.h
 firmware/include/config_local.h
+# Arduino IDE local build config (copied from config.example.h, may hold credentials)
+firmware/arduino-ide/**/config.h
+# Arduino IDE compile output (arduino-cli --output-dir)
+firmware/arduino-ide/**/build/
+# PlatformIO local work dir (build/, libdeps/, cache/, logs/)
+firmware/agent-platformio/.build/
+firmware/.build/
 # Private IR capture / learned provider outputs
 firmware/private_ir/
 firmware/ir_capture/
