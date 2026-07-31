@@ -62,9 +62,12 @@ private:
 #if ENABLE_WIFI
   WifiManager* _net = nullptr;
 
-  // Network commands (wifi / net / campus)
+  // Network commands (wifi / net)
   void doWifi(const char* arg);
   void doNet(const char* arg);
+#endif
+#if ENABLE_CAMPUS_AUTH
+  // Campus-auth subcommands (status / login / logout) — gated on campus auth.
   void doCampus(const char* arg);
 #endif
 

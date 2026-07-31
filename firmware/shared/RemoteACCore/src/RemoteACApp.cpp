@@ -59,11 +59,13 @@ static bool cbDetectPortal() {
     return net.portalDetected();
 }
 
+#if ENABLE_CAMPUS_AUTH
 static bool cbCampusAuth() {
     if (!CampusCredentials::ready()) return false;
     CampusAuthResult r = net.executeLogin();
     return (r == CAMPUS_AUTH_SUCCESS);
 }
+#endif
 
 static bool cbCheckInternet() {
     return net.internetUp();
@@ -153,7 +155,9 @@ void appSetup(void) {
       cloudSM.onCheckWifiConnected = cbWifiConnected;
       cloudSM.onCheckDhcpReady     = cbDhcpReady;
       cloudSM.onDetectPortal       = cbDetectPortal;
+#if ENABLE_CAMPUS_AUTH
       cloudSM.onCampusAuth         = cbCampusAuth;
+#endif
       cloudSM.onCheckInternet      = cbCheckInternet;
       cloudSM.onMqttConnect        = cbMqttConnect;
       cloudSM.onMqttConnected        = cbMqttConnected;

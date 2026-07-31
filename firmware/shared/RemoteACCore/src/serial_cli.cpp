@@ -16,6 +16,7 @@
 #include "app_config.h"
 #include "board_pins.h"
 #include "diagnostics/diag_console.h"
+#include "config/campus_credentials.h"  // CampusCredentials::ready(); declared always, creds gated by ENABLE_CONTROLLED_LIVE_AUTH
 #if ENABLE_IR_MUTATING_COMMANDS
 #include "private_ir_codes/ir_code_registry.h"
 #endif
@@ -88,9 +89,12 @@ void Cli::banner() {
 #endif
   Serial.println(F(" ON BOOT no IR command is sent automatically."));
 #if ENABLE_WIFI
-  Serial.println(F(" Wi-Fi/campus: wifi connect [ssid] | wifi disconnect | wifi scan | wifi status"));
-  Serial.println(F("               net check | campus status | campus login | campus logout"));
+  Serial.println(F(" Wi-Fi: wifi connect [ssid] | wifi disconnect | wifi scan | wifi status"));
+  Serial.println(F("        net check - captive-portal + internet reachability probe"));
   Serial.println(F(" Wi-Fi does NOT auto-connect; issue `wifi connect` to associate."));
+#endif
+#if ENABLE_CAMPUS_AUTH
+  Serial.println(F(" Campus auth: campus status | campus login | campus logout"));
 #endif
   Serial.println(F("=========================================="));
   Serial.println(F("APP_BOOT_OK"));
@@ -126,6 +130,8 @@ void Cli::help() {
   Serial.println(F("  wifi scan       - list nearby APs (read-only)"));
   Serial.println(F("  wifi status     - NET_STATE / LOCAL_IP / MAC / SSID"));
   Serial.println(F("  net check       - captive-portal + internet reachability probe"));
+#endif
+#if ENABLE_CAMPUS_AUTH
   Serial.println(F("  campus status   - auth state (AUTH_BLOCKED if no creds)"));
   Serial.println(F("  campus login    - attempt srun login (needs creds in secrets.h)"));
   Serial.println(F("  campus logout   - best-effort srun logout"));
@@ -312,6 +318,7 @@ void Cli::dispatch(const char* line) {
     Serial.println(F("LIVE_AUTH_BLOCKED_BY_BUILD_POLICY"));
     return;
   }
+#if ENABLE_CAMPUS_AUTH
   if (strcmp(t1, "campus") == 0) {
     #if !ENABLE_CONTROLLED_LIVE_AUTH
       Serial.println(F("LIVE_AUTH_BLOCKED_BY_BUILD_POLICY"));
@@ -319,6 +326,7 @@ void Cli::dispatch(const char* line) {
     #endif
     doCampus(rest); return;
   }
+#endif
 #endif
 
 #if !defined(DISABLE_DHT)
@@ -1182,18 +1190,22 @@ void Cli::doNet(const char* arg) {
   Serial.println(inet ? "UP" : "DOWN");
   if (portal && !inet) {
     Serial.println(F("NET_NEEDS_CAMPUS_AUTH"));
+    #if ENABLE_CAMPUS_AUTH
     if (!CampusCredentials::ready()) {
       Serial.println(F("AUTH_BLOCKED_NEEDS_LOCAL_CREDENTIALS"));
     } else {
       Serial.println(F("CREDS_READY issue `campus login`"));
     }
+    #endif
   } else if (!portal && inet) {
     Serial.println(F("NET_ONLINE_NO_AUTH_NEEDED"));
   } else if (!portal && !inet) {
     Serial.println(F("NET_ASSOCIATED_INTERNET_UNKNOWN"));
   }
 }
+#endif  // ENABLE_WIFI
 
+#if ENABLE_CAMPUS_AUTH
 void Cli::doCampus(const char* arg) {
   if (!_net) { Serial.println(F("ERR wifi manager not attached")); return; }
   if (strcmp(arg, "status") == 0) {
@@ -1210,7 +1222,7 @@ void Cli::doCampus(const char* arg) {
   if (strcmp(arg, "logout") == 0) { _net->campusLogout(); return; }
   Serial.println(F("ERR unknown campus subcommand (use: status|login|logout)"));
 }
-#endif
+#endif  // ENABLE_CAMPUS_AUTH
 
 void Cli::handle() {
   // 1) Process USB Serial input (incl. 'ir cancel').
