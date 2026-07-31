@@ -52,14 +52,19 @@ static void test_backoff_ladder() {
   p.noteRetryableFailure(t);
 
   // failStreak=1 -> 30s
-  CHECK(p.evaluate(t + 1000) == CAMPUS_GATE_DENY_BACKOFF, "backoff: streak1 deny");
+  // The minimum-attempt interval (15s) takes precedence right after an
+  // attempt, so a probe inside it returns MIN_INTERVAL, not BACKOFF.
+  CHECK(p.evaluate(t + 1000) == CAMPUS_GATE_DENY_MIN_INTERVAL,
+        "backoff: min-interval wins right after attempt");
+  CHECK(p.evaluate(t + 15000) == CAMPUS_GATE_DENY_BACKOFF,
+        "backoff: streak1 deny (past min-interval, inside 30s)");
   CHECK(p.evaluate(t + 30000) == CAMPUS_GATE_ALLOW, "backoff: allow after 30s");
   p.noteAttempt(t + 30000);
   p.noteRetryableFailure(t + 30000);
 
   // failStreak=2 -> 60s
-  CHECK(p.evaluate(t + 30000 + 1000) == CAMPUS_GATE_DENY_BACKOFF,
-        "backoff: streak2 deny");
+  CHECK(p.evaluate(t + 30000 + 15000) == CAMPUS_GATE_DENY_BACKOFF,
+        "backoff: streak2 deny (past min-interval, inside 60s)");
   CHECK(p.evaluate(t + 30000 + 60000) == CAMPUS_GATE_ALLOW,
         "backoff: allow after 60s");
   p.noteAttempt(t + 30000 + 60000);
