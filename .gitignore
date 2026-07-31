@@ -33,6 +33,8 @@ firmware/include/cloud_secrets.h
 firmware/include/config_local.h
 # Arduino IDE local build config (copied from config.example.h, may hold credentials)
 firmware/arduino-ide/**/config.h
+# Arduino IDE compile output (arduino-cli --output-dir)
+firmware/arduino-ide/**/build/
 # PlatformIO local work dir (build/, libdeps/, cache/, logs/)
 firmware/agent-platformio/.build/
 firmware/.build/
