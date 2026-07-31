@@ -78,17 +78,28 @@ function Resolve-PioExecutable {
 
     if ($env:PLATFORMIO_CORE_DIR -and (Test-Path $env:PLATFORMIO_CORE_DIR)) {
         $candidates += (Join-Path $env:PLATFORMIO_CORE_DIR 'penv\Scripts\pio.exe')
+        $candidates += (Join-Path $env:PLATFORMIO_CORE_DIR 'penv\Scripts\pio.bat')
+        $candidates += (Join-Path $env:PLATFORMIO_CORE_DIR 'penv\Scripts\pio.ps1')
         $candidates += (Join-Path $env:PLATFORMIO_CORE_DIR 'penv/bin/pio')
     }
 
     $localCore = Join-Path $FirmwareRoot '.pio-core'
     if (Test-Path $localCore) {
         $candidates += (Join-Path $localCore 'penv\Scripts\pio.exe')
+        $candidates += (Join-Path $localCore 'penv\Scripts\pio.bat')
+        $candidates += (Join-Path $localCore 'penv\Scripts\pio.ps1')
         $candidates += (Join-Path $localCore 'penv/bin/pio')
     }
 
     foreach ($c in $candidates) {
-        if ($c -and (Test-Path $c)) { return (Resolve-Path $c).Path }
+        if ($c -and (Test-Path $c)) {
+            $resolved = (Resolve-Path $c).Path
+            # Validate that the discovered executable actually runs (pio.exe shipped
+            # with some PlatformIO Core installs is a stub and fails with exit 1).
+            $null = & $resolved --version 2>&1
+            if ($LASTEXITCODE -eq 0) { return $resolved }
+            # Fall through to the next candidate (e.g. pio.bat / pio.ps1 / PATH).
+        }
     }
 
     foreach ($name in @('pio', 'platformio')) {
