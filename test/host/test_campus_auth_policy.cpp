@@ -124,9 +124,9 @@ static void test_backoff_table() {
   CHECK(CampusAuthPolicy::backoffMs(1) == 30000UL, "bo: streak1 -> 30s");
   CHECK(CampusAuthPolicy::backoffMs(2) == 60000UL, "bo: streak2 -> 60s");
   CHECK(CampusAuthPolicy::backoffMs(3) == 120000UL, "bo: streak3 -> 120s");
-  CHECK(CampusAuthPolicy::backoffMs(4) == 300000UL, "bo: streak4 -> 300s");
-  CHECK(CampusAuthPolicy::backoffMs(5) == 600000UL, "bo: streak5 -> 600s");
-  CHECK(CampusAuthPolicy::backoffMs(99) == 600000UL, "bo: streak>=5 capped at 600s");
+  CHECK(CampusAuthPolicy::backoffMs(4) == 120000UL, "bo: streak4 -> 120s (cap)");
+  CHECK(CampusAuthPolicy::backoffMs(5) == 120000UL, "bo: streak5 -> 120s (cap)");
+  CHECK(CampusAuthPolicy::backoffMs(99) == 120000UL, "bo: streak>=3 capped at 120s");
 }
 
 static void test_decision_str() {
