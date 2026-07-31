@@ -1,4 +1,5 @@
-#if !defined(ENABLE_CLOUD) || ENABLE_CLOUD
+#include "config/feature_gates.h"
+#if ENABLE_CLOUD
 // ============================================================
 // connectivity_state_machine.cpp — v0.4.0 cloud foundation
 // ============================================================
@@ -281,4 +282,4 @@ void ConnectivityStateMachine::tick() {
         break;
     }
 }
-#endif // ENABLE_CLOUD guard
+#endif  // ENABLE_CLOUD

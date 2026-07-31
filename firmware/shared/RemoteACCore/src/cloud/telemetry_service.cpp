@@ -1,4 +1,5 @@
-#if !defined(ENABLE_CLOUD) || ENABLE_CLOUD
+#include "config/feature_gates.h"
+#if ENABLE_CLOUD
 // ============================================================
 // telemetry_service.cpp — v0.4.0 cloud foundation
 // ============================================================
@@ -116,4 +117,4 @@ TelemetryService::TickResult TelemetryService::tick() {
     }
     return TickResult::NotDue;
 }
-#endif // ENABLE_CLOUD guard
+#endif  // ENABLE_CLOUD

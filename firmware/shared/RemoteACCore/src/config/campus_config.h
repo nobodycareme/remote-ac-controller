@@ -1,26 +1,47 @@
 #pragma once
+#include "config/feature_gates.h"
 /*
- * Campus network static parameters (Xidian University / 西安电子科技大学).
+ * Campus network static parameters — PUBLIC, non-secret configuration.
  *
- * Re-forensiced 2026-07-17 — see docs/03_协议与接口/校园网参数实证.md.
+ * These values are kept separate from credentials (config/campus_credentials.h)
+ * and the TLS pin (config/campus_tls_pin.h).
  *
- * These are PUBLIC, non-secret configuration values. They are kept separate
- * from credentials (config/campus_credentials.h) and the TLS pin
- * (config/campus_tls_pin.h).
+ * SOURCING THE FOUR MACROS (CAMPUS_SSID / CAMPUS_PORTAL_HOST / CAMPUS_AC_ID /
+ * CAMPUS_DOMAIN) — three, mutually exclusive:
+ *
+ *   A) PROFILE HEADER (preferred; PlatformIO / CI / globals) — select a campus
+ *      profile at compile time:
+ *        -DCAMPUS_PROFILE_HEADER="profiles/xidian.example.h"
+ *      The profile header defines exactly those four macros (and nothing else).
+ *      Example profiles live in config/profiles/*.example.h; copy one to a
+ *      non-example name (git-ignored) to customise.
+ *
+ *   B) EXTERNAL DEFINITION (Arduino IDE config.h) — the user's config.h already
+ *      defines the four macros before this header is reached, so we keep them
+ *      as-is and define nothing here.
+ *
+ *   C) DEFAULT — if neither (A) nor (B) applies, we fall back to the Xidian
+ *      example profile so the firmware still compiles and links out of the box.
+ *      This is the reference campus; override via (A) for anything else.
  *
  * Constraints enforced by the task (Phase 7):
  *   - SSID is the OPEN campus network (no WPA pre-shared key).
- *   - host is portal.campus.example.edu ONLY; the srun base_url uses NO "/index_8.html"
- *     suffix (the /index_8.html hit is only used by the INSECURE_PROBE_ONLY
+ *   - host is the srun portal host ONLY; the srun base_url uses NO
+ *     "/index_8.html" suffix (that hit is only for the INSECURE_PROBE_ONLY
  *     portal-detection path, which never sends credentials).
- *   - ac_id = 8 (empirically confirmed via the portal-probe build).
+ *   - ac_id is the campus-confirmed value.
  *   - domain is EMPTY: NO operator suffix (@lt / @yd / @dx) is ever appended.
  *   - The ESP8266 uses its REAL DHCP-assigned IP (never a phone/fixed IP).
  */
-#define CAMPUS_SSID        "stu-xdwlan"
-#define CAMPUS_PORTAL_HOST "portal.campus.example.edu"
-#define CAMPUS_AC_ID       8
 
-// Operator/domain suffix — intentionally EMPTY. Appending @lt/@yd/@dx is
-// forbidden by the task; the srun info field is built with an empty domain.
-#define CAMPUS_DOMAIN      ""
+#if defined(CAMPUS_PROFILE_HEADER)
+  // (A) Profile header selected at compile time.
+  #include CAMPUS_PROFILE_HEADER
+
+#elif defined(CAMPUS_SSID)
+  // (B) Values already supplied by an external config (Arduino IDE config.h).
+
+#else
+  // (C) Safe default: reference Xidian profile so the tree builds unmodified.
+  #include "profiles/xidian.example.h"
+#endif
