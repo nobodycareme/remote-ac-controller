@@ -1,141 +1,128 @@
-# IR Simple Learner
+**简体中文** | [English](./README.en.md)
 
-A minimal Windows GUI tool for capturing infrared (IR) signals from air
-conditioner remote controls via a CH9102 USB-to-UART adapter connected to an
-ESP8266 NodeMCU with a ZJ-IR-V2 IR learning module.
+# IR Simple Learner — 红外简易学习工具
 
-## Purpose
+通过 CH9102 USB 转串口适配器连接 ESP8266 NodeMCU（搭载 ZJ-IR-V2 红外学习模块），从空调遥控器采集红外信号的 Windows 简易 GUI 工具。
 
-This tool communicates with an ESP8266 firmware (public profile) over a serial
-port to learn IR frames emitted by an air conditioner remote. Captured frames
-are validated, compared, and saved for integration into the remote-ac-controller
-firmware.
+---
 
-**This tool does not contain any real AC IR frames or production credentials.**
-All distributed test vectors are synthetic.
+## 用途
 
-## Requirements
+本工具通过串口与 ESP8266 固件（公开 Profile）通信，学习空调遥控器发出的红外帧。采集到的帧经过验证、比对和保存，用于集成到 remote-ac-controller 固件中。
 
-- **Operating System**: Windows 10/11 (x64)
-- **Python**: 3.9 or later
-- **Hardware**: ESP8266 NodeMCU with CH9102 USB chip + ZJ-IR-V2 IR learning module
-- **Driver**: CH9102 driver ([WCH official download](https://www.wch.cn/downloads/CH341SER_EXE.html))
+**本工具不包含任何真实空调红外帧或生产凭据。** 所有随附的测试向量均为合成数据。
 
-## Quick Start (Pre-built EXE)
+## 系统要求
 
-1. Download `IR_Simple_Learner_v4_windows_x64.exe` from the
-   [Releases](https://github.com/zmytxylove/remote-ac-controller/releases) page.
-2. Windows may show a SmartScreen warning because the EXE is **unsigned**.
-   Click "More info" then "Run anyway".
-3. Connect the ESP8266 NodeMCU via USB.
-4. Run the EXE and follow the on-screen instructions.
+- **操作系统**：Windows 10/11 (x64)
+- **Python**：3.9 或更高版本
+- **硬件**：ESP8266 NodeMCU（CH9102 USB 芯片）+ ZJ-IR-V2 红外学习模块
+- **驱动**：CH9102 驱动（[WCH 官方下载](https://www.wch.cn/downloads/CH341SER_EXE.html)）
 
-### SHA256 Verification
+## 快速开始（预编译 EXE）
 
-Verify the downloaded EXE against the published SHA256 hash:
+1. 从 [Releases](https://github.com/nobodycareme/remote-ac-controller/releases) 页面下载 `IR_Simple_Learner_v4_windows_x64.exe`。
+2. Windows 可能显示 SmartScreen 警告（因 EXE **未签名**）。点击"更多信息"→"仍要运行"。
+3. 通过 USB 连接 ESP8266 NodeMCU。
+4. 运行 EXE 并按屏幕提示操作。
+
+### SHA256 校验
+
+使用公布的 SHA256 哈希值校验下载的 EXE：
 
 ```powershell
 Get-FileHash IR_Simple_Learner_v4_windows_x64.exe -Algorithm SHA256
 ```
 
-The expected hash is published alongside each GitHub Release.
+预期哈希值在每个 GitHub Release 中公布。
 
-## Install from Source
+## 从源码安装
 
 ```powershell
 cd tools/ir-simple-learner
 
-# Create and activate a virtual environment
+# 创建并激活虚拟环境
 python -m venv .venv
 .venv\Scripts\activate
 
-# Install dependencies
+# 安装依赖
 pip install -r requirements.txt
 
-# Run the tool
+# 运行工具
 python src/simple_ir_learner.py
 ```
 
-### Run Unit Tests
+### 运行单元测试
 
 ```powershell
 python -m unittest discover -s src/tests -p "test_*.py" -v
 ```
 
-## Build the EXE
+## 构建 EXE
 
 ```powershell
 pwsh tools/ir-simple-learner/build.ps1
 ```
 
-The EXE will be written to `tools/ir-simple-learner/dist/`.
-Use `-Clean` to rebuild from scratch:
+EXE 将写入 `tools/ir-simple-learner/dist/`。
+使用 `-Clean` 参数从头重建：
 
 ```powershell
 pwsh tools/ir-simple-learner/build.ps1 -Clean
 ```
 
-## Usage
+## 使用方法
 
-### 1. Connect the Device
+### 1. 连接设备
 
-Connect the ESP8266 NodeMCU to your PC via USB. The CH9102 driver should
-auto-install; if not, download it from the [WCH website](https://www.wch.cn/downloads/CH341SER_EXE.html).
+通过 USB 将 ESP8266 NodeMCU 连接到电脑。CH9102 驱动通常自动安装；如未安装，请从 [WCH 官网](https://www.wch.cn/downloads/CH341SER_EXE.html) 下载。
 
-### 2. Launch the Tool
+### 2. 启动工具
 
-Run the EXE or `python src/simple_ir_learner.py`. The main window has three
-sections:
+运行 EXE 或 `python src/simple_ir_learner.py`。主窗口包含三个区域：
 
-- **Device Connection** (top): Scan ports, connect/disconnect, status LED.
-- **AC State** (left): Preset selector, mode, temperature, fan, extra options.
-- **Capture** (right): Capture buttons (1-3), compare, approve canonical frame.
+- **设备连接**（顶部）：扫描端口、连接/断开、状态指示灯。
+- **空调状态**（左侧）：预设选择器、模式、温度、风速、附加选项。
+- **采集**（右侧）：采集按钮（1-3）、比对、选定标准帧。
 
-### 3. Capture Workflow
+### 3. 采集流程
 
-1. Click **Scan Ports** to find the CH9102 device.
-2. Select the port and click **Connect**.
-3. Choose an AC state from the preset dropdown or fill in parameters manually.
-4. Click **Capture 1**. When the status shows "please press remote", press the
-   remote control button once.
-5. Wait for the capture to save (SHA256 and byte count shown in log).
-6. Repeat for **Capture 2** and **Capture 3**.
-7. Click **Compare All** to see byte-level differences between captures.
-8. Select the canonical capture (1, 2, or 3) and click **Select Canonical**.
+1. 点击 **Scan Ports** 查找 CH9102 设备。
+2. 选择端口并点击 **Connect**。
+3. 从预设下拉菜单中选择空调状态，或手动填写参数。
+4. 点击 **Capture 1**。当状态显示"please press remote"时，按一次遥控器按钮。
+5. 等待采集完成（日志中显示 SHA256 和字节数）。
+6. 重复 **Capture 2** 和 **Capture 3**。
+7. 点击 **Compare All** 查看三次采集的字节级差异。
+8. 选择标准帧（1、2 或 3）并点击 **Select Canonical**。
 
-### 4. Save Location
+### 4. 保存位置
 
-Captured data is saved to a user-configurable directory (default:
-`~/IR_Learned/`). To change it, click **Set Save Directory** in the tool.
+采集数据保存到用户可配置的目录（默认：`~/IR_Learned/`）。在工具中点击 **Set Save Directory** 更改。
 
-## CH9102 Driver Note
+## CH9102 驱动说明
 
-The ESP8266 NodeMCU used in this project uses a **CH9102** USB-to-serial chip
-(VID 0x1A86, PID 0x55D4). Windows may not install the driver automatically.
+本项目使用的 ESP8266 NodeMCU 采用 **CH9102** USB 转串口芯片（VID 0x1A86，PID 0x55D4）。Windows 可能不会自动安装驱动。
 
-- Download: [WCH CH341SER driver package](https://www.wch.cn/downloads/CH341SER_EXE.html)
-- After installation, the device should appear as a COM port in Device Manager.
+- 下载：[WCH CH341SER 驱动包](https://www.wch.cn/downloads/CH341SER_EXE.html)
+- 安装后，设备应在设备管理器中显示为 COM 端口。
 
-## Security
+## 安全说明
 
-- **The EXE is unsigned.** This is expected. Windows SmartScreen will show a
-  warning. Verify the SHA256 hash against the published value.
-- **No production credentials, WiFi passwords, or real IR codes** are embedded
-  in the tool or its source code.
-- All test data in the repository (including `presets.py`) contains
-  configuration metadata only, not actual IR frame payloads.
-- Captured IR data is saved locally and never transmitted anywhere by this tool.
+- **EXE 未签名。** 这是预期行为。Windows SmartScreen 会显示警告。请通过公布的 SHA256 哈希值校验。
+- **无生产凭据、WiFi 密码或真实红外码**嵌入在工具或其源代码中。
+- 仓库中的所有测试数据（包括 `presets.py`）仅包含配置元数据，不包含实际红外帧载荷。
+- 采集的红外数据保存在本地，本工具不会将其传输到任何地方。
 
-Report security issues via [SECURITY.md](../../SECURITY.md).
+安全相关问题请通过 [SECURITY.md](../../SECURITY.md) 报告。
 
-## License
+## 许可
 
-This tool is part of the remote-ac-controller project, licensed under the
-Apache License, Version 2.0. See [LICENSE](../../LICENSE) for the full text.
+本工具是 remote-ac-controller 项目的一部分，采用 Apache License, Version 2.0 许可。完整文本见 [LICENSE](../../LICENSE)。
 
-Third-party component licenses are listed in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
+第三方组件许可列于 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
 
-## Related Documentation
+## 相关文档
 
-- [Firmware README](../../firmware/README.md) — ESP8266 firmware build and flash
-- [Project README](../../README.md) — Full project overview
+- [固件 README](../../firmware/README.md) — ESP8266 固件构建与烧录
+- [项目 README](../../README.md) — 完整项目概览

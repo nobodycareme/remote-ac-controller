@@ -39,6 +39,11 @@ frontend, and PCB design files are all open source.
   persistent trusted sessions and device fingerprinting.
 - **MQTT/TLS secure device link** — encrypted MQTT between ESP8266 and the
   cloud backend, with scoped credentials.
+- **Automatic Xidian campus-network authentication on ESP8266** — After joining
+  the campus open SSID, the device can automatically obtain DHCP configuration,
+  detect the captive portal, perform Srun authentication, verify Internet access,
+  and then continue to cloud connectivity. Authentication credentials remain in
+  local ignored files. **Disabled by default** — requires explicit user configuration.
 
 ---
 
@@ -50,6 +55,11 @@ graph LR
     B -->|MQTT TLS| C[🌐 MQTT Broker<br/>Mosquitto]
     C -->|MQTT TLS| D[🔌 ESP8266]
     D -->|IR| E[❄️ AC]
+
+    D -->|Campus Auth| P[📡 Campus Wi-Fi]
+    P -->|DHCP| Q[🌐 Captive Portal]
+    Q -->|Srun Auth| R[🌍 Internet]
+    R -->|After Auth| C
 
     B --> F[(SQLite)]
     B --> G[⏰ Scheduling]
@@ -196,6 +206,8 @@ Full bilingual documentation in [`docs/`](../):
 | [Hardware](../中文/硬件说明.md) | [Security Model](../中文/安全模型.md) | [Ops Guide](../中文/运维指南.md) |
 | [Wiring](../中文/接线说明.md) | [Scheduling](../中文/定时任务.md) | [Troubleshooting](../中文/故障排查.md) |
 | [IR Learning](../中文/红外学习.md) | [Temp Automation](../中文/温度自动控制.md) | [Backup & Recovery](../中文/备份与恢复.md) |
+| [Arduino IDE Guide](./arduino-ide-guide.md) | [Xidian Campus Auth](./xidian-campus-network-authentication.md) | |
+| | [Srun Porting Guide](./srun-campus-network-porting-guide.md) | |
 
 ---
 

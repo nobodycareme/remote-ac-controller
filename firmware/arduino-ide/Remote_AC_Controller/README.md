@@ -1,30 +1,34 @@
-# Remote AC Controller — Arduino IDE Build
+**简体中文** | [English](./README.en.md)
 
-Arduino IDE sketch for the **Remote AC Controller** (ESP8266 NodeMCU v2).
+# Remote AC Controller — Arduino IDE 构建指南
 
-## Prerequisites
+**Remote AC Controller**（ESP8266 NodeMCU v2）的 Arduino IDE 固件构建说明。
 
-### 1. ESP8266 Board Support
+---
 
-1. Open Arduino IDE → File → Preferences
-2. Add the ESP8266 board URL: `https://arduino.esp8266.com/stable/package_esp8266com_index.json`
-3. Tools → Board → Boards Manager → search "esp8266" → install
+## 先决条件
 
-### 2. Required Libraries (Library Manager)
+### 1. 安装 ESP8266 开发板支持
 
-Install all of these via Sketch → Include Library → Manage Libraries:
+1. 打开 Arduino IDE → 文件 → 首选项
+2. 在"附加开发板管理器网址"中添加：`https://arduino.esp8266.com/stable/package_esp8266com_index.json`
+3. 工具 → 开发板 → 开发板管理器 → 搜索 "esp8266" → 安装
 
-| Library               | Author              | Note                          |
-|----------------------|---------------------|-------------------------------|
-| DHT sensor library   | Adafruit            | For DHT11 temperature sensor  |
-| Adafruit Unified Sensor | Adafruit         | Dependency of DHT library     |
-| ArduinoJson          | Benoit Blanchon     | JSON parsing/serialization    |
-| PubSubClient         | Nick O'Leary        | MQTT client                   |
-| Crypto               | Rhys Weatherley     | SHA256, Base64, BLAKE2s       |
+### 2. 安装所需库（库管理器）
 
-### 3. RemoteACCore Shared Library
+通过 项目 → 加载库 → 管理库 安装以下库：
 
-Copy the shared core library to your Arduino libraries folder:
+| 库                    | 作者              | 说明                          |
+|-----------------------|-------------------|-------------------------------|
+| DHT sensor library    | Adafruit          | DHT11 温湿度传感器驱动         |
+| Adafruit Unified Sensor | Adafruit        | DHT 库的依赖项                 |
+| ArduinoJson           | Benoit Blanchon   | JSON 解析/序列化               |
+| PubSubClient          | Nick O'Leary      | MQTT 客户端                    |
+| Crypto                | Rhys Weatherley   | SHA256、Base64、BLAKE2s        |
+
+### 3. 安装 RemoteACCore 共享库
+
+将共享核心库复制到 Arduino 库文件夹：
 
 ```bash
 # Windows (PowerShell)
@@ -34,50 +38,50 @@ Copy-Item -Recurse ..\..\shared\RemoteACCore "$env:USERPROFILE\Documents\Arduino
 cp -r ../../shared/RemoteACCore ~/Arduino/libraries/RemoteACCore
 ```
 
-### 4. srun-c Library (Campus Network Auth)
+### 4. 安装 srun-c 库（校园网认证）
 
-If you need campus network authentication, copy the srun-c library:
+如需校园网认证功能，复制 srun-c 库：
 
 ```bash
-# From PlatformIO lib/
+# 从 PlatformIO lib/ 目录复制
 cp -r ../agent-platformio/lib/srun-c ~/Arduino/libraries/srun-c
 ```
 
 ### 5. SoftwareSerial
 
-The IR module uses SoftwareSerial. This is included with ESP8266 core — no separate install needed.
+红外模块使用 SoftwareSerial。ESP8266 核心已内置，无需单独安装。
 
-## Configuration
+## 配置
 
-1. **Copy and edit config file:**
+1. **复制并编辑配置文件：**
    ```bash
    cp config.example.h config.h
    ```
 
-2. **Edit `config.h`** with your settings:
-   - Set `CAMPUS_SSID` to your Wi-Fi network name
-   - Set `ENABLE_CAMPUS_AUTH` to `1` if on campus network
-   - Set campus login credentials if required
-   - Set `ENABLE_CLOUD` to `1` for MQTT cloud connectivity
-   - Set MQTT broker details if cloud is enabled
+2. **编辑 `config.h`** 设置你的参数：
+   - 设置 `CAMPUS_SSID` 为你的 Wi-Fi 网络名称
+   - 校园网环境设置 `ENABLE_CAMPUS_AUTH` 为 `1`
+   - 如需校园网认证，填写校园网账号凭据
+   - 如需 MQTT 云连接，设置 `ENABLE_CLOUD` 为 `1`
+   - 如启用云连接，填写 MQTT Broker 信息
 
-3. **`config.h` is git-ignored** — never commit real credentials.
+3. **`config.h` 已被 git-ignore** — 切勿提交真实凭据。
 
-## Building & Uploading
+## 构建与上传
 
-1. Open `Remote_AC_Controller.ino` in Arduino IDE
-2. Select board: Tools → Board → ESP8266 → NodeMCU 1.0 (ESP-12E Module)
-3. Select port: Tools → Port → (your ESP8266 COM port)
-4. Click Verify (checkmark) to compile
-5. Click Upload (arrow) to flash
+1. 在 Arduino IDE 中打开 `Remote_AC_Controller.ino`
+2. 选择开发板：工具 → 开发板 → ESP8266 → NodeMCU 1.0 (ESP-12E Module)
+3. 选择端口：工具 → 端口 →（你的 ESP8266 COM 端口）
+4. 点击"验证"（勾选图标）编译
+5. 点击"上传"（箭头图标）烧录
 
-## Serial Monitor
+## 串口监视器
 
-- Tools → Serial Monitor
-- Baud rate: **115200**
-- Line ending: Newline
+- 工具 → 串口监视器
+- 波特率：**115200**
+- 换行符：Newline
 
-Expected startup messages:
+预期启动消息：
 ```
 BOOT_ID=0x...
 DHT11_MODULE_READY pin=GPIO5
@@ -86,39 +90,39 @@ DIAGNOSTIC_CONSOLE_READY=YES
 SINGLE_SERIAL_ROUTER=TRUE
 ```
 
-## Build Profiles
+## 构建配置矩阵
 
-| Feature                | Flag                          | Default |
-|-----------------------|-------------------------------|---------|
-| Wi-Fi                 | ENABLE_WIFI                   | ON      |
-| Cloud (MQTT)          | ENABLE_CLOUD                  | OFF     |
-| Cloud credentials     | ENABLE_CLOUD_CREDENTIALS      | OFF     |
-| Campus auth           | ENABLE_CAMPUS_AUTH            | OFF     |
-| IR mutating commands  | ENABLE_IR_MUTATING_COMMANDS   | OFF     |
+| 功能                | 宏                            | 默认值 |
+|--------------------|-------------------------------|--------|
+| Wi-Fi              | ENABLE_WIFI                   | ON     |
+| 云连接 (MQTT)      | ENABLE_CLOUD                  | OFF    |
+| 云凭据加载         | ENABLE_CLOUD_CREDENTIALS      | OFF    |
+| 校园网认证         | ENABLE_CAMPUS_AUTH            | OFF    |
+| 红外发射命令       | ENABLE_IR_MUTATING_COMMANDS   | OFF    |
 
-Set these in `config.h` to match your use case.
+在 `config.h` 中设置这些宏以匹配你的使用场景。
 
-## Differences from PlatformIO Build
+## 与 PlatformIO 构建的差异
 
-| Feature          | PlatformIO (`agent-platformio/`) | Arduino IDE (`arduino-ide/`)  |
-|-----------------|----------------------------------|-------------------------------|
-| Entry point     | `src/main.cpp`                   | `Remote_AC_Controller.ino`    |
-| Config system   | `include/cloud_secrets.h` + env  | `config.h`                    |
-| Private IR codes| Supported (`ENABLE_IR_MUTATING`) | Requires manual setup         |
-| Build tool      | PlatformIO CLI / VS Code         | Arduino IDE                   |
+| 特性            | PlatformIO (`agent-platformio/`) | Arduino IDE (`arduino-ide/`)  |
+|----------------|----------------------------------|-------------------------------|
+| 入口文件        | `src/main.cpp`                   | `Remote_AC_Controller.ino`    |
+| 配置系统        | `include/cloud_secrets.h` + 环境  | `config.h`                    |
+| 私有红外码      | 支持（`ENABLE_IR_MUTATING`）     | 需要手动设置                  |
+| 构建工具        | PlatformIO CLI / VS Code          | Arduino IDE                   |
 
-Both builds share the **same business logic** via `shared/RemoteACCore/`.
+两种构建方式共享**同一套业务逻辑**（`shared/RemoteACCore/`）。
 
-## Troubleshooting
+## 故障排查
 
-### Compilation error: "RemoteACApp.h not found"
-- Ensure RemoteACCore library is in the Arduino libraries folder
-- Restart Arduino IDE after copying the library
+### 编译错误："RemoteACApp.h not found"
+- 确保 RemoteACCore 库在 Arduino 库文件夹中
+- 复制库后重启 Arduino IDE
 
-### Compilation error: "srun.h not found"
-- Copy srun-c library or set `ENABLE_CAMPUS_AUTH` to `0`
+### 编译错误："srun.h not found"
+- 复制 srun-c 库，或设置 `ENABLE_CAMPUS_AUTH` 为 `0`
 
-### Cloud features don't work
-- Verify `config.h` has correct MQTT broker details
-- Ensure `ENABLE_CLOUD` is set to `1`
-- Check serial monitor for `CLOUD_MQTT_INIT_OK`
+### 云功能不工作
+- 检查 `config.h` 中 MQTT Broker 信息是否正确
+- 确保 `ENABLE_CLOUD` 设置为 `1`
+- 查看串口监视器是否有 `CLOUD_MQTT_INIT_OK`
