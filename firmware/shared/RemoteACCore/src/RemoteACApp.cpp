@@ -13,8 +13,10 @@
 #include "app_config.h"
 #include "sensors/dht11_sensor.h"
 #include "ir_module.h"
+#if ENABLE_CLOUD
 #include "serial_cli.h"
 #include "network/wifi_manager.h"
+#endif
 
 // Cloud module (MQTT/telemetry/command) gated on ENABLE_CLOUD
 #if ENABLE_CLOUD
@@ -28,7 +30,9 @@
 static Dht11Sensor dht(DHT11_DATA_PIN);
 static IrModule    ir;
 static Cli         gCli(dht, ir);
+#if ENABLE_CLOUD
 static WifiManager net;
+#endif
 
 uint32_t gBootId = 0;
 
@@ -106,7 +110,9 @@ static int cbMqttSslError() {
 
 void appSetup(void) {
   gCli.begin();
+#if ENABLE_CLOUD
   gCli.attachNetwork(net);
+#endif
   ir.begin(IR_DEFAULT_BAUD);
 
   randomSeed((uint32_t)(ESP.getCycleCount() ^ ESP.getChipId()));

@@ -162,11 +162,10 @@ jobs:
           cp firmware/arduino-ide/Remote_AC_Controller/config.example.h \
              firmware/arduino-ide/Remote_AC_Controller/config.h
 
-          # Install shared library
           mkdir -p "$HOME/Arduino/libraries"
           ln -sf "$(pwd)/firmware/shared/RemoteACCore" "$HOME/Arduino/libraries/RemoteACCore"
 
-          # CI stubs for PlatformIO-only dependencies (campus auth, cloud, srun-c)
+          # Minimal stubs: disable cloud/campus/IR-mutate, stub CampusCredentials
           cat > /tmp/ci_stubs.h << 'EOF'
           #pragma once
           #define ENABLE_CLOUD 0
@@ -174,28 +173,12 @@ jobs:
           #define ENABLE_CAMPUS_AUTH 0
           #define ENABLE_IR_MUTATING_COMMANDS 0
           #define CLOUD_CREDENTIALS_AVAILABLE 0
-          typedef int CampusAuthResult;
-          #define CAMPUS_AUTH_SUCCESS 0
-          #define CAMPUS_AUTH_TLS_PIN_MISMATCH 1
-          // Stub cloud credentials namespace
+          namespace CampusCredentials { static inline bool ready() { return false; } }
           namespace CloudCredentials {
-            static inline bool ready() { return false; }
             static inline bool available() { return false; }
-          }
-          namespace CampusCredentials {
             static inline bool ready() { return false; }
           }
           EOF
-
-          # Exclude files requiring PlatformIO build env from Arduino CI
-          SRCDIR="firmware/shared/RemoteACCore/src"
-          # Remove complex implementation files; their headers are satisfied by stubs
-          rm -f "$SRCDIR/cloud/mqtt_client.cpp" \
-                "$SRCDIR/cloud/telemetry_service.cpp" \
-                "$SRCDIR/cloud/connectivity_state_machine.cpp" \
-                "$SRCDIR/cloud/command_service.cpp" \
-                "$SRCDIR/network/campus_auth_vendor.cpp" \
-                "$SRCDIR/network/wifi_manager.cpp"
 
           echo "=== Compiling ==="
           arduino-cli compile \
@@ -204,17 +187,8 @@ jobs:
             firmware/arduino-ide/Remote_AC_Controller
           RC=$?
 
-          # Restore removed files from git
-          git checkout -- "$SRCDIR/cloud/mqtt_client.cpp" \
-                          "$SRCDIR/cloud/telemetry_service.cpp" \
-                          "$SRCDIR/cloud/connectivity_state_machine.cpp" \
-                          "$SRCDIR/cloud/command_service.cpp" \
-                          "$SRCDIR/network/campus_auth_vendor.cpp" \
-                          "$SRCDIR/network/wifi_manager.cpp" 2>/dev/null || true
-
           [ $RC -ne 0 ] && { echo "COMPILE_FAILED"; exit $RC; }
 
-          echo "=== Output ==="
           ELF=$(find firmware/arduino-ide/Remote_AC_Controller/build -name "*.elf" 2>/dev/null | head -1)
           BIN=$(find firmware/arduino-ide/Remote_AC_Controller/build -name "*.bin" 2>/dev/null | head -1)
           [ -n "$ELF" ] && { echo "ARDUINO_ELF_EXISTS=True"; size "$ELF" || true; }
