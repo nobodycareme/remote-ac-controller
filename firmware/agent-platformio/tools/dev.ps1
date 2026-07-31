@@ -91,11 +91,12 @@ function Resolve-PioExecutable {
         $candidates += (Join-Path $localCore 'penv/bin/pio')
     }
 
-    # Project-local config: .pio-core-dir in the repository root (one-line path,
+    # Project-local config: .pio-core-dir in the firmware root (one-line path,
     # git-ignored, mirrors the $env:PLATFORMIO_CORE_DIR behaviour).
+    # Read with -Encoding UTF8 so paths containing non-ASCII characters are preserved.
     $configFile = Join-Path $RepoRoot '.pio-core-dir'
     if (Test-Path $configFile) {
-        $corePath = (Get-Content -Path $configFile -TotalCount 1).Trim()
+        $corePath = (Get-Content -Path $configFile -TotalCount 1 -Encoding UTF8).Trim()
         if ($corePath -and (Test-Path $corePath)) {
             $candidates += (Join-Path $corePath 'penv\Scripts\pio.exe')
             $candidates += (Join-Path $corePath 'penv\Scripts\pio.bat')
