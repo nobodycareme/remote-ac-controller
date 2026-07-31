@@ -108,16 +108,15 @@ function Resolve-PioExecutable {
     foreach ($c in $candidates) {
         if ($c -and (Test-Path $c)) {
             $resolved = (Resolve-Path $c).Path
-            # Validate that the discovered executable actually runs (pio.exe shipped
-            # with some PlatformIO Core installs is a broken stub).
-            $LASTEXITCODE = 1  # default-fail so the catch block can always read it
-            try {
-                $null = & $resolved --version 2>&1
-                if ($LASTEXITCODE -eq 0) { return $resolved }
-            } catch {
-                # Native stub (e.g. broken pio.exe) throws ApplicationFailedException;
-                # $LASTEXITCODE stays at default-fail (1) -> fall through.
-            }
+            # Skip the broken pio.exe stub (some PlatformIO Core installs ship a
+            # placeholder that always fails with "not valid for this OS").
+            if ($c -like '*pio.exe') { continue }
+            # Validate that the discovered executable actually runs.
+            $ErrorActionPreference = 'Continue'
+            $null = & $resolved --version 2>&1
+            $rc = $LASTEXITCODE
+            $ErrorActionPreference = 'Stop'
+            if ($rc -eq 0) { return $resolved }
         }
     }
 
