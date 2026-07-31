@@ -53,19 +53,27 @@ cp -r ../agent-platformio/lib/srun-c ~/Arduino/libraries/srun-c
 
 ## 配置
 
-1. **复制并编辑配置文件：**
+1. **复制并编辑数值配置文件：**
    ```bash
    cp config.example.h config.h
    ```
 
-2. **编辑 `config.h`** 设置你的参数：
+2. **编辑 `config.h`** 填写你的运行期参数（仅数值/凭据占位）：
    - 设置 `CAMPUS_SSID` 为你的 Wi-Fi 网络名称
-   - 校园网环境设置 `ENABLE_CAMPUS_AUTH` 为 `1`
-   - 如需校园网认证，填写校园网账号凭据
-   - 如需 MQTT 云连接，设置 `ENABLE_CLOUD` 为 `1`
-   - 如启用云连接，填写 MQTT Broker 信息
+   - 如需校园网认证，校园网账号凭据填在 `config/campus_secrets.h`（复制
+     `config/campus_secrets.example.h` → `config/campus_secrets.h`）
+   - 如需 MQTT 云连接，填写 MQTT Broker 信息
 
-3. **`config.h` 已被 git-ignore** — 切勿提交真实凭据。
+3. **（可选）复制并编辑全局功能开关头文件：**
+   ```bash
+   cp Remote_AC_Controller.ino.globals.example.h Remote_AC_Controller.ino.globals.h
+   ```
+   在其中设置 `ENABLE_CAMPUS_AUTH` / `ENABLE_CLOUD` / `ENABLE_IR_MUTATING_COMMANDS`
+   等编译期功能开关；并将 `sketch.yaml` 的 `compile.extra_flags` 指向你的
+   `globals.h`。**跳过此步也可编译**——提交的 `.example.h` 已含安全公开默认值，
+   通过 ESP8266 核心的 `-include` 机制自动注入。
+
+4. **`config.h` 与 `globals.h` 均已被 git-ignore** — 切勿提交真实凭据或开启真实认证。
 
 ## 构建与上传
 
@@ -92,15 +100,19 @@ SINGLE_SERIAL_ROUTER=TRUE
 
 ## 构建配置矩阵
 
-| 功能                | 宏                            | 默认值 |
-|--------------------|-------------------------------|--------|
-| Wi-Fi              | ENABLE_WIFI                   | ON     |
-| 云连接 (MQTT)      | ENABLE_CLOUD                  | OFF    |
-| 云凭据加载         | ENABLE_CLOUD_CREDENTIALS      | OFF    |
-| 校园网认证         | ENABLE_CAMPUS_AUTH            | OFF    |
-| 红外发射命令       | ENABLE_IR_MUTATING_COMMANDS   | OFF    |
+| 功能                | 宏                            | 默认值（globals.example.h） |
+|--------------------|-------------------------------|------------------------------|
+| Wi-Fi              | ENABLE_WIFI                   | ON                           |
+| 云连接 (MQTT)      | ENABLE_CLOUD                  | OFF                          |
+| 云凭据加载         | ENABLE_CLOUD_CREDENTIALS      | OFF                          |
+| 校园网自动认证     | ENABLE_AUTO_CAMPUS_AUTH       | OFF                          |
+| 校园网认证         | ENABLE_CAMPUS_AUTH            | OFF                          |
+| 受控真实认证       | ENABLE_CONTROLLED_LIVE_AUTH   | OFF                          |
+| 红外发射命令       | ENABLE_IR_MUTATING_COMMANDS   | OFF                          |
 
-在 `config.h` 中设置这些宏以匹配你的使用场景。
+这些编译期功能开关在 `Remote_AC_Controller.ino.globals.h`（由 `sketch.yaml` 的
+`-include` 注入）中设置；运行期数值（SSID、Broker、TLS 等）在 `config.h` 中设置。
+两者职责分离。
 
 ## 与 PlatformIO 构建的差异
 

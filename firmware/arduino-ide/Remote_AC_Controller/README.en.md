@@ -53,19 +53,28 @@ The IR module uses SoftwareSerial. This is included with ESP8266 core — no sep
 
 ## Configuration
 
-1. **Copy and edit config file:**
+1. **Copy and edit the value config file:**
    ```bash
    cp config.example.h config.h
    ```
 
-2. **Edit `config.h`** with your settings:
+2. **Edit `config.h`** with your runtime values (values/credential placeholders only):
    - Set `CAMPUS_SSID` to your Wi-Fi network name
-   - Set `ENABLE_CAMPUS_AUTH` to `1` if on campus network
-   - Set campus login credentials if required
-   - Set `ENABLE_CLOUD` to `1` for MQTT cloud connectivity
+   - For campus auth, put your credentials in `config/campus_secrets.h`
+     (copy `config/campus_secrets.example.h` -> `config/campus_secrets.h`)
    - Set MQTT broker details if cloud is enabled
 
-3. **`config.h` is git-ignored** — never commit real credentials.
+3. **(Optional) Copy and edit the global feature-switch header:**
+   ```bash
+   cp Remote_AC_Controller.ino.globals.example.h Remote_AC_Controller.ino.globals.h
+   ```
+   Set `ENABLE_CAMPUS_AUTH` / `ENABLE_CLOUD` / `ENABLE_IR_MUTATING_COMMANDS` etc.
+   there, and point `sketch.yaml`'s `compile.extra_flags` at your `globals.h`.
+   **Skipping this step still compiles** — the committed `.example.h` ships safe
+   public defaults and is auto-injected via the ESP8266 core `-include` mechanism.
+
+4. **Both `config.h` and `globals.h` are git-ignored** — never commit real
+   credentials or turn on live authentication.
 
 ## Building & Uploading
 
@@ -92,15 +101,19 @@ SINGLE_SERIAL_ROUTER=TRUE
 
 ## Build Profiles
 
-| Feature                | Flag                          | Default |
-|------------------------|-------------------------------|---------|
-| Wi-Fi                  | ENABLE_WIFI                   | ON      |
-| Cloud (MQTT)           | ENABLE_CLOUD                  | OFF     |
-| Cloud credentials      | ENABLE_CLOUD_CREDENTIALS      | OFF     |
-| Campus auth            | ENABLE_CAMPUS_AUTH            | OFF     |
-| IR mutating commands   | ENABLE_IR_MUTATING_COMMANDS   | OFF     |
+| Feature                | Flag                          | Default (globals.example.h) |
+|------------------------|-------------------------------|------------------------------|
+| Wi-Fi                  | ENABLE_WIFI                   | ON                           |
+| Cloud (MQTT)           | ENABLE_CLOUD                  | OFF                          |
+| Cloud credentials      | ENABLE_CLOUD_CREDENTIALS      | OFF                          |
+| Auto campus auth       | ENABLE_AUTO_CAMPUS_AUTH       | OFF                          |
+| Campus auth            | ENABLE_CAMPUS_AUTH            | OFF                          |
+| Controlled live auth   | ENABLE_CONTROLLED_LIVE_AUTH   | OFF                          |
+| IR mutating commands   | ENABLE_IR_MUTATING_COMMANDS   | OFF                          |
 
-Set these in `config.h` to match your use case.
+The compile-time feature switches live in `Remote_AC_Controller.ino.globals.h`
+(injected by `sketch.yaml`'s `-include`); runtime values (SSID, broker, TLS) live
+in `config.h`. The two are deliberately separate.
 
 ## Differences from PlatformIO Build
 
