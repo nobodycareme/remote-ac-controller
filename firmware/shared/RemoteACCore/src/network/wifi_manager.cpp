@@ -1,21 +1,28 @@
-// ============================================================
-// wifi_manager.cpp - campus Wi-Fi + srun auth state machine (see header)
-// v0.3.4: PortalDetector integration, BACKOFF discipline, timestamp-scheduled
-// verification (no delay in loop), heap telemetry, single-source portal logic.
-// ============================================================
-// Public Arduino build (ENABLE_CLOUD=0): this file is skipped because it
-// depends on PlatformIO-only campus auth libraries.
-#if !defined(ENABLE_CLOUD) || ENABLE_CLOUD
+﻿/*
+ * wifi_manager.cpp - campus Wi-Fi + srun auth state machine (see header)
+ * v0.3.5: Base WiFi (begin/connect/disconnect/scan/update/state/localIp) ALWAYS
+ *         compiled. Campus-auth-specific members (doAuth/campusLogin/campusLogout/
+ *         executeLogin) conditionally compiled under ENABLE_CAMPUS_AUTH.
+ *
+ * v0.3.4 foundation: PortalDetector integration, BACKOFF discipline,
+ * timestamp-scheduled verification (no delay in loop), heap telemetry,
+ * single-source portal logic.
+ */
 #include "network/wifi_manager.h"
 #include <ESP8266HTTPClient.h>
 #include "network/net_telemetry.h"
+
+#if ENABLE_CAMPUS_AUTH
 #include "config/campus_credentials.h"
+#endif
 #include "config/campus_config.h"
 
 // ---- timing constants ----
-static const uint32_t PORTAL_BACKOFF_MS = 30000;                 // 二.1: 30s on portal-unknown
-static const uint32_t AUTH_BACKOFF_MS[] = {30000, 60000, 120000}; // 二.2: 30/60/120s
-static const uint32_t VERIFY_GAP_MS = 3000;                      // 三.2: gap between verify rounds
+static const uint32_t PORTAL_BACKOFF_MS = 30000;                 // 浜?1: 30s on portal-unknown
+#if ENABLE_CAMPUS_AUTH
+static const uint32_t AUTH_BACKOFF_MS[] = {30000, 60000, 120000}; // 浜?2: 30/60/120s
+#endif
+static const uint32_t VERIFY_GAP_MS = 3000;                      // 涓?2: gap between verify rounds
 static const uint32_t NET_CHECK_MS = 5UL * 60UL * 1000UL;        // ONLINE re-check every 5 min
 static const uint8_t  MAX_AUTH_RETRIES = 2;                      // initial + 2 retries = 3 attempts
 
@@ -75,6 +82,7 @@ void WifiManager::schedulePortalBackoff() {
   _nextRetryMs = millis() + PORTAL_BACKOFF_MS;
 }
 
+#if ENABLE_CAMPUS_AUTH
 void WifiManager::scheduleAuthBackoff() {
   _backoffReason = BACKOFF_AUTH_RETRY;
   const uint8_t maxStep = sizeof(AUTH_BACKOFF_MS) / sizeof(AUTH_BACKOFF_MS[0]);
@@ -83,19 +91,8 @@ void WifiManager::scheduleAuthBackoff() {
   if (_backoffStep < maxStep) _backoffStep++;
 }
 
-// Delegates to the shared PortalDetector module (no credentials sent).
-void WifiManager::doPortalDetect() {
-  PortalResult res;
-  _portalDetected = PortalDetector::detect(res);   // prints CAPTIVE_PORTAL_DETECTED=YES/HOST/AC_ID
-  _portalHost = res.portalHost;
-  _portalUrl  = res.portalUrl;
-  _acId       = res.acId;
-}
-
-// ---------------------------------------------------------------------------
 // Login orchestration. Blocking (srun_login is synchronous) but only runs on an
 // explicit, protected request. Retries on TIMEOUT only, gated by BACKOFF.
-// ---------------------------------------------------------------------------
 void WifiManager::doAuth() {
   if (!CampusCredentials::ready()) {
     Serial.println(F("CAMPUS_CREDS_READY=NO"));
@@ -151,13 +148,64 @@ void WifiManager::doAuth() {
     enterState(WIFI_BLOCKED);
     return;
   }
-  // Other failures -> backoff then REAL re-auth (二.7), not a silent stop.
+  // Other failures -> backoff then REAL re-auth (浜?7), not a silent stop.
   enterState(WIFI_BACKOFF);
   scheduleAuthBackoff();
 }
 
+void WifiManager::campusLogin() {
+  if (!CampusCredentials::ready()) {
+    Serial.println(F("CAMPUS_CREDS_READY=NO"));
+    Serial.println(F("AUTH_BLOCKED_NEEDS_LOCAL_CREDENTIALS"));
+    return;
+  }
+  if (_state == WIFI_DISCONNECTED || _state == WIFI_ASSOCIATING) {
+    Serial.println(F("WIFI_NOT_ASSOCIATED connect first"));
+    return;
+  }
+  // 浜?10: if Wi-Fi is associated but portal detection is not yet determined,
+  // trigger detection first instead of silently waiting.
+  if (_state == WIFI_DHCP_WAIT) {
+    Serial.println(F("PORTAL_NOT_READY trigger detect"));
+    enterState(WIFI_PORTAL_CHECK);
+    return;
+  }
+  // Protected, single request. The actual login runs in update() (AUTHENTICATING).
+  _authRetry = 0;
+  _authRequested = true;
+  Serial.println(F("CAMPUS_LOGIN_REQUESTED"));
+}
+
+void WifiManager::campusLogout() {
+  if (!CampusCredentials::ready()) {
+    Serial.println(F("CAMPUS_CREDS_READY=NO"));
+    return;
+  }
+  CampusAuthResult r = _auth.logout();
+  Serial.print(F("CAMPUS_LOGOUT result="));
+  Serial.println(CampusAuthVendor::resultStr(r));
+}
+
+CampusAuthResult WifiManager::executeLogin() {
+  if (!CampusCredentials::ready()) return CAMPUS_AUTH_UNKNOWN_RESPONSE;
+  if (!_auth.tlsPinValid())         return CAMPUS_AUTH_TLS_PIN_MISMATCH;
+  _tlsOk = true;
+  Serial.println(F("CAMPUS_AUTH_START"));
+  return _auth.login(localIp());
+}
+#endif // ENABLE_CAMPUS_AUTH
+
+// Delegates to the shared PortalDetector module (no credentials sent).
+void WifiManager::doPortalDetect() {
+  PortalResult res;
+  _portalDetected = PortalDetector::detect(res);   // prints CAPTIVE_PORTAL_DETECTED=YES/HOST/AC_ID
+  _portalHost = res.portalHost;
+  _portalUrl  = res.portalUrl;
+  _acId       = res.acId;
+}
+
 // ---------------------------------------------------------------------------
-// ONE internet-verification round (三.2): timestamp-scheduled, no delay().
+// ONE internet-verification round (涓?2): timestamp-scheduled, no delay().
 // Only ALL 3 rounds success -> ONLINE.
 // ---------------------------------------------------------------------------
 void WifiManager::doVerifyRound() {
@@ -180,12 +228,14 @@ void WifiManager::doVerifyRound() {
       _lastNetCheckMs = millis();
     } else {
       Serial.println(F("AUTH_RESPONSE_OK_BUT_INTERNET_BLOCKED"));
-      // No-cred gate (二.9): honest blocker printed ONCE, then periodic backoff.
+#if ENABLE_CAMPUS_AUTH
+      // No-cred gate (浜?9): honest blocker printed ONCE, then periodic backoff.
       if (!CampusCredentials::ready() && !_authBlockedReported) {
         Serial.println(F("CAMPUS_CREDS_READY=NO"));
         Serial.println(F("AUTH_BLOCKED_NEEDS_LOCAL_CREDENTIALS"));
         _authBlockedReported = true;
       }
+#endif
       enterState(WIFI_BACKOFF);
       schedulePortalBackoff();
     }
@@ -216,59 +266,17 @@ bool WifiManager::probeInternet() {
   return ok;
 }
 
-void WifiManager::campusLogin() {
-  if (!CampusCredentials::ready()) {
-    Serial.println(F("CAMPUS_CREDS_READY=NO"));
-    Serial.println(F("AUTH_BLOCKED_NEEDS_LOCAL_CREDENTIALS"));
-    return;
-  }
-  if (_state == WIFI_DISCONNECTED || _state == WIFI_ASSOCIATING) {
-    Serial.println(F("WIFI_NOT_ASSOCIATED connect first"));
-    return;
-  }
-  // 二.10: if Wi-Fi is associated but portal detection is not yet determined,
-  // trigger detection first instead of silently waiting.
-  if (_state == WIFI_DHCP_WAIT) {
-    Serial.println(F("PORTAL_NOT_READY trigger detect"));
-    enterState(WIFI_PORTAL_CHECK);
-    return;
-  }
-  // Protected, single request. The actual login runs in update() (AUTHENTICATING).
-  _authRetry = 0;
-  _authRequested = true;
-  Serial.println(F("CAMPUS_LOGIN_REQUESTED"));
-}
-
-void WifiManager::campusLogout() {
-  if (!CampusCredentials::ready()) {
-    Serial.println(F("CAMPUS_CREDS_READY=NO"));
-    return;
-  }
-  CampusAuthResult r = _auth.logout();
-  Serial.print(F("CAMPUS_LOGOUT result="));
-  Serial.println(CampusAuthVendor::resultStr(r));
-}
-
-// -- Direct login helper (for controlled-auth firmware; call after raw WiFi connect) --
-CampusAuthResult WifiManager::executeLogin() {
-  if (!CampusCredentials::ready()) return CAMPUS_AUTH_UNKNOWN_RESPONSE;
-  if (!_auth.tlsPinValid())         return CAMPUS_AUTH_TLS_PIN_MISMATCH;
-  _tlsOk = true;
-  Serial.println(F("CAMPUS_AUTH_START"));
-  return _auth.login(localIp());
-}
-
 void WifiManager::update() {
   const uint32_t now = millis();
 
-  // 二.3: link-loss guard (except DISCONNECTED/ASSOCIATING/BLOCKED).
+  // 浜?3: link-loss guard (except DISCONNECTED/ASSOCIATING/BLOCKED).
   if (_state != WIFI_DISCONNECTED && _state != WIFI_ASSOCIATING && _state != WIFI_BLOCKED) {
     if (WiFi.status() != WL_CONNECTED) {
       Serial.println(F("WIFI_LINK_LOST re-associate"));
       connect();   // -> ASSOCIATING
       return;
     }
-    // 二.4: DHCP IP change -> re-detect portal.
+    // 浜?4: DHCP IP change -> re-detect portal.
     String ip = localIp();
     if (ip != _lastLocalIp) {
       _lastLocalIp = ip;
@@ -312,7 +320,7 @@ void WifiManager::update() {
       if (_portalDetected) {
         enterState(WIFI_AUTH_READY);
       } else if (now - _stateEnterMs > 500) {
-        // No captive portal detected — verify internet before going online
+        // No captive portal detected 鈥?verify internet before going online
         if (probeInternet()) {
           Serial.println(F("PORTAL_CAPTIVE=NO INTERNET_OK AUTH=NOT_REQUIRED"));
           enterState(WIFI_VERIFYING_INTERNET);
@@ -324,6 +332,7 @@ void WifiManager::update() {
       }
       break;
 
+#if ENABLE_CAMPUS_AUTH
     case WIFI_AUTH_READY:
       if (_authRequested) {
         _authRequested = false;
@@ -334,6 +343,7 @@ void WifiManager::update() {
     case WIFI_AUTHENTICATING:
       doAuth();
       break;
+#endif
 
     case WIFI_VERIFYING_INTERNET:
       if (now >= _nextVerifyMs) {
@@ -353,7 +363,7 @@ void WifiManager::update() {
             enterState(WIFI_PORTAL_CHECK);
           }
         } else {
-          _failStreak = 0;   // 二.5: success resets streak
+          _failStreak = 0;   // 浜?5: success resets streak
           Serial.println(F("INTERNET_CHECK_OK"));
         }
       }
@@ -365,7 +375,11 @@ void WifiManager::update() {
           if (WiFi.status() == WL_CONNECTED) enterState(WIFI_PORTAL_CHECK);
           else connect();    // re-associate
         } else {
-          enterState(WIFI_AUTHENTICATING);   // 二.7: real re-auth, not stuck at AUTH_READY
+#if ENABLE_CAMPUS_AUTH
+          enterState(WIFI_AUTHENTICATING);   // 浜?7: real re-auth, not stuck at AUTH_READY
+#else
+          enterState(WIFI_PORTAL_CHECK);     // portal-only backoff
+#endif
         }
       }
       break;
@@ -392,4 +406,3 @@ const char* WifiManager::stateStr(WifiState s) {
     default:                       return "UNKNOWN";
   }
 }
-#endif // ENABLE_CLOUD guard
