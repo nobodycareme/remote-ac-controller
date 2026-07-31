@@ -1,6 +1,8 @@
 // ============================================================
 // serial_cli.cpp - CLI implementation (DHT11 + ZJ-IR-V2 IR module)
 // ============================================================
+// Public Arduino build (ENABLE_CLOUD=0): skipped — depends on wifi_manager.
+#if !defined(ENABLE_CLOUD) || ENABLE_CLOUD
 #include "serial_cli.h"
 #include <Arduino.h>
 #include <Crypto.h>
@@ -1283,3 +1285,4 @@ void Cli::handle() {
   }
 #endif
 }
+#endif // ENABLE_CLOUD guard

@@ -1,3 +1,4 @@
+#if !defined(ENABLE_CLOUD) || ENABLE_CLOUD
 // ============================================================
 // mqtt_client.cpp — MQTT-over-TLS client for ESP8266 (v0.4.0)
 // ============================================================
@@ -302,3 +303,4 @@ bool MqttClientWrapper::publishAck(const char* json) {
 String MqttClientWrapper::makeTopic(const char* suffix) const {
     return String(MQTT_TOPIC_PREFIX "/") + suffix;
 }
+#endif // ENABLE_CLOUD guard

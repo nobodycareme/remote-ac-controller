@@ -1,3 +1,4 @@
+#if !defined(ENABLE_CLOUD) || ENABLE_CLOUD
 // ============================================================
 // connectivity_state_machine.cpp — v0.4.0 cloud foundation
 // ============================================================
@@ -280,3 +281,4 @@ void ConnectivityStateMachine::tick() {
         break;
     }
 }
+#endif // ENABLE_CLOUD guard

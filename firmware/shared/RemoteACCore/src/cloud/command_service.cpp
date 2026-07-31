@@ -1,3 +1,4 @@
+#if !defined(ENABLE_CLOUD) || ENABLE_CLOUD
 // ============================================================
 // command_service.cpp — v0.4.0 cloud foundation
 // ============================================================
@@ -338,3 +339,4 @@ void CommandService::recordCommandId(const String& cmdId) {
     _recentIds[_recentIdx % MAX_RECENT] = cmdId;
     _recentIdx++;
 }
+#endif // ENABLE_CLOUD guard

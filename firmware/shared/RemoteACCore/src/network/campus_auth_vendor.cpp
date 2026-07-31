@@ -1,3 +1,4 @@
+#if !defined(ENABLE_CLOUD) || ENABLE_CLOUD
 // ============================================================
 // campus_auth_vendor.cpp - wrapper around vendored srun-c (see header)
 // v0.3.5: +HTTP metadata diagnostics, JSONP handling, precise error stages
@@ -332,3 +333,4 @@ const char* CampusAuthVendor::resultStr(CampusAuthResult r) {
     default: return "UNSET";
   }
 }
+#endif // ENABLE_CLOUD guard

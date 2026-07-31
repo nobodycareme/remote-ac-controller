@@ -3,6 +3,9 @@
 // v0.3.4: PortalDetector integration, BACKOFF discipline, timestamp-scheduled
 // verification (no delay in loop), heap telemetry, single-source portal logic.
 // ============================================================
+// Public Arduino build (ENABLE_CLOUD=0): this file is skipped because it
+// depends on PlatformIO-only campus auth libraries.
+#if !defined(ENABLE_CLOUD) || ENABLE_CLOUD
 #include "network/wifi_manager.h"
 #include <ESP8266HTTPClient.h>
 #include "network/net_telemetry.h"
@@ -389,3 +392,4 @@ const char* WifiManager::stateStr(WifiState s) {
     default:                       return "UNKNOWN";
   }
 }
+#endif // ENABLE_CLOUD guard

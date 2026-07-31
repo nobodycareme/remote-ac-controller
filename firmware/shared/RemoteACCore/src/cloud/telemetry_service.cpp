@@ -1,3 +1,4 @@
+#if !defined(ENABLE_CLOUD) || ENABLE_CLOUD
 // ============================================================
 // telemetry_service.cpp — v0.4.0 cloud foundation
 // ============================================================
@@ -115,3 +116,4 @@ TelemetryService::TickResult TelemetryService::tick() {
     }
     return TickResult::NotDue;
 }
+#endif // ENABLE_CLOUD guard
