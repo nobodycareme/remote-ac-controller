@@ -2,6 +2,23 @@
 
 # Changelog
 
+## [1.2.0] - 2026-08-01
+
+Canonical monorepo consolidation release.
+
+- Single authoritative monorepo established; the two split repositories are
+  retained only as private archived records (histories not merged; zero secret
+  leakage).
+- Production-grade automatic Xidian campus authentication: authEpoch cycle
+  model + policy backoff/quota/hard-block + compile-time feature-gate
+  dependency constraints; recovery on Wi-Fi drop, DHCP change and portal
+  re-appearance; 30/60/120s backoff ladder.
+- Host tests: CampusAuthPolicy / feature gates / auth epoch / campus profiles.
+- Cloud security consolidation (backend_verify.js credentials come only from
+  the environment).
+- Complete bilingual documentation paths (24 doc-map pairs + three checkers).
+- Unified CI (11 jobs) + unified version v1.2.0 + BOM/mojibake cleanup.
+
 All notable changes to this project are documented here. This repository
 follows a Monorepo layout combining the ESP8266 firmware and the cloud
 backend/frontend into a single published history.

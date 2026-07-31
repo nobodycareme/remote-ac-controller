@@ -53,18 +53,27 @@ lib_extra_dirs = ../shared
 - 生产环境的 Wi-Fi 或 MQTT 凭据
 - 硬件关联的秘密
 
-所有凭据相关的配置预期在构建特定的项目层完成（PlatformIO `include/` 或 Arduino `config.h`）。
+所有凭据相关的配置预期在构建特定的项目层完成：PlatformIO 使用
+`agent-platformio/include/`（`cloud_secrets.h` 等）；Arduino IDE 使用本库
+`src/` 与 `src/config/` 下的 git-ignored 秘密头文件。编译期功能开关一律来自
+`config/feature_gates.h` 及其上游宏定义，而非任何运行期配置文件。
 
 ## 依赖
 
-所需的 Arduino 库（通过 PlatformIO 库管理器或 Arduino 库管理器安装）：
+所需的 Arduino 库（通过 PlatformIO 库管理器或 Arduino 库管理器安装）。
+**并非全部无条件必需**——取决于启用的功能开关：
 
-- **DHT sensor library** (Adafruit)
-- **Adafruit Unified Sensor**
-- **ArduinoJson** (Benoit Blanchon)
-- **PubSubClient** (Nick O'Leary)
-- **Crypto** (Rhys Weatherley) — SHA256、Base64、BLAKE2s
-- **srun-c** (自定义，已捆绑) — 校园网认证
+| 库                          | 何时需要                                  |
+|-----------------------------|-------------------------------------------|
+| **DHT sensor library** (Adafruit) | 始终（`sensors/dht11_sensor.h`）      |
+| **Adafruit Unified Sensor**       | 始终（DHT 的依赖项）                   |
+| **ArduinoJson** (Benoit Blanchon) | `ENABLE_CAMPUS_AUTH=1`                |
+| **PubSubClient** (Nick O'Leary)   | `ENABLE_CLOUD=1`                      |
+| **srun-c**（本仓库捆绑）           | `ENABLE_CAMPUS_AUTH=1`                |
+
+> **不需要**第三方 Crypto 库。`serial_cli.cpp` 中的 `<Crypto.h>` / `<base64.h>`
+> 仅在 `ENABLE_IR_LAB_LEARNING_COMMANDS=1` 时引用，且这两个头文件由 ESP8266
+> 核心自带。`<SoftwareSerial.h>` 同理，无需单独安装。
 
 ## 版本
 

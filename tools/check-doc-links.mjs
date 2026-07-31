@@ -4,10 +4,11 @@
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join, dirname, resolve, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SKIP_DIRS = new Set([
-  '.git', 'node_modules', 'dist', 'build', '.pio', '.vite',
+  '.git', 'node_modules', 'dist', 'build', '.pio', '.build', '.vite',
   'coverage', 'vendor', '.venv', '__pycache__',
 ]);
 
@@ -21,6 +22,27 @@ function walk(dir, out = []) {
     }
   }
   return out;
+}
+
+// 只检查 git 跟踪的 Markdown：CI 的干净检出里不存在 .build/ 等生成目录，
+// 本地工作树却可能有；用 git 清单让本地预演与 CI 结论完全一致。
+function trackedMarkdown() {
+  try {
+    const out = execFileSync('git', ['-C', repoRoot, 'ls-files', '-z', '--', '*.md', '*.MD'], {
+      encoding: 'utf8',
+      maxBuffer: 32 * 1024 * 1024,
+    });
+    const files = out.split('\0').filter(Boolean).map((p) => join(repoRoot, p));
+    return files.length ? files : null;
+  } catch {
+    return null;
+  }
+}
+
+function collectFiles() {
+  const tracked = trackedMarkdown();
+  if (tracked) return { files: tracked, source: 'git ls-files (tracked only)' };
+  return { files: walk(repoRoot), source: 'filesystem walk (git unavailable)' };
 }
 
 // 行内链接 [text](target) 与引用式定义 [id]: target
@@ -40,16 +62,16 @@ function isExternal(target) {
 }
 
 // 第三方 vendored 目录：其 README 由上游维护，不改名、不修链接，仅作提示。
+// 上游 README 常引用未随发行包分发的文件（如 Unity 的 docs/、srun-c 的
+// platform/md.c），这类断链不是本仓库的缺陷，因此只报告不失败。
 const VENDORED_PREFIXES = [
-  'firmware/lib/Adafruit Unified Sensor/',
-  'firmware/lib/ArduinoJson/',
-  'firmware/lib/DHT sensor library/',
-  'firmware/lib/PubSubClient/',
-  'firmware/lib/srun-c/',
+  'firmware/agent-platformio/lib/',
+  'firmware/arduino-ide/libraries/',
 ];
 const isVendored = (rel) => VENDORED_PREFIXES.some((p) => rel.startsWith(p));
 
-const files = walk(repoRoot).sort();
+const collected = collectFiles();
+const files = collected.files.slice().sort();
 const broken = [];
 const brokenVendored = [];
 let totalLinks = 0;
@@ -86,6 +108,7 @@ for (const file of files) {
 
 const report = {
   repoRoot,
+  fileSource: collected.source,
   markdownFiles: files.length,
   totalLinks,
   relativeLinks,
@@ -98,6 +121,7 @@ const report = {
 if (process.argv.includes('--json')) {
   process.stdout.write(JSON.stringify(report, null, 2) + '\n');
 } else {
+  console.log(`File source                 : ${report.fileSource}`);
   console.log(`Markdown files scanned      : ${report.markdownFiles}`);
   console.log(`Links found (total)         : ${report.totalLinks}`);
   console.log(`Relative links checked      : ${report.relativeLinks}`);

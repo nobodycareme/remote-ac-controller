@@ -53,18 +53,31 @@ This library **does not** contain:
 - Production Wi-Fi or MQTT credentials
 - Hardware-tied secrets
 
-All credential-sensitive configuration is expected in the build-specific project layer (PlatformIO `include/` or Arduino `config.h`).
+All credential-sensitive configuration belongs to the build-specific project
+layer: PlatformIO uses `agent-platformio/include/` (`cloud_secrets.h` etc.);
+Arduino IDE uses the git-ignored secret headers under this library's `src/` and
+`src/config/`. Compile-time feature switches always come from
+`config/feature_gates.h` and its upstream macros, never from a runtime config
+file.
 
 ## Dependencies
 
-Required Arduino libraries (install via PlatformIO Library Manager or Arduino Library Manager):
+Arduino libraries (install via PlatformIO Library Manager or Arduino Library
+Manager). **Not all are unconditionally required** — it depends on the feature
+switches you enable:
 
-- **DHT sensor library** (Adafruit)
-- **Adafruit Unified Sensor**
-- **ArduinoJson** (Benoit Blanchon)
-- **PubSubClient** (Nick O'Leary)
-- **Crypto** (Rhys Weatherley) — SHA256, Base64, BLAKE2s
-- **srun-c** (custom, bundled) — campus network authentication
+| Library                           | Required when                          |
+|-----------------------------------|----------------------------------------|
+| **DHT sensor library** (Adafruit) | Always (`sensors/dht11_sensor.h`)      |
+| **Adafruit Unified Sensor**       | Always (DHT dependency)                |
+| **ArduinoJson** (Benoit Blanchon) | `ENABLE_CAMPUS_AUTH=1`                 |
+| **PubSubClient** (Nick O'Leary)   | `ENABLE_CLOUD=1`                       |
+| **srun-c** (bundled in this repo) | `ENABLE_CAMPUS_AUTH=1`                 |
+
+> A third-party Crypto library is **not** required. The `<Crypto.h>` /
+> `<base64.h>` includes in `serial_cli.cpp` are referenced only under
+> `ENABLE_IR_LAB_LEARNING_COMMANDS=1`, and both headers ship with the ESP8266
+> core. The same applies to `<SoftwareSerial.h>`.
 
 ## Version
 

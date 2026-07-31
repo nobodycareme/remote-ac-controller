@@ -201,7 +201,7 @@ No Git submodules — a single `git clone` gives you everything.
 
 Full bilingual documentation in [`docs/`](../) — see the complete
 [English documentation index](./documentation-index.md) or the
-[中文文档导航](../中文/文档导航.md).
+[中文文档导航](documentation-index.md).
 
 | Getting Started | Understanding | Operations |
 |---|---|---|

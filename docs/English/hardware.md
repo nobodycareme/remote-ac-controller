@@ -168,7 +168,7 @@ common first-build mistake.
   and give the DHT11 airflow that is not warmed by the board's own regulator.
 - **No IR code data.** Air-conditioner IR frames are model-specific and are not
   distributed with this project. Capture your own — the procedure is in
-  [`docs/ir-learning.md`](../中文/红外学习.md).
+  [`docs/ir-learning.md`](ir-learning.md).
 
 ---
 

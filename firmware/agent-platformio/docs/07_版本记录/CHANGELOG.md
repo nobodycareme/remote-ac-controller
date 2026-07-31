@@ -16,8 +16,8 @@
   `srun_portal_pc?ac_id=8`（校园真实形态），不再仅依赖 3xx 状态码。
 - 设备实测（COM6，固件 `1.1.4-srun-portal-fix`）：
   `WIFI_ASSOC_PASS` / `PORTAL_DETECT_RESULT captive=YES` /
-  `CAPTIVE_PORTAL_DETECTED=YES` / `PORTAL_HOST=portal.campus.example.edu` / `AC_ID=8` /
-  `PORTAL_LOGIN_URL=https://portal.campus.example.edu/index_8.html` / `INTERNET=DOWN` /
+  `CAPTIVE_PORTAL_DETECTED=YES` / `PORTAL_HOST=w.xidian.edu.cn` / `AC_ID=8` /
+  `PORTAL_LOGIN_URL=https://w.xidian.edu.cn/index_8.html` / `INTERNET=DOWN` /
   `AUTH_BLOCKED_NEEDS_LOCAL_CREDENTIALS`（无凭据诚实阻断，未发起任何真实登录）。
 - 六环境 clean build 全 PASS（v0.3.4）：`nodemcuv2` / `nodemcuv2_probe` /
   `nodemcuv2_wifi_assoc` / `nodemcuv2_portal_probe` / `nodemcuv2_campus_auth` /
@@ -65,11 +65,11 @@
   （**废弃**旧的 `#ifdef SECRETS_H` 误写）；单一来源 `CAMPUS_USERNAME`/`CAMPUS_PASSWORD`；
   无凭据时 `CAMPUS_CREDS_READY=NO`，启动仅打印该标志，**绝不打印**账号/密码/token/info/chksum/URL。
 - `include/config/campus_tls_pin.h`：`CAMPUS_CERT_SHA1=F4:BD:59:32:8E:77:8C:CB:AD:6E:AE:85:86:59:36:FD:0D:28:47:F9`
-  （`CN=*.campus.example.edu`，GlobalSign，有效期 2025-10-16~2026-11-17，经 PC 可信 TLS 核验为真证非 MITM）。
+  （`CN=*.xidian.edu.cn`，GlobalSign，有效期 2025-10-16~2026-11-17，经 PC 可信 TLS 核验为真证非 MITM）。
 - 保留 `INSECURE_PROBE_ONLY` 模式（仅门户检测，无 challenge/login、无凭据、无 secrets）。
 
 ### 校园参数再取证
-- SSID `stu-xdwlan`、host `portal.campus.example.edu`、`base_url` 仅 `https://portal.campus.example.edu`
+- SSID `stu-xdwlan`、host `w.xidian.edu.cn`、`base_url` 仅 `https://w.xidian.edu.cn`
   （无 `/index_8.html`）、`ac_id=8`、domain 空、禁运营商后缀、ESP IP 走真实 DHCP。
 
 ### 验证（真实运行时证据）
@@ -107,7 +107,7 @@ CLI 交互与状态机骨架被保留并改为调用 vendored srun-c，但算法
 
 ### 验证（真实运行时证据）
 - Wi-Fi 关联：`WIFI_ASSOC_PASS`，`LOCAL_IP=10.0.x.x`，`GATEWAY=10.0.0.1`，`DNS=198.51.100.53`。
-- 透明门户检测（校园 srun，`ac_id=8`）：`PORTAL_DETECTED=YES` / `CAPTIVE_PORTAL_DETECTED host=portal.campus.example.edu`。
+- 透明门户检测（校园 srun，`ac_id=8`）：`PORTAL_DETECTED=YES` / `CAPTIVE_PORTAL_DETECTED host=w.xidian.edu.cn`。
 - 主固件合并：`nodemcuv2` 编译 SUCCESS（416,416 B），烧录后 boot OK（DHT11 持续读取、heap 稳定），CLI 命令实测响应正确。
 - 无凭据诚实行为：所有真实登录/联网验证路径统一标记 `AUTH_BLOCKED_NEEDS_LOCAL_CREDENTIALS`，不伪造成功。
 
