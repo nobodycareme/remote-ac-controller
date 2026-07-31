@@ -164,16 +164,20 @@ jobs:
           cp firmware/arduino-ide/Remote_AC_Controller/config.example.h \
              firmware/arduino-ide/Remote_AC_Controller/config.h
 
-          # Install shared library and vendored srun-c for Arduino CLI
+          # Install shared library
           mkdir -p "$HOME/Arduino/libraries"
           ln -sf "$(pwd)/firmware/shared/RemoteACCore" "$HOME/Arduino/libraries/RemoteACCore"
-          # srun-c is a vendored campus network auth library needed by wifi_manager
-          cp -r firmware/agent-platformio/lib/srun-c "$HOME/Arduino/libraries/srun-c"
 
-          echo "=== Compiling (ENABLE_CLOUD=0, ENABLE_CAMPUS_AUTH=0) ==="
+          # srun-c include path (vendored campus network auth, PlatformIO-format lib)
+          SRUN_INC="-Ifirmware/agent-platformio/lib/srun-c/include"
+          SRUN_SRC="firmware/agent-platformio/lib/srun-c/src"
+
+          echo "=== Compiling public sketch ==="
+          echo "Flags: ENABLE_CLOUD=0 ENABLE_CAMPUS_AUTH=0 ENABLE_IR_MUTATING_COMMANDS=0 ENABLE_CLOUD_CREDENTIALS=0"
           arduino-cli compile \
             --fqbn esp8266:esp8266:nodemcuv2 \
-            --build-property "build.extra_flags=-DENABLE_CLOUD=0 -DENABLE_CAMPUS_AUTH=0 -DENABLE_IR_MUTATING_COMMANDS=0 -DENABLE_CLOUD_CREDENTIALS=0" \
+            --build-property "build.extra_flags=-DENABLE_CLOUD=0 -DENABLE_CAMPUS_AUTH=0 -DENABLE_IR_MUTATING_COMMANDS=0 -DENABLE_CLOUD_CREDENTIALS=0 ${SRUN_INC}" \
+            --build-property "build.source.path=src ${SRUN_SRC}" \
             firmware/arduino-ide/Remote_AC_Controller
 
           echo "=== Checking output ==="

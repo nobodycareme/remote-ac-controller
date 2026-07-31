@@ -24,11 +24,9 @@
  */
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
+#include "network/campus_auth_vendor.h"
 #include "network/portal_detector.h"
 #include "config/campus_config.h"
-#if ENABLE_CAMPUS_AUTH
-#include "network/campus_auth_vendor.h"
-#endif
 
 enum WifiState {
   WIFI_DISCONNECTED = 0,

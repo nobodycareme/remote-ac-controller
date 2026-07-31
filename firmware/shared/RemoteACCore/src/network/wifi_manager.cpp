@@ -6,9 +6,7 @@
 #include "network/wifi_manager.h"
 #include <ESP8266HTTPClient.h>
 #include "network/net_telemetry.h"
-#if ENABLE_CAMPUS_AUTH
 #include "config/campus_credentials.h"
-#endif
 #include "config/campus_config.h"
 
 // ---- timing constants ----
