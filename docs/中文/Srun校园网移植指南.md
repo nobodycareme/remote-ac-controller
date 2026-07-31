@@ -1,3 +1,5 @@
+**简体中文** | [English](../English/srun-campus-network-porting-guide.md)
+
 # Srun 校园网移植指南
 
 > 将本项目的校园网自动认证功能适配到其他基于 Srun 认证系统的学校。

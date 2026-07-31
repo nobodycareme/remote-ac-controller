@@ -1,3 +1,5 @@
+[简体中文](../中文/西电校园网自动认证.md) | **English**
+
 # Xidian Campus Network Automatic Authentication
 
 > **ESP8266 automatic Xidian University campus network authentication on boot** — After joining the campus open SSID, the device automatically completes Wi-Fi association, DHCP address acquisition, Captive Portal detection, Srun authentication, and Internet connectivity verification.

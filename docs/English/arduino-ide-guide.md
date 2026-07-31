@@ -1,3 +1,5 @@
+[简体中文](../中文/Arduino-IDE使用指南.md) | **English**
+
 # Arduino IDE Guide
 
 > Complete guide for compiling, uploading, and debugging the Remote AC Controller firmware using Arduino IDE.

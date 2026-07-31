@@ -124,5 +124,7 @@ pwsh tools/ir-simple-learner/build.ps1 -Clean
 
 ## 相关文档
 
-- [固件 README](../../firmware/README.md) — ESP8266 固件构建与烧录
+- [PlatformIO 固件 README](../../firmware/agent-platformio/README.md) — 命令行构建与烧录
+- [Arduino IDE 固件 README](../../firmware/arduino-ide/Remote_AC_Controller/README.md) — Arduino IDE 手动编译
+- [红外学习流程](../../docs/中文/红外学习.md) — 从采集到落库的完整流程
 - [项目 README](../../README.md) — 完整项目概览

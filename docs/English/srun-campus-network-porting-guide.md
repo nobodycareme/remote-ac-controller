@@ -1,3 +1,5 @@
+[简体中文](../中文/Srun校园网移植指南.md) | **English**
+
 # Srun Campus Network Porting Guide
 
 > Adapting the campus network automatic authentication feature to other schools that use Srun-based authentication systems.

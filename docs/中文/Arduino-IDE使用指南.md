@@ -1,3 +1,5 @@
+**简体中文** | [English](../English/arduino-ide-guide.md)
+
 # Arduino IDE 使用指南
 
 > 使用 Arduino IDE 编译、上传和调试 Remote AC Controller 固件的完整指南。

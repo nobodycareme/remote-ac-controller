@@ -160,8 +160,8 @@ remote-ac-controller/
 │   ├── test-all.ps1                # 全量测试
 │   └── build-all.ps1               # 全量构建
 ├── docs/
-│   ├── 中文/                        # 中文文档（21 篇）
-│   └── English/                     # English documentation（20 docs）
+│   ├── 中文/                        # 中文文档（24 篇）
+│   └── English/                     # English documentation（24 docs）
 ├── .github/workflows/              # CI 工作流
 ├── LICENSE  NOTICE  THIRD_PARTY_NOTICES.md
 └── CHANGELOG.md  CONTRIBUTING.md  SECURITY.md  SUPPORT.md
@@ -182,7 +182,9 @@ remote-ac-controller/
 
 ## 文档
 
-完整的中英文文档位于 [`docs/`](./docs)：
+完整的中英文文档位于 [`docs/`](./docs)：完整索引见
+[中文文档导航](./docs/中文/文档导航.md)，英文索引见
+[English documentation index](./docs/English/documentation-index.md)。
 
 | 让它跑起来 | 理解它 | 运维它 |
 |---|---|---|
@@ -190,7 +192,8 @@ remote-ac-controller/
 | [接线说明](./docs/中文/接线说明.md) | [MQTT 协议](./docs/中文/MQTT协议.md) | [运维指南](./docs/中文/运维指南.md) |
 | [红外学习](./docs/中文/红外学习.md) | [安全模型](./docs/中文/安全模型.md) | [低配服务器部署](./docs/中文/低配置服务器部署.md) |
 | [Arduino IDE 使用指南](./docs/中文/Arduino-IDE使用指南.md) | [定时任务](./docs/中文/定时任务.md) · [温控自动化](./docs/中文/温度自动控制.md) | [故障排查](./docs/中文/故障排查.md) · [备份恢复](./docs/中文/备份与恢复.md) |
-| [西电校园网自动认证](./docs/中文/西电校园网自动认证.md) | [Srun 校园网移植指南](./docs/中文/Srun校园网移植指南.md) | |
+| [西电校园网自动认证](./docs/中文/西电校园网自动认证.md) | [Srun 校园网移植指南](./docs/中文/Srun校园网移植指南.md) | [支持说明](./docs/中文/支持说明.md) |
+| [参与贡献](./docs/中文/参与贡献.md) | [第三方许可说明](./docs/中文/第三方许可说明.md) | [更新日志](./docs/中文/更新日志.md) |
 
 ---
 

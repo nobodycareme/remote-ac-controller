@@ -123,5 +123,7 @@ Third-party component licenses are listed in [THIRD_PARTY_NOTICES.md](./THIRD_PA
 
 ## Related Documentation
 
-- [Firmware README](../../firmware/README.md) — ESP8266 firmware build and flash
-- [Project README](../../README.md) — Full project overview
+- [PlatformIO firmware README](../../firmware/agent-platformio/README.en.md) — command-line build and flash
+- [Arduino IDE firmware README](../../firmware/arduino-ide/Remote_AC_Controller/README.en.md) — manual Arduino IDE build
+- [IR learning workflow](../../docs/English/ir-learning.md) — end-to-end capture-to-storage flow
+- [Project README](../../docs/English/README.md) — full project overview
