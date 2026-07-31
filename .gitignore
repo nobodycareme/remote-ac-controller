@@ -19,6 +19,8 @@ _QUARANTINE_/
 
 # ---- Firmware (PlatformIO / ESP8266) ----
 firmware/.pio/
+firmware/.pio-core/
+firmware/.pio-core-dir
 firmware/.vscode/
 firmware/*.bin
 firmware/*.elf

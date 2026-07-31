@@ -91,6 +91,19 @@ function Resolve-PioExecutable {
         $candidates += (Join-Path $localCore 'penv/bin/pio')
     }
 
+    # Project-local config: .pio-core-dir in the repository root (one-line path,
+    # git-ignored, mirrors the $env:PLATFORMIO_CORE_DIR behaviour).
+    $configFile = Join-Path $RepoRoot '.pio-core-dir'
+    if (Test-Path $configFile) {
+        $corePath = (Get-Content -Path $configFile -TotalCount 1).Trim()
+        if ($corePath -and (Test-Path $corePath)) {
+            $candidates += (Join-Path $corePath 'penv\Scripts\pio.exe')
+            $candidates += (Join-Path $corePath 'penv\Scripts\pio.bat')
+            $candidates += (Join-Path $corePath 'penv\Scripts\pio.ps1')
+            $candidates += (Join-Path $corePath 'penv/bin/pio')
+        }
+    }
+
     foreach ($c in $candidates) {
         if ($c -and (Test-Path $c)) {
             $resolved = (Resolve-Path $c).Path
