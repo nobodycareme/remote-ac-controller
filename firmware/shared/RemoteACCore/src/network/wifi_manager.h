@@ -1,4 +1,5 @@
 #pragma once
+#include "config/feature_gates.h"
 /*
  * wifi_manager.h - non-blocking campus Wi-Fi + srun auth state machine.
  *
@@ -9,14 +10,25 @@
  *   - Wi-Fi link loss (except DISCONNECTED/ASSOCIATING) -> immediate re-associate.
  *   - DHCP IP change -> re-detect portal.
  *   - Portal UNKNOWN / detect failure -> 30s BACKOFF (no immediate re-loop).
- *   - TIMEOUT auth retry -> 30/60/120s BACKOFF, then REAL re-auth (not stuck).
  *   - ONLINE: internet check every 5 min; 2 consecutive failures -> PORTAL_CHECK.
  *   - 3 internet-verification rounds are TIMESTAMP-scheduled (no delay() in loop);
  *     each round is an independent single request.
  *   - BAD_CREDENTIALS / WRONG_DOMAIN / TLS_PIN_MISMATCH -> BLOCKED (no auto-login).
  *   - No auto-logout, no kick of other terminals, no high-frequency request storm.
- *   - Login is gated behind an explicit, protected request (campus login).
  *   - Every HTTP/TLS op is wrapped with begin/end time + heap telemetry.
+ *
+ * v1.0.0 changes:
+ *   - AUTH_READY is the single decision point for starting a login. Pacing
+ *     (minimum interval, failure backoff, hourly quota, hard-block latch) lives
+ *     in CampusAuthPolicy, which is host-unit-tested. The old ad-hoc
+ *     30/60/120 s BACKOFF ladder for auth is gone; BACKOFF now only serves
+ *     portal/association problems.
+ *   - ENABLE_AUTO_CAMPUS_AUTH=1 lets AUTH_READY start the login on its own, so
+ *     a device recovers from a power cut without an operator. With the macro at
+ *     0 the login still requires an explicit `campus login`.
+ *   - A build WITHOUT campus-auth support that lands behind a captive portal no
+ *     longer parks in AUTH_READY forever: it reports the situation and re-probes
+ *     on a slow timer, so the portal being cleared externally is picked up.
  *
  * Portal detection is delegated to the shared PortalDetector module
  * (network/portal_detector.*) — the SAME module the standalone portal-probe
@@ -26,6 +38,7 @@
 #include <ESP8266WiFi.h>
 #if ENABLE_CAMPUS_AUTH
 #include "network/campus_auth_vendor.h"
+#include "network/campus_auth_policy.h"
 #endif
 #include "network/portal_detector.h"
 #include "config/campus_config.h"
@@ -43,9 +56,11 @@ enum WifiState {
   WIFI_BLOCKED
 };
 
+// BACKOFF is now exclusively an association/portal concern. Authentication
+// pacing moved into CampusAuthPolicy (see AUTH_READY).
 enum BackoffReason {
   BACKOFF_PORTAL_UNKNOWN = 0,   // portal detection failed/unknown -> re-detect
-  BACKOFF_AUTH_RETRY          // retryable auth error -> real re-auth
+  BACKOFF_NO_AUTH_SUPPORT       // portal present, build cannot authenticate
 };
 
 class WifiManager {
@@ -59,9 +74,13 @@ public:
 #if ENABLE_CAMPUS_AUTH
   void campusLogin();             // protected, one-shot request (gated)
   void campusLogout();
+  void campusUnblock();           // operator clears a latched hard block
   CampusAuthResult executeLogin(); // direct login for controlled-auth (raw WiFi connect first)
   const char* authLastError()  const { return _auth.lastErrMsg(); }
   const char* authLastSuccess() const { return _auth.lastSucMsg(); }
+  const CampusAuthPolicy& authPolicy() const { return _authPolicy; }
+  // True when this build authenticates without an operator command.
+  static bool authIsAutomatic() { return CAMPUS_AUTH_IS_AUTOMATIC ? true : false; }
 #endif
 
   WifiState       state() const { return _state; }
@@ -97,8 +116,9 @@ private:
   bool probeInternet();           // one plain-HTTP external probe (with telemetry)
 
   void schedulePortalBackoff();   // 30s, reason=PORTAL_UNKNOWN
+  void scheduleNoAuthBackoff();   // 5min, reason=NO_AUTH_SUPPORT
 #if ENABLE_CAMPUS_AUTH
-  void scheduleAuthBackoff();     // 30/60/120s, reason=AUTH_RETRY
+  void serviceAuthReady();        // policy-gated entry into AUTHENTICATING
 #endif
 
   String  _cfgSsid = CAMPUS_SSID;
@@ -117,11 +137,13 @@ private:
 
 #if ENABLE_CAMPUS_AUTH
   CampusAuthVendor _auth;            // vendored srun-c wrapper (tlsPinValid/login/logout)
+  CampusAuthPolicy _authPolicy;      // rate limit / backoff / quota / hard block
   bool _authRequested = false;
-  uint8_t _authRetry = 0;
   CampusAuthResult _lastAuth = CAMPUS_AUTH_UNSET;
   bool _authBlockedReported = false;  // one-shot AUTH_BLOCKED marker for no-cred gate
+  uint8_t _lastGateReported = 0xFF;   // de-duplicates AUTH_GATE console output
 #endif
+  bool _noAuthSupportReported = false;  // one-shot notice for auth-less builds
 
   uint8_t  _verifyRound = 0;
   uint8_t  _verifyOkCount = 0;

@@ -4,8 +4,12 @@
 //
 // Before compiling:
 // 1. Install the RemoteACCore library (see README.md)
-// 2. Copy config.example.h → config.h and fill in your settings
-// 3. Install required dependencies via Library Manager:
+// 2. Copy config.example.h -> config.h and fill in your settings
+// 3. (Optional, for custom feature switches) copy
+//    Remote_AC_Controller.ino.globals.example.h -> Remote_AC_Controller.ino.globals.h
+//    and point sketch.yaml's compile.extra_flags at your globals.h. The committed
+//    .example.h already has safe public defaults, so this step can be skipped.
+// 4. Install required dependencies via Library Manager:
 //    - DHT sensor library by Adafruit
 //    - Adafruit Unified Sensor
 //    - ArduinoJson by Benoit Blanchon

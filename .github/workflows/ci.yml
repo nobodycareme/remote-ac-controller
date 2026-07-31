@@ -128,9 +128,25 @@ jobs:
   # configuration. ENABLE_CLOUD=0 and ENABLE_CAMPUS_AUTH=0 — no real credentials,
   # no real IR, no private data required.
   arduino-ide-ci:
-    name: arduino-ide-ci
+    name: arduino-ide-ci (${{ matrix.name }})
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: offline
+            extra: "-DENABLE_WIFI=0"
+          - name: wifi-only
+            extra: "-DENABLE_WIFI=1"
+          - name: xidian-campus-example
+            extra: "-DENABLE_WIFI=1 -DENABLE_CAMPUS_AUTH=1"
+            profile: "profiles/xidian.example.h"
+          - name: generic-srun-example
+            extra: "-DENABLE_WIFI=1 -DENABLE_CAMPUS_AUTH=1"
+            profile: "profiles/generic_srun.example.h"
+          - name: wifi-cloud-example
+            extra: "-DENABLE_WIFI=1 -DENABLE_CLOUD=1"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -155,45 +171,58 @@ jobs:
           arduino-cli lib install "PubSubClient@2.8.0"
           arduino-cli lib install "ArduinoJson@6.21.5"
 
-      - name: Compile Arduino IDE public sketch
+      - name: Assemble Arduino-compatible srun-c library
         run: |
           set -euo pipefail
-          echo "=== Preparing CI build ==="
-          cp firmware/arduino-ide/Remote_AC_Controller/config.example.h \
-             firmware/arduino-ide/Remote_AC_Controller/config.h
+          SRCDIR=firmware/agent-platformio/lib/srun-c
+          DST="$HOME/Arduino/libraries/srun-c"
+          rm -rf "$DST"
+          mkdir -p "$DST/src"
+          cp "$SRCDIR/include/"*.h "$DST/src/"
+          cp "$SRCDIR/src/"* "$DST/src/"
+          # Arduino CLI will not compile the PlatformIO (include/ + src/) layout, so
+          # we flatten headers + sources into a single src/ and add the metadata it
+          # requires. This copy lives only in the runner, never in the repository.
+          cat > "$DST/library.properties" << 'EOF'
+          name=srun-c
+          version=1.0.0
+          author=upstream
+          maintainer=remote-ac-controller
+          sentence=srun/drcom campus auth adapter.
+          paragraph=Bundled ESP8266 srun-c adapter for RemoteACCore.
+          category=Communication
+          url=https://github.com/example/remote-ac-controller
+          architectures=esp8266
+          includes=srun.h
+          EOF
+          echo "srun-c assembled at $DST"
 
+      - name: Compile Arduino IDE public sketch (${{ matrix.name }})
+        run: |
+          set -euo pipefail
+          SKETCH_DIR="$(pwd)/firmware/arduino-ide/Remote_AC_Controller"
+          GLOBALS="$SKETCH_DIR/Remote_AC_Controller.ino.globals.example.h"
+          PROFILE_INC=""
+          # Campus groups select a profile header via CAMPUS_PROFILE_HEADER. It is
+          # written to a generated override header (not a -D string) to avoid
+          # shell-quoting the quoted path inside the compiler flag.
+          if [ -n "${{ matrix.profile }}" ]; then
+            cat > "$SKETCH_DIR/ci_campus_profile.h" << 'EOF'
+          #pragma once
+          #define CAMPUS_PROFILE_HEADER "${{ matrix.profile }}"
+          EOF
+            PROFILE_INC="-include $SKETCH_DIR/ci_campus_profile.h -I$SKETCH_DIR"
+          fi
           mkdir -p "$HOME/Arduino/libraries"
           ln -sf "$(pwd)/firmware/shared/RemoteACCore" "$HOME/Arduino/libraries/RemoteACCore"
-
-          # Feature macros only. The sketch's own config.h reaches the .ino, but not
-          # the RemoteACCore library translation units, so the public configuration
-          # is forced into every TU with -include.
-          #
-          # Deliberately NO CampusCredentials / CloudCredentials stubs here: both
-          # already ship a real public implementation that returns empty/unready
-          # when these macros are 0 (campus_credentials.h inline, cloud_credentials.cpp).
-          # Stubbing them re-declared the same symbols and broke the build with
-          # "redefinition of 'bool CloudCredentials::available()'".
-          cat > /tmp/ci_stubs.h << 'EOF'
-          #pragma once
-          #define ENABLE_CLOUD 0
-          #define ENABLE_CLOUD_CREDENTIALS 0
-          #define ENABLE_CAMPUS_AUTH 0
-          #define ENABLE_IR_MUTATING_COMMANDS 0
-          EOF
-
-          echo "=== Compiling ==="
-          # --output-dir is required: without it arduino-cli writes the artifacts to a
-          # temporary sketch directory, the ELF/BIN lookup below silently finds nothing
-          # and the artifact check degrades into a no-op that can never fail.
-          OUT=firmware/arduino-ide/Remote_AC_Controller/build
+          # The committed globals example replaces the old /tmp/ci_stubs.h; per-group
+          # -D flags (matrix.extra) override individual switches as needed.
+          OUT="$SKETCH_DIR/build"
           arduino-cli compile \
             --fqbn esp8266:esp8266:nodemcuv2 \
             --output-dir "$OUT" \
-            --build-property "build.extra_flags=-include /tmp/ci_stubs.h -Ifirmware/agent-platformio/lib/srun-c/include" \
-            firmware/arduino-ide/Remote_AC_Controller
-
-          # set -e already aborts on a non-zero arduino-cli exit; these are real gates.
+            --build-property "build.extra_flags=-include $GLOBALS $PROFILE_INC -Ifirmware/agent-platformio/lib/srun-c/include ${{ matrix.extra }}" \
+            "$SKETCH_DIR"
           ELF=$(find "$OUT" -name "*.elf" 2>/dev/null | head -1)
           BIN=$(find "$OUT" -name "*.bin" 2>/dev/null | head -1)
           if [ -z "$ELF" ]; then echo "ARDUINO_ELF_EXISTS=False"; exit 1; fi
@@ -203,6 +232,76 @@ jobs:
           echo "ARDUINO_BIN_EXISTS=True ($(wc -c < "$BIN") bytes)"
           echo "ARDUINO_BIN_SHA256=$(sha256sum "$BIN" | cut -d' ' -f1)"
           echo "ARDUINO_CLI_COMPILE_PASS=True"
+
+  # ---------------------------------------------------------------------------
+  # host-tests — pure-logic unit tests on the host toolchain (no hardware, no CI secrets)
+  # ---------------------------------------------------------------------------
+  # Validates the two pieces of campus-auth logic that MUST be correct before any
+  # device is involved:
+  #   - CampusAuthPolicy (rate-limit / backoff ladder / hourly quota / hard-block):
+  #     functional runtime tests, header-only and Arduino-free.
+  #   - feature_gates.h derived predicates: compile-time invariants under several
+  #     legal flag combinations, PLUS NEGATIVE tests asserting that illegal flag
+  #     combinations fail to compile (the #error guards in feature_gates.h).
+  host-tests:
+    name: host-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Compile & run CampusAuthPolicy tests
+        run: |
+          set -euo pipefail
+          g++ -std=c++11 -Wall -I firmware/shared/RemoteACCore/src \
+            test/host/test_campus_auth_policy.cpp -o /tmp/test_policy
+          /tmp/test_policy
+
+      - name: Compile feature_gates invariants under legal flag sets
+        run: |
+          set -euo pipefail
+          INC="-I firmware/shared/RemoteACCore/src"
+          sets=(
+            ""              # all defaults (offline build)
+            "-DENABLE_WIFI=1"
+            "-DENABLE_WIFI=1 -DENABLE_CAMPUS_AUTH=1"
+            "-DENABLE_WIFI=1 -DENABLE_CAMPUS_AUTH=1 -DENABLE_AUTO_CAMPUS_AUTH=1"
+            "-DENABLE_WIFI=1 -DENABLE_CLOUD=1"
+            "-DENABLE_WIFI=1 -DENABLE_CLOUD=1 -DENABLE_CAMPUS_AUTH=1 -DENABLE_AUTO_CAMPUS_AUTH=1"
+            "-DENABLE_WIFI=1 -DENABLE_CLOUD=1 -DENABLE_CLOUD_CREDENTIALS=1"
+          )
+          for s in "${sets[@]}"; do
+            echo "== feature_gates: [$s] =="
+            g++ -std=c++11 $INC $s test/host/test_feature_gates.cpp -o /tmp/test_gates
+            /tmp/test_gates
+          done
+
+      - name: NEGATIVE tests — illegal flag combinations must fail to compile
+        run: |
+          set -euo pipefail
+          INC="-I firmware/shared/RemoteACCore/src"
+          bad=(
+            "-DENABLE_CAMPUS_AUTH=1"                # campus without wifi
+            "-DENABLE_AUTO_CAMPUS_AUTH=1"           # auto without campus
+            "-DENABLE_CLOUD=1"                     # cloud without wifi
+            "-DENABLE_CLOUD_CREDENTIALS=1"          # cloud creds without cloud
+            "-DENABLE_CONTROLLED_LIVE_AUTH=1"       # live auth without campus
+            "-DENABLE_IR_LAB_LEARNING_COMMANDS=1"   # lab IR without IR mutating
+          )
+          fail=0
+          for s in "${bad[@]}"; do
+            echo "== expect COMPILE FAIL: [$s] =="
+            if g++ -std=c++11 $INC $s test/host/test_feature_gates.cpp -o /tmp/test_gates_bad 2>/dev/null; then
+              echo "UNEXPECTED_PASS: illegal combo compiled: $s"
+              fail=1
+            else
+              echo "OK  rejected as expected: $s"
+            fi
+          done
+          [ "$fail" -eq 0 ] || exit 1
 
   # ---------------------------------------------------------------------------
   # cloud-ci

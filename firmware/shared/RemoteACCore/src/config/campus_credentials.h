@@ -1,4 +1,5 @@
 #pragma once
+#include "config/feature_gates.h"
 /*
  * Campus credential loader — SECURE COMPILE-TIME GATE (v0.4.0).
  *
@@ -7,22 +8,28 @@
  * CAMPUS_PASSWORD directly.
  *
  * GATE POLICY (ENABLE_CONTROLLED_LIVE_AUTH):
- *   = 1 (private build): secrets.h is included if present; if absent, NO
- *     fallback placeholders are emitted — the build may fail or CampusCredentials::ready()
- *     returns false, and NO default credentials are ever used.
- *   = 0 (public build):  secrets.h is NEVER included. CAMPUS_USERNAME /
- *     CAMPUS_PASSWORD are NOT defined. All auth request paths are unreachable.
+ *   = 1 (private build): campus_secrets.h (preferred) or legacy secrets.h is
+ *     included if present; if absent, NO fallback placeholders are emitted — the
+ *     build may fail or CampusCredentials::ready() returns false, and NO default
+ *     credentials are ever used.
+ *   = 0 (public build):  campus_secrets.h / secrets.h is NEVER included.
+ *     CAMPUS_USERNAME / CAMPUS_PASSWORD are NOT defined. All auth request paths
+ *     are unreachable.
  *
- * secrets.h is NEVER committed and is git-ignored.
+ * campus_secrets.h / secrets.h are NEVER committed and are git-ignored.
  */
 #if ENABLE_CONTROLLED_LIVE_AUTH
-  // ---- PRIVATE BUILD: allow secrets.h inclusion ----
+  // ---- PRIVATE BUILD: allow campus_secrets.h (or legacy secrets.h) inclusion ----
   #if defined(__has_include)
-  #  if __has_include("secrets.h")
+  #  if __has_include("campus_secrets.h")
+  #    include "campus_secrets.h"
+  #  elif __has_include("secrets.h")
   #    include "secrets.h"
   #  endif
   #else
-  #  ifdef HAVE_SECRETS_H
+  #  ifdef HAVE_CAMPUS_SECRETS_H
+  #    include "campus_secrets.h"
+  #  elif defined(HAVE_SECRETS_H)
   #    include "secrets.h"
   #  endif
   #endif

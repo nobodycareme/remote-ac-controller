@@ -8,13 +8,17 @@
 #include <Arduino.h>
 #include "RemoteACApp.h"
 
+#include "config/feature_gates.h"
 #include "config/hardware_config.h"
 #include "board_pins.h"
 #include "app_config.h"
 #include "sensors/dht11_sensor.h"
 #include "ir_module.h"
 #include "serial_cli.h"
-#if ENABLE_CLOUD
+
+// Network stack. Owned by ENABLE_WIFI, NOT by ENABLE_CLOUD: a campus-auth-only
+// device has a full Wi-Fi state machine and never speaks MQTT.
+#if ENABLE_NETWORK_STACK
 #include "network/wifi_manager.h"
 #endif
 
@@ -31,7 +35,7 @@
 Dht11Sensor dht(DHT11_DATA_PIN);
 IrModule    ir;
 Cli         gCli(dht, ir);
-#if ENABLE_CLOUD
+#if ENABLE_NETWORK_STACK
 WifiManager net;
 #endif
 
@@ -60,6 +64,9 @@ static bool cbDetectPortal() {
 }
 
 #if ENABLE_CAMPUS_AUTH
+// The cloud state machine may ask the network layer to clear a captive portal
+// before MQTT is attempted. This is a *consumer* of campus auth, never its
+// owner: with ENABLE_CLOUD=0 the same login path is driven by WifiManager.
 static bool cbCampusAuth() {
     if (!CampusCredentials::ready()) return false;
     CampusAuthResult r = net.executeLogin();
@@ -113,7 +120,7 @@ static int cbMqttSslError() {
 
 void appSetup(void) {
   gCli.begin();
-#if ENABLE_CLOUD
+#if ENABLE_NETWORK_STACK
   gCli.attachNetwork(net);
 #endif
   ir.begin(IR_DEFAULT_BAUD);
@@ -168,11 +175,26 @@ void appSetup(void) {
       cloudSM.onMqttSslError         = cbMqttSslError;
 
       Serial.println(F("CLOUD_STATE_MACHINE_READY"));
-      net.connect();
-      Serial.println(F("AUTO_WIFI_CONNECT_ISSUED"));
   } else {
       Serial.println(F("CLOUD_MQTT_INIT_SKIPPED (no cloud_secrets.h)"));
   }
+#endif
+
+  Serial.print(F("BUILD_PROFILE_NET="));
+  Serial.println(F(BUILD_PROFILE_NET));
+
+#if ENABLE_NETWORK_STACK
+  // begin() applies the radio policy (no flash-persisted config, auto-reconnect
+  // on link loss). It used to be skipped entirely on the cloud path, which is
+  // why an unattended device never recovered its association by itself.
+  net.begin();
+#endif
+
+#if WIFI_AUTOCONNECT_ON_BOOT
+  net.connect();
+  Serial.println(F("AUTO_WIFI_CONNECT_ISSUED"));
+#elif ENABLE_NETWORK_STACK
+  Serial.println(F("AUTO_WIFI_CONNECT_SKIPPED (manual `wifi connect`)"));
 #endif
 }
 

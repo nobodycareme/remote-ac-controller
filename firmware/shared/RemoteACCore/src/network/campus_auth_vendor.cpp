@@ -1,5 +1,10 @@
+#include "config/feature_gates.h"
+// NOTE (v1.0.0): this unit used to carry a second guard,
+// `#if !defined(ENABLE_CLOUD) || ENABLE_CLOUD`, which silently emptied the
+// whole translation unit for a campus-auth-only build (ENABLE_CAMPUS_AUTH=1,
+// ENABLE_CLOUD=0) and produced undefined references at link time. Campus
+// authentication does not depend on MQTT and is no longer gated on it.
 #if ENABLE_CAMPUS_AUTH
-#if !defined(ENABLE_CLOUD) || ENABLE_CLOUD
 // ============================================================
 // campus_auth_vendor.cpp - wrapper around vendored srun-c (see header)
 // v0.3.5: +HTTP metadata diagnostics, JSONP handling, precise error stages
@@ -334,6 +339,4 @@ const char* CampusAuthVendor::resultStr(CampusAuthResult r) {
     default: return "UNSET";
   }
 }
-#endif // ENABLE_CLOUD guard
-
 #endif  // ENABLE_CAMPUS_AUTH

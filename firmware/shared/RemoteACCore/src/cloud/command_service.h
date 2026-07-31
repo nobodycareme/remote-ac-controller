@@ -1,4 +1,5 @@
 #pragma once
+#include "config/feature_gates.h"
 /*
  * command_service.h — MQTT command dispatch and ACK service (v0.4.0)
  *

@@ -14,3 +14,11 @@ profiles:
 
 # Shared library: firmware/shared/RemoteACCore/
 # Install it by symlinking or copying to the Arduino libraries folder.
+
+# Global feature switches (ENABLE_*) are force-included for every translation
+# unit via the ESP8266 core `-include` mechanism. The committed .example.h has
+# safe public defaults so a fresh clone always compiles; for customization copy
+# it to Remote_AC_Controller.ino.globals.h and point this flag at your copy.
+compile:
+  extra_flags:
+    - -include "Remote_AC_Controller.ino.globals.example.h"

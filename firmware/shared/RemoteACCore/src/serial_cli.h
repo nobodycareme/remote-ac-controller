@@ -2,6 +2,7 @@
 // serial_cli.h - USB Serial text command interface
 // ============================================================
 #pragma once
+#include "config/feature_gates.h"
 #include <Arduino.h>
 #if !defined(DISABLE_DHT)
 #include "sensors/dht11_sensor.h"
