@@ -1,4 +1,4 @@
-**简体中文** | [English](./docs/English/README.md)
+**简体中文** | [English](./README.en.md)
 
 <p align="center">
   <img src="./docs/assets/logo.svg" alt="Remote AC Controller" width="240" />
