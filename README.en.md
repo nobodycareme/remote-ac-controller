@@ -35,9 +35,9 @@ extensible, and ready for your own remotes.
 ## Core features
 
 - **Responsive remote web UI** — Vue 3 single-page app for desktop and mobile.
-- **11 preset discrete IR states** — covering off, cool, dry, heat, and common
-  temperature/fan/swing combinations, each independently enabled. The public
-  repository ships no real AC IR frames; capture your own with the
+- **11 registered AC state metadata entries** — covering off, cool, dry, heat,
+  and common temperature/fan/swing combinations, each independently enabled.
+  The public repository ships no real AC IR frames; capture your own with the
   [IR learning tool](#ir-learning-tool).
 - **Temperature & humidity monitoring** — DHT11 on GPIO5.
 - **Scheduling & temperature automation** — weekly cron-style tasks with
@@ -70,13 +70,15 @@ pwsh ./tools/dev.ps1 verify -Profile public
 pwsh ./tools/dev.ps1 build -Profile public
 ```
 
-Full guide: [Arduino IDE guide](./docs/English/arduino-ide-guide.md)
+Full guide: [`firmware/agent-platformio/README.md`](./firmware/agent-platformio/README.md)
 
 ### 2. Arduino IDE workflow
 
 Open `firmware/arduino-ide/Remote_AC_Controller/Remote_AC_Controller.ino`
 in Arduino IDE, follow the one-time setup in the sketch README, then compile
 and upload.
+
+Full guide: [Arduino IDE guide](./docs/English/arduino-ide-guide.md)
 
 ### 3. Deploy backend and frontend
 

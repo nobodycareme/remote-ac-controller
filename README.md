@@ -32,7 +32,7 @@
 ## 核心功能
 
 - **响应式远程控制网页** — Vue 3 单页应用，桌面与手机均可使用。
-- **11 组预设离散红外状态** — 覆盖关机、制冷、除湿、制热及常用温度/风速/摆风组合，每组可独立启用。公开仓库不包含任何真实空调红外帧，请使用[红外学习工具](#红外学习工具)采集你自己的遥控器数据。
+- **11 组已注册空调状态元数据** — 覆盖关机、制冷、除湿、制热及常用温度/风速/摆风组合，每组可独立启用。公开仓库不包含任何真实空调红外帧，请使用[红外学习工具](#红外学习工具)采集你自己的遥控器数据。
 - **温湿度监测** — DHT11 传感器（GPIO5）。
 - **定时与温控自动化** — 按星期掩码的周期调度；温控采用滞回算法避免频繁启停。
 - **双角色访问模型** — Owner / Guest 与受信任设备，会话持久。
@@ -59,11 +59,13 @@ pwsh ./tools/dev.ps1 verify -Profile public
 pwsh ./tools/dev.ps1 build -Profile public
 ```
 
-详细说明：[Arduino IDE 使用指南](./docs/中文/Arduino-IDE使用指南.md)
+详细说明：[`firmware/agent-platformio/README.md`](./firmware/agent-platformio/README.md)
 
 ### 2. Arduino IDE workflow
 
 用 Arduino IDE 打开 `firmware/arduino-ide/Remote_AC_Controller/Remote_AC_Controller.ino`，按 sketch 内 README 完成一次性配置后编译上传。
+
+详细指南：[Arduino IDE 使用指南](./docs/中文/Arduino-IDE使用指南.md)
 
 ### 3. 部署 Backend 和 Frontend
 
