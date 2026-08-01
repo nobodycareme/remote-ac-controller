@@ -49,8 +49,15 @@ for dirpath, dirs, files in os.walk(ROOT):
         for i, line in enumerate(lines):
             # Header language-switch / nav zone: lines that carry the language
             # toggle (中文 <-> English) are exempt, as are explicit
-            # translation-source notes.
-            is_header_nav = ("简体中文" in line and "English" in line) or                             ("中文" in line and "English" in line and i < 14)
+            # translation-source notes. The README top navigation block now
+            # uses Markdown links inside a <p align="center"> section (up to
+            # line ~25), so single-label switch lines like
+            # `[简体中文](./README.md)` / `[English](./README.en.md)` are
+            # exempt there too.
+            is_header_nav = ("简体中文" in line and "English" in line) or \
+                ("中文" in line and "English" in line and i < 14) or \
+                (("中文" in line or "English" in line or "简体中文" in line)
+                 and i < 30 and ("](./README" in line or "README.md" in line or "README.en.md" in line))
             is_trans_note = ("translation" in line.lower() or "参考译文" in line or
                              "翻译" in line)
             is_bilingual_table = line.strip().startswith("|") and                                 ("中文" in line or "简体中文" in line) and "English" in line

@@ -2,6 +2,71 @@
 
 # Changelog
 
+## [1.2.2] - 2026-08-02
+
+### Added
+
+- **Home/lab WPA or WPA2 Wi-Fi configuration**: new
+  `firmware/shared/RemoteACCore/src/config/wifi_secrets.example.h` placeholder
+  template with `ENABLE_WIFI_CREDENTIALS` / `ENABLE_AUTO_WIFI_CONNECT` feature
+  gates; the no-argument `wifi connect` serial command uses the compiled-in
+  local credentials; `local-wifi` / `local-wifi-cloud` PlatformIO profiles are
+  wired into `dev.ps1` and build-verified. Passwords never appear in serial
+  logs, build flags, CI environments, or README examples.
+- **First-time setup guides (bilingual)**: `docs/中文/首次配置.md` /
+  `docs/English/first-time-setup.md`, covering home Wi-Fi, Xidian campus
+  network, and offline modes.
+- **Windows CI IR learner gate**: new `ir-simple-learner-windows` job
+  (`windows-latest` + Python 3.12) installing locked dependencies, running
+  both IR unit test trees, 20 stability rounds, the official
+  `build.ps1 -Clean`, EXE `--self-test`, SHA-256 computation, credential/real-IR
+  scans, and uploading the EXE as a CI artifact.
+- **Official build.ps1 (Python 3.12 + PyInstaller 6.21.0)**: native-process
+  helper (System.Diagnostics.Process) fixes PowerShell 5.1 stderr
+  misdetection; `requirements-lock.txt` is pinned and hash-verified;
+  `--self-test` / `--version` write report files for the windowed EXE.
+- **README interface previews**: desktop (1440×900) and mobile (390×844)
+  control-interface screenshots built from the local frontend with synthetic
+  demo data.
+
+### Fixed
+
+- IR learner state machine: the mutually-exclusive if/elif between
+  `ir.learn.cancelled` and `State.EXITING` made the exit-completion branch
+  unreachable, leaving the flow stuck in EXITING; after refactoring all 12
+  unit tests pass and stay green for 20 consecutive rounds.
+- IR learner preset-count assertion: the authoritative contract is 10 presets;
+  the test now uses a single source of truth and adds a codeId-uniqueness
+  check; both tool copies are enforced identical by
+  `tools/check-ir-tool-parity.py`.
+- v1.2.1 official build-chain issues: requirements-lock.txt pins
+  PyInstaller 6.21.0 (matching the release build) and build.ps1 rebuilds the
+  EXE from a clean environment through the locked dependencies.
+- README navigation (Chinese uses Chinese-title anchors) and visible `.md`
+  suffix link labels in both READMEs.
+- Firmware documentation drift: removed stale `v0.4.0-cloud-foundation`
+  version strings and outdated `campus_credentials.h` paths; versions are
+  unified to v1.2.2.
+
+### Security
+
+- Wi-Fi credentials and campus credentials are strictly separated
+  (`wifi_secrets.h` / `campus_secrets.h` are both git-ignored); no mode ever
+  writes a password to logs.
+- New compile-time `#error` guards for illegal flag combinations:
+  `ENABLE_WIFI_CREDENTIALS` / `ENABLE_AUTO_WIFI_CONNECT` require
+  `ENABLE_WIFI`; local Wi-Fi credentials and campus authentication are
+  mutually exclusive.
+
+### Known issues
+
+- No validated BOM or pick-and-place files are provided.
+- Real AC IR frames are not in the public repository; capture your own with
+  the IR learning tool.
+- v1.2.1's IR learner release flow did not fully pass the official build
+  script and full unit tests; use v1.2.2 or newer (the v1.2.1 tag and assets
+  are kept for historical audit).
+
 ## [1.2.1] - 2026-08-01
 
 ### Changed

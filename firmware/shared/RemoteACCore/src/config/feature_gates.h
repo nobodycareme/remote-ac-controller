@@ -83,6 +83,20 @@
 #define ENABLE_IR_LAB_LEARNING_COMMANDS 0
 #endif
 
+// WPA/WPA2 credentials for a normal home/lab router (wifi_secrets.h).
+// Independent from campus credentials: a home SSID password is NOT a campus
+// portal account. Requires ENABLE_WIFI.
+#ifndef ENABLE_WIFI_CREDENTIALS
+#define ENABLE_WIFI_CREDENTIALS 0
+#endif
+
+// Unattended connect at boot using the compiled-in local Wi-Fi credentials
+// (ENABLE_WIFI_CREDENTIALS) or the campus open SSID (ENABLE_CAMPUS_AUTH).
+// Requires ENABLE_WIFI.
+#ifndef ENABLE_AUTO_WIFI_CONNECT
+#define ENABLE_AUTO_WIFI_CONNECT 0
+#endif
+
 // ---------------------------------------------------------------------------
 // 2. Dependency rules
 // ---------------------------------------------------------------------------
@@ -123,6 +137,21 @@
 #error "feature_gates: ENABLE_IR_LAB_LEARNING_COMMANDS=1 requires ENABLE_IR_MUTATING_COMMANDS=1 (the lab CLI drives the IR module)."
 #endif
 
+#if ENABLE_WIFI_CREDENTIALS && !ENABLE_WIFI
+#error "feature_gates: ENABLE_WIFI_CREDENTIALS=1 requires ENABLE_WIFI=1 (a home-SSID password is meaningless without station mode)."
+#endif
+
+#if ENABLE_AUTO_WIFI_CONNECT && !ENABLE_WIFI
+#error "feature_gates: ENABLE_AUTO_WIFI_CONNECT=1 requires ENABLE_WIFI=1 (nothing would associate)."
+#endif
+
+// Local WPA credentials and campus portal auth are two INDEPENDENT identity
+// sources. Enabling both would make the connection source ambiguous, so it is
+// a hard compile-time error (never a silent fallback).
+#if ENABLE_WIFI_CREDENTIALS && ENABLE_CAMPUS_AUTH
+#error "feature_gates: ENABLE_WIFI_CREDENTIALS=1 and ENABLE_CAMPUS_AUTH=1 are mutually exclusive (choose home/lab WPA credentials OR the campus open-SSID portal flow, never both)."
+#endif
+
 // ---------------------------------------------------------------------------
 // 3. Derived convenience predicates
 // ---------------------------------------------------------------------------
@@ -137,12 +166,14 @@
 
 // Boot-time association policy. The project's default philosophy is
 // offline-first: the radio stays idle until an operator issues `wifi connect`.
-// Two features legitimately need the link up without an operator present:
+// Three features legitimately need the link up without an operator present:
 //   - ENABLE_CLOUD              a remotely controllable device must dial home;
 //   - ENABLE_AUTO_CAMPUS_AUTH   unattended re-auth after a power cut is the
-//                               entire point of the feature.
+//                               entire point of the feature;
+//   - ENABLE_AUTO_WIFI_CONNECT  unattended join of a home/lab WPA network or
+//                               the campus open SSID at boot.
 // Any other build keeps the manual behaviour.
-#define WIFI_AUTOCONNECT_ON_BOOT (ENABLE_WIFI && (ENABLE_CLOUD || ENABLE_AUTO_CAMPUS_AUTH))
+#define WIFI_AUTOCONNECT_ON_BOOT (ENABLE_WIFI && (ENABLE_CLOUD || ENABLE_AUTO_CAMPUS_AUTH || ENABLE_AUTO_WIFI_CONNECT))
 
 // ---------------------------------------------------------------------------
 // 4. Human-readable build profile string (printed at boot)

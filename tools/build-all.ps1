@@ -188,6 +188,38 @@ else {
     }
 }
 
+# --- ir-simple-learner: official Windows EXE build --------------------------
+# Only on Windows with a Python 3.12 x64 interpreter (the official release
+# environment). Skips elsewhere — the CI ir-simple-learner-windows job covers
+# the gate on windows-latest.
+$IRBuildScript = Join-Path $RepoRoot 'tools/ir-simple-learner/build.ps1'
+if ($env:OS -match 'Windows') {
+    if (-not (Test-Path -LiteralPath $IRBuildScript)) {
+        Add-Result -Name 'ir-simple-learner :: build' -Status 'SKIP' -Detail 'build.ps1 not found'
+    }
+    else {
+        Invoke-Step -Name 'ir-simple-learner :: official build.ps1 -Clean' -Action {
+            $prevEap = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            try {
+                if ($env:IR_PYTHON_PATH -and (Test-Path -LiteralPath $env:IR_PYTHON_PATH)) {
+                    & $IRBuildScript -Clean -PythonPath $env:IR_PYTHON_PATH 2>&1 | ForEach-Object { Write-Host $_ }
+                }
+                else {
+                    & $IRBuildScript -Clean 2>&1 | ForEach-Object { Write-Host $_ }
+                }
+                $nativeCode = $LASTEXITCODE
+            }
+            finally { $ErrorActionPreference = $prevEap }
+            if ($nativeCode -ne 0) { throw "build.ps1 exit code $nativeCode" }
+        }
+    }
+}
+else {
+    Add-Result -Name 'ir-simple-learner :: build' -Status 'SKIP' -Detail 'non-Windows host'
+    Write-Host 'ir-simple-learner: official EXE build requires Windows; skipped' -ForegroundColor Yellow
+}
+
 # --- summary -----------------------------------------------------------------
 Write-Section 'Summary'
 $script:Results | Format-Table -AutoSize | Out-String | Write-Host

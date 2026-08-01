@@ -164,13 +164,20 @@ Runtime values are **not** configured in this sketch folder:
 
 | Item                | Location                                                  | Consumed when                     |
 |---------------------|-----------------------------------------------------------|-----------------------------------|
-| Wi-Fi SSID          | serial command `wifi connect <ssid>` (no auto-connect)     | `ENABLE_WIFI=1`                   |
+| Home Wi-Fi credentials | `RemoteACCore/src/config/wifi_secrets.h` (used by the no-arg `wifi connect`) | `ENABLE_WIFI=1 ENABLE_WIFI_CREDENTIALS=1` |
+| Open SSID           | serial command `wifi connect <ssid>` (explicit open SSID)  | `ENABLE_WIFI=1`                   |
 | Campus parameters   | the profile header (SSID / portal host / ac_id / cert pin) | `ENABLE_CAMPUS_AUTH=1`            |
 | Campus credentials  | `RemoteACCore/src/config/campus_secrets.h`                 | `ENABLE_CONTROLLED_LIVE_AUTH=1`   |
 | MQTT broker         | `RemoteACCore/src/cloud_secrets.h`                         | `ENABLE_CLOUD_CREDENTIALS=1`      |
 
 ```bash
-# Campus account (create only if you really need live authentication)
+# Home Wi-Fi credentials (home/lab WPA/WPA2, mutually exclusive with campus)
+cp ~/Arduino/libraries/RemoteACCore/src/config/wifi_secrets.example.h \
+   ~/Arduino/libraries/RemoteACCore/src/config/wifi_secrets.h
+# Edit wifi_secrets.h: LOCAL_WIFI_SSID / LOCAL_WIFI_PASSWORD
+
+# Campus account (create only if you really need live authentication;
+# mutually exclusive with home Wi-Fi credentials)
 cp ~/Arduino/libraries/RemoteACCore/src/config/campus_secrets.example.h \
    ~/Arduino/libraries/RemoteACCore/src/config/campus_secrets.h
 
@@ -242,8 +249,11 @@ campus logout         - log out
 campus unblock        - clear a latched hard block, re-detect the portal
 ```
 
-> `wifi connect` calls `WiFi.begin(ssid)` (**open SSID, no password**), matching
-> the open access SSID model used by srun-style campus networks.
+> The no-argument `wifi connect` uses the local WPA/WPA2 credentials from
+> `wifi_secrets.h` when `ENABLE_WIFI_CREDENTIALS=1` (`WiFi.begin(ssid,
+> password)`); `wifi connect <ssid>` explicitly joins an OPEN SSID
+> (`WiFi.begin(ssid)`), matching the open access SSID model used by srun-style
+> campus networks. Passwords never appear in serial logs.
 
 ---
 

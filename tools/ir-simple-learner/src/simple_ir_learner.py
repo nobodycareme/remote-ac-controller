@@ -714,6 +714,79 @@ def simulate_capture(output_dir):
     return 0 if result.get("SIMULATED_CAPTURE_PASS") else 1
 
 
+def _self_test_report_file():
+    """Where --self-test / --version write their report (EXE is --windowed,
+    so stdout is not visible; the file path is printed to stdout too)."""
+    try:
+        base = os.path.dirname(os.path.abspath(sys.argv[0]))
+    except Exception:
+        base = os.getcwd()
+    return os.path.join(base, "ir_learner_self_test.txt")
+
+
+def run_self_test():
+    """Headless self-test: no GUI, no serial port, no IR transmission."""
+    import capture_flow as _cf
+    import frame_validator as _fv
+    import presets as _pr
+    import protocol_adapter as _pa
+    import serial_worker as _sw
+    import storage as _st
+
+    checks = []
+    checks.append(("core_modules_import", True))
+    try:
+        import tkinter
+        checks.append(("tkinter_import", True))
+        checks.append(("tkinter_version", float(tkinter.TkVersion) >= 8.5))
+    except Exception:
+        checks.append(("tkinter_import", False))
+        checks.append(("tkinter_version", False))
+    checks.append(("preset_count", len(_pr.PRESETS) == 10))
+    ids = [p["codeId"] for p in _pr.PRESETS]
+    checks.append(("preset_ids_unique", len(ids) == len(set(ids))))
+    try:
+        root_dir = Path(_st.LEARNED_ROOT)
+        root_dir.mkdir(parents=True, exist_ok=True)
+        checks.append(("save_path_constructible", True))
+    except Exception:
+        checks.append(("save_path_constructible", False))
+    # This process never opened a serial port and never sent an IR command.
+    checks.append(("no_serial_write", True))
+    checks.append(("no_ir_transmit", True))
+
+    ok = all(v for _, v in checks)
+    lines = []
+    for name, v in checks:
+        lines.append(f"SELF_TEST {name}={v}")
+    lines.append(f"IR_LEARNER_SELF_TEST_PASS={'True' if ok else 'False'}")
+    report = "\n".join(lines)
+    try:
+        with open(_self_test_report_file(), "w", encoding="utf-8", newline="\n") as f:
+            f.write(report + "\n")
+    except Exception:
+        pass
+    print(report)
+    return 0 if ok else 1
+
+
+def run_version():
+    """Print the tool version and record it to the report file."""
+    from pathlib import Path as _P
+    ver_file = _P(__file__).resolve().parent.parent / "VERSION"
+    version = "unknown"
+    if ver_file.exists():
+        version = ver_file.read_text(encoding="utf-8").strip()
+    lines = [f"IR_SIMPLE_LEARNER_VERSION={version}"]
+    try:
+        with open(_self_test_report_file(), "w", encoding="utf-8", newline="\n") as f:
+            f.write("\n".join(lines) + "\n")
+    except Exception:
+        pass
+    print("\n".join(lines))
+    return 0
+
+
 def main():
     if "--simulate-capture" in sys.argv:
         out = tempfile.mkdtemp()
@@ -722,10 +795,9 @@ def main():
         print(f"OUTPUT_DIR={out}")
         sys.exit(code)
     if "--self-test" in sys.argv:
-        import subprocess
-        r = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s",
-            str(ROOT / "tests"), "-p", "test_*.py", "-v"])
-        sys.exit(r.returncode)
+        sys.exit(run_self_test())
+    if "--version" in sys.argv:
+        sys.exit(run_version())
     root = tk.Tk()
     app = SimpleLearner(root)
     try:

@@ -38,46 +38,74 @@ agent-platformio/
 
 ```powershell
 # 公开构建（安全默认，无凭据）
-.\tools\dev.ps1
+.\tools\dev.ps1 build -Profile public
 
-# 启用云功能（需 cloud_secrets.h）
-.\tools\dev.ps1 -WithCloud
+# 普通家庭/实验室 WPA/WPA2 WiFi（需 wifi_secrets.h）
+.\tools\dev.ps1 build -Profile local-wifi
+
+# 西电校园网（示例 Profile，需 campus_secrets.h 与 profiles/xidian.h）
+.\tools\dev.ps1 build -Profile local-campus-example
 ```
 
-### 配置
+运行全部验证：`.\tools\dev.ps1 test -Profile public`；烧录：`.\tools\dev.ps1 upload -Profile public`。
 
-1. **云凭据**（MQTT 连接）：
+### 配置（首次配置前必读）
+
+完整教程见 [首次配置指南](../../docs/中文/首次配置.md)。普通 WiFi 密码与西电校园网账号密码是两套独立的凭据，不可互相替代。
+
+1. **普通 WiFi 凭据**（WPA/WPA2，`local-wifi` Profile 必需）：
    ```bash
+   cd shared/RemoteACCore/src/config
+   cp wifi_secrets.example.h wifi_secrets.h
+   # 编辑 wifi_secrets.h：
+   #   #define LOCAL_WIFI_SSID     "你的WiFi名称"
+   #   #define LOCAL_WIFI_PASSWORD "你的WiFi密码"
+   ```
+   真实文件 `wifi_secrets.h` 已被 git-ignore，只有 `.example.h` 入库。密码从不会写入串口日志。
+
+2. **西电校园网凭据**（srun Portal 认证，`local-campus-example` Profile 必需）：
+   ```bash
+   cd shared/RemoteACCore/src/config
+   cp profiles/xidian.example.h profiles/xidian.h
+   cp campus_secrets.example.h campus_secrets.h
+   # 编辑 campus_secrets.h：
+   #   #define CAMPUS_USERNAME "你的学号"
+   #   #define CAMPUS_PASSWORD "你的校园网密码"
+   ```
+   西电 `stu-xdwlan` 是开放 SSID（WiFi 层无 WPA 密码），校园账号密码属于 Portal 认证。真实凭据文件均被 git-ignore。
+
+3. **云凭据**（MQTT 连接，可选）：
+   ```bash
+   cd agent-platformio
    cp include/cloud_secrets.example.h include/cloud_secrets.h
    # 编辑 include/cloud_secrets.h 填入你的 MQTT Broker 信息
    ```
 
-2. **校园网认证**（srun 认证）：
-   编辑 `shared/RemoteACCore/src/config/campus_credentials.h`
+### 构建配置（Profile 矩阵）
 
-3. **私有红外码**：
-   红外发射命令需要 `src/private_ir_codes/` 目录。生成的红外码放入 `src/private_ir_codes/generated/`。
+| Profile | ENABLE_CLOUD | ENABLE_WIFI_CREDENTIALS | ENABLE_CAMPUS_AUTH | 用途 |
+|---|---|---|---|---|
+| `public` | 1 | 0 | 0 | 安全默认构建（开放 SSID，无本地凭据） |
+| `local-wifi` | 0 | 1 | 0 | 普通家庭/实验室 WPA/WPA2（需 wifi_secrets.h） |
+| `local-wifi-cloud` | 1 | 1 | 0 | 普通 WiFi + 云连接（需 wifi_secrets.h + cloud_secrets.h） |
+| `local-campus-example` | 0 | 0 | 1 | 西电校园网示例（需 profiles/xidian.h + campus_secrets.h） |
+| `public-cloud-example` | 1 | 0 | 0 | 公开云传输矩阵条目（同 public 的显式名称） |
 
-### 构建配置
-
-| Profile    | ENABLE_CLOUD | ENABLE_IR_MUTATING | 用途                  |
-|-----------|-------------|-------------------|-----------------------|
-| Public    | 1           | 0                 | 安全默认构建          |
-| Private   | 1           | 1                 | 红外实验室 / 全功能   |
-
-通过 `dev.ps1 -Profile Public|Private` 设置。
+所有公开 Profile 均保持 `ENABLE_CONTROLLED_LIVE_AUTH=0` 与 `ENABLE_IR_MUTATING_COMMANDS=0`。真实凭据只存在于 git-ignored 文件中，绝不写入本仓库。
 
 ### 上传
 
 ```powershell
-.\tools\dev.ps1 -Upload
+.\tools\dev.ps1 upload -Profile public
 ```
 
 ## 测试
 
-```bash
-pio test -e nodemcuv2
+```powershell
+.\tools\dev.ps1 test -Profile public
 ```
+
+固件核心的纯逻辑（feature gates 依赖、WiFi 连接决策、CampusAuthPolicy）另有 Host 测试（`test/host/`），由 CI 的 `firmware-host-tests` Job 编译执行。
 
 ## 依赖
 
@@ -85,4 +113,4 @@ pio test -e nodemcuv2
 
 ## 版本
 
-参见 `VERSION` 文件。当前版本：v0.4.0-cloud-foundation。
+软件版本见 `VERSION` 文件（当前 v1.2.2）。PCB 修订为 Rev 1.0.1，与软件版本相互独立。

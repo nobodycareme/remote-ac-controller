@@ -1,6 +1,6 @@
 {
   "_comment": "First-party documentation map (CN <-> EN). Every Chinese doc has an English counterpart and vice versa. Language-switch links at the top of each file are the only permitted cross-language links.",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "readme_cn": "README.md",
   "readme_en": "README.en.md",
   "docs_root_en": "docs/English/README.md",
@@ -109,6 +109,10 @@
     {
       "zh": "docs/中文/PCB发布流程.md",
       "en": "docs/English/hardware-release-process.md"
+    },
+    {
+      "zh": "docs/中文/首次配置.md",
+      "en": "docs/English/first-time-setup.md"
     },
     {
       "zh": "docs/中文/Apache-2.0许可证参考译文.md",

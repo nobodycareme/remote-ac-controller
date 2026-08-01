@@ -74,6 +74,31 @@ class CaptureFlow:
         name = evt.get("event", "")
         rid = evt.get("requestId", "")
 
+        # ---- Exiting: only a cancel/exit-ACK advances this state ----
+        # NOTE: this branch must be checked BEFORE the generic cancelled
+        # handling below. Previously the generic `if name == cancelled`
+        # swallowed the event while in EXITING (a bare `pass`), and the
+        # EXITING branch lived in an `elif` that is only evaluated when the
+        # event name is NOT "ir.learn.cancelled" — making EXITING unreachable
+        # and the flow stuck forever.
+        if ctx.state == State.EXITING:
+            if name == "ir.learn.cancelled" or name == "IR_EXTLEARN_EXIT_ACK":
+                if rid and rid != ctx.request_id:
+                    return
+                exit_ok = evt.get("exitConfirmed", False)
+                if isinstance(exit_ok, str):
+                    exit_ok = exit_ok.lower() == "true"
+                ack_status = evt.get("moduleAckStatus", evt.get("ackStatus", 0))
+                ctx.exit_confirmed = bool(exit_ok) and ack_status == 0
+                if ctx.exit_confirmed and ctx.pending_frame:
+                    ctx.state = State.COMPLETED
+                elif ctx.exit_confirmed and not ctx.pending_frame:
+                    ctx.state = State.CANCELLED
+                else:
+                    ctx.state = State.EXIT_UNCONFIRMED
+                    ctx.error = "exit unconfirmed"
+            return
+
         # ---- Waiting for enter ACK ----
         if ctx.state == State.WAITING_ENTER_ACK:
             if "ir.learn.waiting" in name or "EXTLEARN_ENTER" in name or name == "IR_EXTLEARN_ACK":
@@ -112,33 +137,12 @@ class CaptureFlow:
             if name.startswith("ir.learn.export"):
                 self._handle_export(evt, ctx, write_fn)
 
-        # ---- Cancelled in any state -> clear flow ----
+        # ---- Cancelled in any other state -> clear flow ----
         if name == "ir.learn.cancelled":
-            if ctx.state in (State.EXITING,):
-                pass  # handled below
-            else:
-                # ERROR, WAITING_ENTER_ACK, WAITING_REMOTE etc. — just clear
-                ctx.state = State.CANCELLED
-                ctx.error = evt.get("reason", "user_cancelled")
-                self.active = None
-
-        # ---- Exiting ----
-        elif ctx.state == State.EXITING:
-            if name == "ir.learn.cancelled" or name == "IR_EXTLEARN_EXIT_ACK":
-                if rid and rid != ctx.request_id:
-                    return
-                exit_ok = evt.get("exitConfirmed", False)
-                if isinstance(exit_ok, str):
-                    exit_ok = exit_ok.lower() == "true"
-                ack_status = evt.get("moduleAckStatus", evt.get("ackStatus", 0))
-                ctx.exit_confirmed = bool(exit_ok) and ack_status == 0
-                if ctx.exit_confirmed and ctx.pending_frame:
-                    ctx.state = State.COMPLETED
-                elif ctx.exit_confirmed and not ctx.pending_frame:
-                    ctx.state = State.CANCELLED
-                else:
-                    ctx.state = State.EXIT_UNCONFIRMED
-                    ctx.error = "exit unconfirmed"
+            # ERROR, WAITING_ENTER_ACK, WAITING_REMOTE etc. — just clear
+            ctx.state = State.CANCELLED
+            ctx.error = evt.get("reason", "user_cancelled")
+            self.active = None
 
     def check_timeout(self):
         ctx = self.active
