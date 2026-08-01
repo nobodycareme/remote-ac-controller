@@ -2,6 +2,19 @@
 
 # 更新日志 / Changelog
 
+## [1.2.3] - 2026-08-02
+
+### 修复
+
+- **无凭据 public 构建的自动联网策略**：`WIFI_AUTOCONNECT_ON_BOOT` 不再由 `ENABLE_CLOUD` 单独触发。编译 Cloud 模块并不提供 SSID 与连接身份，`public` 与 `public-cloud-example` 现在不会在开机时自动关联网络。
+- **空 SSID 硬保护**：`WifiConnectPlan` 新增 `configurationValid` / `reason`，SSID 为空时打印 `WIFI_CONNECT_SKIPPED reason=SSID_NOT_CONFIGURED`，不调用任何 `WiFi.begin()` 重载，状态保持断开；本地 WPA 密码为空时同样跳过（`WIFI_PASSWORD_NOT_CONFIGURED`）。
+- **local-wifi-cloud 语义修正**：该 Profile 现在启用 `ENABLE_CLOUD_CREDENTIALS=1` 并要求本地 `cloud_secrets.h`；缺少 `wifi_secrets.h` 或 `cloud_secrets.h` 时构建直接停止，不再回退为无凭据示例。
+- **文档事实错误修正**：README 删除"只部署固件即可手机控制""模拟设备""组件随意替换""任意 ESP8266 板可直接运行"等无代码依据的表述；首次配置指南改用真实的 `Remote_AC_Controller.ino.globals.h` 文件名；西电校园网指南修正 `local-campus-example` 的真实能力（`ENABLE_AUTO_CAMPUS_AUTH=0`、不读取真实凭据、不自动登录）。
+
+### 说明
+
+- 固件、云端 API 与数据库格式无破坏性变化；PCB 保持 Rev 1.0.1。
+
 ## [1.2.2] - 2026-08-01
 
 ### 新增

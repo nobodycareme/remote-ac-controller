@@ -2,6 +2,19 @@
 
 # Changelog
 
+## [1.2.3] - 2026-08-02
+
+### Fixed
+
+- **Boot-time network policy for credentials-free public builds**: `WIFI_AUTOCONNECT_ON_BOOT` is no longer triggered by `ENABLE_CLOUD` alone. Compiling the cloud module provides no SSID and no connection identity, so `public` and `public-cloud-example` no longer auto-associate at boot.
+- **Empty-SSID hard guard**: when no SSID is configured the firmware prints `WIFI_CONNECT_SKIPPED reason=SSID_NOT_CONFIGURED` and calls no `WiFi.begin()` overload, staying disconnected; a missing local WPA password is skipped the same way.
+- **local-wifi-cloud semantics fixed**: the profile now enables `ENABLE_CLOUD_CREDENTIALS=1` and requires the local `cloud_secrets.h`; the build stops when either `wifi_secrets.h` or `cloud_secrets.h` is missing instead of falling back to a credentials-free example.
+- **Documentation corrections**: the READMEs no longer claim firmware-only phone control, a simulated device, freely swappable components, or that any ESP8266 board runs unmodified; the first-time setup guide uses the real `Remote_AC_Controller.ino.globals.h` filename; the Xidian campus guide states the real capabilities of `local-campus-example` (`ENABLE_AUTO_CAMPUS_AUTH=0`, no real credentials, no automatic login).
+
+### Notes
+
+- Firmware, cloud API, and database format are unchanged; PCB stays Rev 1.0.1.
+
 ## [1.2.2] - 2026-08-02
 
 ### Added
