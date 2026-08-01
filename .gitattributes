@@ -1,0 +1,16 @@
+# Manufacturing data is audited byte-for-byte. These files must never be
+# altered by OS line-ending conversion (core.autocrlf) or any filter, because
+# their SHA-256 values are part of the PCB release contract.
+hardware/pcb/fabrication/gerber/** -text
+hardware/pcb/fabrication/drill/** -text
+hardware/pcb/fabrication/test/** -text
+hardware/pcb/fabrication/manufacturing-manifest.md -text
+hardware/pcb/fabrication/PCB下单必读.txt -text
+hardware/pcb/source/*.eprj2 binary
+
+# EasyEDA source projects are binary (SQLite containers).
+hardware/pcb/source/** binary
+
+# Keep published archives deterministic regardless of the checkout platform.
+hardware/pcb/REVISION text eol=lf
+hardware/pcb/CHANGELOG.md text eol=lf

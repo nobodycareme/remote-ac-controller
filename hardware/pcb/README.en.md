@@ -1,85 +1,78 @@
-[简体中文](./README.md) | **English**
+**English** | [简体中文](./README.md)
 
-# PCB Design Documentation
+# PCB Design Document (Rev 1.0.1)
 
 ## Overview
 
-This PCB is designed for the **Remote AC Controller** project, integrating an ESP32 microcontroller, IR transmitter and receiver modules, temperature/humidity sensor, and power management circuitry for air conditioner IR remote control and cloud data acquisition.
+This PCB is designed for the **Remote AC Controller** project. The firmware runs
+on a **NodeMCU ESP8266 development board**. The PCB carries the interface and
+peripheral circuitry for an IR transmitter/receiver module and a
+temperature/humidity sensor, used for air-conditioner IR remote control and
+local data acquisition.
 
-## Design Software
+This repository publishes the PCB manufacturing files and the EasyEDA project
+source. **It does not include a Bill of Materials (BOM), coordinate files, or
+pick-and-place files**; you must compile those yourself for assembly.
 
-- **EasyEDA Pro** (Professional Edition)
-- Project file: `source/Remote_AC_Controller_PCB_v1.0.eprj2`
+## Design tool and revision
 
-## Layer Count
+- **EasyEDA Pro** (professional edition)
+- Project file: `source/Remote_AC_Controller_PCB_Rev1.0.1.eprj2`
+- Logical revision: **Rev 1.0.1** (`hardware/pcb/REVISION`)
 
-- **2-layer board**
-- Top Layer: `Gerber_TopLayer.GTL`
-- Bottom Layer: `Gerber_BottomLayer.GBL`
+> **Revision separation**: the software release version (v1.2.1) and the PCB
+> design revision (Rev 1.0.1) are independent. The silkscreen still reads v1.0,
+> but Rev 1.0.1 is the only valid manufacturing data.
 
-## Board Specifications
+## Layers and manufacturing files
 
-| Item | Specification |
-|------|---------------|
-| Layers | 2 |
-| Board Thickness | 1.6mm (standard) |
-| Copper Thickness | 1oz (35μm) |
-| Surface Finish | HASL (leaded/lead-free as required) |
-| Min Trace/Space | 6mil / 6mil (recommended) |
-| Min Hole Size | 0.3mm |
-| Solder Mask Color | Green (default) |
-| Silkscreen Color | White |
-| Laminate | FR-4 TG130-140 |
+**2-layer board**; manufacturing files live in `fabrication/gerber/`,
+`fabrication/drill/`, and `fabrication/test/`:
 
-## Gerber File List
-
-All fabrication files are located in `fabrication/gerber/` and `fabrication/drill/`:
-
-| File Name | Description |
-|-----------|-------------|
-| `Gerber_TopLayer.GTL` | Top copper layer |
-| `Gerber_BottomLayer.GBL` | Bottom copper layer |
+| File | Description |
+|------|-------------|
+| `Gerber_TopLayer.GTL` | Top copper |
+| `Gerber_BottomLayer.GBL` | Bottom copper |
 | `Gerber_TopSilkscreenLayer.GTO` | Top silkscreen |
 | `Gerber_BottomSilkscreenLayer.GBO` | Bottom silkscreen |
 | `Gerber_TopSolderMaskLayer.GTS` | Top solder mask |
 | `Gerber_BottomSolderMaskLayer.GBS` | Bottom solder mask |
 | `Gerber_BoardOutlineLayer.GKO` | Board outline |
 | `Gerber_DrillDrawingLayer.GDD` | Drill drawing layer |
-| `Drill_PTH_Through.DRL` | Through-hole drill file |
+| `Drill_PTH_Through.DRL` | Plated through-hole drill file |
 | `Drill_PTH_Through_Via.DRL` | Via drill file |
+| `FlyingProbeTesting.json` | Flying-probe test data (`fabrication/test/`) |
+| `manufacturing-manifest.md` | Manufacturing manifest (per-file hashes) |
 
-## Manufacturing Notes
+The manufacturing package contract is defined in
+`fabrication/manufacturing-manifest.md`.
 
-1. **Gerber Format**: Standard RS-274X format exported from EasyEDA Pro.
-2. **Drill Files**: Separate Excellon format drill files (`.DRL`) are provided.
-3. **Board Outline**: Defined by `Gerber_BoardOutlineLayer.GKO` — verify the outline is closed before submission.
-4. **Solder Mask Openings**: The solder mask layer defines pad and via openings; standard process is recommended.
-5. **Silkscreen**: Top silkscreen includes component identifiers and labels.
+## Manufacturing notes
 
-## JLCPCB Ordering Guide
-
-1. Log in to [jlcpcb.com](https://jlcpcb.com) and select "Order Now".
-2. Upload all `.GTL`, `.GBL`, `.GTO`, `.GBO`, `.GTS`, `.GBS`, `.GKO`, `.GDD` files from `fabrication/gerber/`.
-3. Upload `.DRL` drill files from `fabrication/drill/`.
-4. **Recommended Configuration**:
-   - Layers: 2 Layers
-   - Board Thickness: 1.6mm
-   - Copper Weight: 1oz
-   - Solder Mask: Green
-   - Surface Finish: HASL or LeadFree HASL
-   - Quantity: 5 pieces (minimum order)
-5. Verify Gerber preview and place the order.
+1. **Gerber format**: standard RS-274X (exported by EasyEDA Pro). Review the
+   Gerber preview in the fab-house order page before ordering.
+2. **Drill files**: separate Excellon `.DRL` files are provided; verify drill
+   sizes and counts.
+3. **Board outline**: defined by `Gerber_BoardOutlineLayer.GKO`; make sure the
+   outline is closed.
+4. **DRC**: run a design-rule check before fabrication to satisfy the
+   manufacturer's process requirements.
+5. **Rev 1.0 manufacturing files are superseded**: do not manufacture from the
+   Rev 1.0 Gerber/drill files; use the Rev 1.0.1 data.
 
 ## License
 
-This PCB design is licensed under the [Apache License 2.0](../../LICENSE).
+The PCB design files are licensed under the [Apache License 2.0](../../LICENSE).
 
-## Disclaimer
+## Risk notes
 
-> **Note**: This PCB is an open-source hardware design intended for educational and research purposes only. Users should verify the completeness and correctness of the design themselves.
+> **Notice**: this PCB is open-source hardware for learning and research; open
+> designs require the user to perform their own suitability verification.
 >
-> - The circuit may contain high-voltage or high-current sections. Inspect solder joints and check for shorts before powering on.
-> - The IR transmitter module uses IR LED drivers. Verify current-limiting resistors to avoid component damage.
-> - The ESP32 power supply requires a stable 3.3V output. Use a qualified voltage regulator.
-> - Always run DRC (Design Rule Check) before fabrication to ensure the design meets the manufacturer's process requirements.
-> - The author assumes no responsibility for any direct or indirect damages resulting from the use of this design.
+> - Check power polarity and solder shorts before powering on.
+> - The IR LED driver must use correct current-limiting resistors to avoid
+>   damaging components.
+> - Review the Gerber preview and drill files before fabrication.
+> - Rev 1.0 manufacturing files are superseded and must not be used.
+> - The author accepts no liability for any direct or indirect loss caused by
+>   the use of this design.
