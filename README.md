@@ -27,7 +27,15 @@
 
 一套完整的开源远程空调控制系统：手机网页 → 云端后端 → MQTT（TLS）→ ESP8266 → 红外 → 空调。固件、云端、前端、PCB 全部开源，可自行部署。
 
+> **唯一正式仓库声明**：本仓库（`nobodycareme/remote-ac-controller`）是该项目的**唯一**正式 Monorepo——Firmware、Cloud Backend、Cloud Frontend、硬件 PCB、红外学习工具与完整中英文文档全部包含在**一次 clone** 中。**不存在**需要单独克隆的 Firmware 或 Cloud 仓库；此前误拆的 `remote-ac-firmware` 与 `remote-ac-cloud` 仅作为私有归档迁移记录保留，不再维护。
+>
+> - 构建边界：`public`（无凭据、无真实 IR、自动认证关闭）与 `private`（自动校园网认证 + MQTT v2，凭据位于 git-ignored 文件）双路径。
+> - 西电校园网自动认证：默认关闭；私有构建开启后可上电自动完成 Srun 认证与 MQTT 恢复（真机验证）。
+> - 当前版本：**v1.2.0**（[Releases](https://github.com/nobodycareme/remote-ac-controller/releases)）。
+> - 安全：公开仓库不含任何生产凭据、私钥与真实 IR 帧；GitHub Secret Scanning + Push Protection 常开。
+
 ---
+
 
 ## 核心能力
 
