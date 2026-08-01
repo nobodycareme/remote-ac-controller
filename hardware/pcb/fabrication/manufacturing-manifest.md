@@ -1,7 +1,7 @@
 # Manufacturing Manifest
 
-Generated: 2026-07-31
-Source: JLCPCB/EasyEDA Pro one-click export (`嘉立创下单文件.zip`, 127,308 bytes)
+Generated: 2026-08-01 (refreshed after PCB v1.0.1 correction)
+Source: JLCPCB/EasyEDA Pro one-click export (`嘉立创下单文件.zip`); PCB v1.0.1 correction uploaded 2026-08-01
 SHA-256 of source ZIP: not retained (ZIP is not checked into git; it is a Release asset)
 
 ## File Inventory
@@ -10,66 +10,51 @@ SHA-256 of source ZIP: not retained (ZIP is not checked into git; it is a Releas
 
 | File | Size (bytes) | SHA-256 | Description |
 |---|---|---|---|
-| `Gerber_TopLayer.GTL` | 152,522 | `c42538740cacd425ff49410ff1ce9fb1eb670ea98850e7ce87bbd882db9ddd85` | Top copper layer |
-| `Gerber_BottomLayer.GBL` | 172,037 | `6046c75a5a973dc95ced0eba1f2f0c085d412ff6ce4e33a9b57ae2b8637c802d` | Bottom copper layer |
-| `Gerber_TopSilkscreenLayer.GTO` | 45,737 | `00fd057d4f0d8a6b376de4bc06a5a44a6d975af22bbed4528e10448bc5fa5742` | Top silkscreen |
-| `Gerber_BottomSilkscreenLayer.GBO` | 631 | `ad69b201b0b11cad852dfe37945cdf18015aff440edb20d7f8d83a4da38ef85d` | Bottom silkscreen |
-| `Gerber_TopSolderMaskLayer.GTS` | 1,945 | `b2c9a4a668e12d29823a0f6fb151bb1faa9a034e4b811d293a180a8507953275` | Top solder mask |
-| `Gerber_BottomSolderMaskLayer.GBS` | 1,948 | `f5700a590bca7f011f5a15919ae0d7a44911b96ed0fbf104311612cb20d48727` | Bottom solder mask |
-| `Gerber_BoardOutlineLayer.GKO` | 885 | `a3f84f739017259c29d180aec3c2bf28fff1363c9697a0440daddc74a9b26fac` | Board outline |
-| `Gerber_DrillDrawingLayer.GDD` | 123,276 | `8273aeb84491ab6b680887a4e8b876f9537c1db52d4e5639ee4fb6fabcf4e6f1` | Drill drawing/legend |
+| `Gerber_BoardOutlineLayer.GKO` | 885 | `7cc20d58987d37c1e48df1f18b183f08e89b8d9576de14b4956017328f5fc5dc` | Gerber layer |
+| `Gerber_BottomLayer.GBL` | 43,792 | `26eeaa523c9bcfab8dffae6c2740ac2c4968441baf4c1ba586a7ad7eddd34b41` | Gerber layer |
+| `Gerber_BottomSilkscreenLayer.GBO` | 121,299 | `7f2bd96e02bd688822b5a844830c917ae764d051becb3afada7d08d4d4d8d287` | Gerber layer |
+| `Gerber_BottomSolderMaskLayer.GBS` | 1,948 | `15ef036b9663358119c0fa88e01aa8eff1dd2ab6df6eabf135d66e147785a805` | Gerber layer |
+| `Gerber_DrillDrawingLayer.GDD` | 123,276 | `bd1740df1e1b0258795ab766933355123d1f927ef5b1610c7bca1bbef48573f1` | Gerber layer |
+| `Gerber_TopLayer.GTL` | 42,046 | `b0c6e7afb2f122b318d78ec9063c847b915a3579c1f767a85c8a9fe96dd961b8` | Gerber layer |
+| `Gerber_TopSilkscreenLayer.GTO` | 149,826 | `59b57e62728e68c7bb1a2392c5c9854c45977e03f603dd5c5621428465687070` | Gerber layer |
+| `Gerber_TopSolderMaskLayer.GTS` | 1,945 | `612d52759b0f241dd9672c41bc77815878dc88d38b639ccfb912c2747a1d732b` | Gerber layer |
 
 ### Drill Files (`fabrication/drill/`)
 
 | File | Size (bytes) | SHA-256 | Description |
 |---|---|---|---|
-| `Drill_PTH_Through.DRL` | 1,139 | `251128cfcdad22d8b556d1667eddcc82fc2cd80e361099dfdfd52da8804fe7ad` | Plated through-hole component + mounting holes (6 sizes: 0.305-3.000 mm) |
-| `Drill_PTH_Through_Via.DRL` | 424 | `b626522e37a9964d08961741bfdfbaf72b8185343d3b5560e263c170af1aae61` | Plated through-hole vias (3 sizes: 0.305, 2.744, 3.000 mm) |
+| `Drill_PTH_Through.DRL` | 1,130 | `028f629baba8dbbc961054f89956635068ea3a2e3d78aa9e20fe71e020ddb282` | Drill file |
+| `Drill_PTH_Through_Via.DRL` | 424 | `d0026e650645e644b98b49cb215b4145463bb5399e02267789dfb4cffc223abb` | Drill file |
 
 ### Test Data (`fabrication/test/`)
 
 | File | Size (bytes) | SHA-256 | Description |
 |---|---|---|---|
-| `FlyingProbeTesting.json` | 6,378 | `ab210b9406b93e52b20eada51e6c80c28fd63ddb4638e47fb0427914b1bcd0f9` | Flying probe test netlist (3 components, 74 test points) |
-
-## Drill Summary
-
-### `Drill_PTH_Through.DRL`
-
-| Tool | Diameter (mm) | Count | Typical Use |
-|---|---|---|---|
-| T01 | 0.305 | 4 | Fine vias/pads |
-| T02 | 0.914 | 30 | ESP8266 module pins (30 positions, 15+15) |
-| T03 | 1.021 | 3 | Additional component pins |
-| T04 | 1.100 | 4 | Additional component pins |
-| T05 | 2.744 | 2 | Mounting holes |
-| T06 | 3.000 | 2 | Mounting holes |
-
-### `Drill_PTH_Through_Via.DRL`
-
-| Tool | Diameter (mm) | Count | Typical Use |
-|---|---|---|---|
-| T01 | 0.305 | 4 | Fine vias |
-| T02 | 2.744 | 2 | Mounting holes |
-| T03 | 3.000 | 2 | Mounting holes |
+| `FlyingProbeTesting.json` | 7,259 | `e8ae9a9185143f103b4171b41c01bdfa8d062ff29cb8ceae4e3b0a4c753d36ed` | Test fixture |
 
 ## Component Summary (from Flying Probe Test)
 
-| Component | Name | Layer | Coordinates (mil) | Angle | Description |
-|---|---|---|---|---|---|
-| 1 | "1" | Top | (1461.28, -1205) | 0° | 2-pin header, likely DHT11 interface |
-| 2 | "H_" | Top | (405, -1180) | 180° | 5-pin header: VCC, GND, RXD, TXD (IR module) |
-| 3 | "U1" | Top | (260, -955) | 90° | ESP8266 ESP-12E/F module, 30-pin DIP |
+| Component | Position | Rotation | Description |
+|---|---|---|---|
+## Drill Summary
 
-All components are through-hole (DIP) type, pads are circular (C) or rectangular
-(R), typical pad size 60x60 mil, hole sizes 36-43 mil.
+### `fabrication/drill/<file>`
 
 ## Notes
 
-- All files generated by EasyEDA Pro Client v3.2.166 on 2026-07-27 21:42:31 UTC
+- All files generated by EasyEDA Pro one-click export on 2026-08-01 (PCB v1.0.1 correction).
 - Gerber format: RS-274X, metric units, 4.5 precision
 - Drill format: Excellon, metric, leading zero suppression
-- No BOM file was included in the EasyEDA export
-- No pick-and-place / centroid file was included
-- The original Chinese-named ZIP file is NOT stored in git; it is a Release
-  asset only
+- `PCB下单必读.txt` (from JLCPCB package) is a public ordering hint; no secrets.
+- The original Chinese-named ZIP file is NOT stored in git; it is a Release asset only.
+
+## v1.0.1 PCB correction (2026-08-01)
+
+The v1.0 PCB had a layout error that was reported after the v1.2.0 release.
+All Gerber, drill, flying-probe-test and EasyEDA source files were regenerated
+from JLCPCB's one-click export. The board revision is still v1.0 (same part number)
+because the change is a layout correction, not a behavioural revision. The v1.2.0
+Release asset `remote-ac-controller-pcb-v1.2.0.zip` is republished with the
+corrected files; SHA-256SUMS.txt is updated accordingly.
+
+No firmware change. No cloud change. No CR. PCB Rev string on the silkscreen is unchanged.
