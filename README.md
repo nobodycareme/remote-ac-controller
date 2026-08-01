@@ -10,74 +10,47 @@
 <p align="center">
   <a href="https://github.com/nobodycareme/remote-ac-controller/actions/workflows/ci.yml"><img src="https://github.com/nobodycareme/remote-ac-controller/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License" /></a>
-  <a href="https://github.com/nobodycareme/remote-ac-controller/releases"><img src="https://img.shields.io/github/v/release/nobodycareme/remote-ac-controller?include_prereleases" alt="Release" /></a>
-  <a href="#固件两种使用方式"><img src="https://img.shields.io/badge/PlatformIO-ESP8266-orange" alt="PlatformIO" /></a>
-  <a href="#固件两种使用方式"><img src="https://img.shields.io/badge/Arduino-IDE-00979D" alt="Arduino IDE" /></a>
+  <a href="https://github.com/nobodycareme/remote-ac-controller/releases"><img src="https://img.shields.io/github/v/release/nobodycareme/remote-ac-controller?include_prereleases" alt="Latest Release" /></a>
+  <a href="#quick-start"><img src="https://img.shields.io/badge/PlatformIO-ESP8266-orange" alt="PlatformIO" /></a>
+  <a href="#quick-start"><img src="https://img.shields.io/badge/Arduino-IDE-00979D" alt="Arduino IDE" /></a>
 </p>
 
 <p align="center">
-  <a href="#快速开始">快速开始</a> ·
+  <a href="#quick-start">快速开始</a> ·
   <a href="./docs/中文/文档导航.md">中文文档</a> ·
   <a href="./docs/English/README.md">English</a> ·
-  <a href="#红外学习工具">下载工具</a> ·
-  <a href="#pcb-与硬件资料">PCB 资料</a>
+  <a href="#hardware">硬件</a> ·
+  <a href="#documentation">文档</a>
 </p>
 
 ---
 
-一套完整的开源远程空调控制系统：手机网页 → 云端后端 → MQTT（TLS）→ ESP8266 → 红外 → 空调。固件、云端、前端、PCB 全部开源，可自行部署。
-
-> **唯一正式仓库声明**：本仓库（`nobodycareme/remote-ac-controller`）是该项目的**唯一**正式 Monorepo——Firmware、Cloud Backend、Cloud Frontend、硬件 PCB、红外学习工具与完整中英文文档全部包含在**一次 clone** 中。**不存在**需要单独克隆的 Firmware 或 Cloud 仓库；此前误拆的 `remote-ac-firmware` 与 `remote-ac-cloud` 仅作为私有归档迁移记录保留，不再维护。
->
-> - 构建边界：`public`（无凭据、无真实 IR、自动认证关闭）与 `private`（自动校园网认证 + MQTT v2，凭据位于 git-ignored 文件）双路径。
-> - 西电校园网自动认证：默认关闭；私有构建开启后可上电自动完成 Srun 认证与 MQTT 恢复（真机验证）。
-> - 当前版本：**v1.2.0**（[Releases](https://github.com/nobodycareme/remote-ac-controller/releases)）。
-> - 安全：公开仓库不含任何生产凭据、私钥与真实 IR 帧；GitHub Secret Scanning + Push Protection 常开。
+一套完整的开源远程空调控制系统：手机网页 → 云端后端 → MQTT（TLS）→ ESP8266 → 红外 → 空调。固件、云端、前端、PCB 与红外学习工具全部开源，可自行部署、扩展与二次开发。
 
 ---
 
+## 核心功能
 
-## 核心能力
+- **响应式远程控制网页** — Vue 3 单页应用，桌面与手机均可使用。
+- **11 组预设离散红外状态** — 覆盖关机、制冷、除湿、制热及常用温度/风速/摆风组合，每组可独立启用。公开仓库不包含任何真实空调红外帧，请使用[红外学习工具](#红外学习工具)采集你自己的遥控器数据。
+- **温湿度监测** — DHT11 传感器（GPIO5）。
+- **定时与温控自动化** — 按星期掩码的周期调度；温控采用滞回算法避免频繁启停。
+- **双角色访问模型** — Owner / Guest 与受信任设备，会话持久。
+- **可选校园网自动认证** — 针对使用 Srun 的校园网，可配置上电后自动完成 Portal 认证（默认关闭，见[可选校园网认证](#可选校园网认证)）。
 
-- **响应式远程网页控制** — Vue 3 构建的跨设备自适应界面，覆盖桌面与移动端。
-- **11 个预置离散红外状态** — 覆盖关机、制冷、除湿、制热及常用温度/风速/扫风组合，每种状态独立启用。公开仓库不包含用户空调的真实红外帧，需通过[红外学习工具](./tools/ir-simple-learner/README.md)自行采集。
-- **DHT11 温湿度监测** — 传感器接 GPIO5，实时上报温度与湿度。
-- **定时与双阈值温控自动化** — 支持按星期掩码的周期调度任务；温控采用滞回算法，避免频繁开关机。
-- **Owner / Guest 与受信任设备** — 双角色权限模型，支持持久可信会话与设备指纹识别。
-- **MQTT/TLS 安全设备链路** — NodeMCU ESP8266 经加密 MQTT 与云端双向通信，凭据按用途隔离。
-- **ESP8266 上电自动认证西电校园网** — 连接校园开放 SSID 后，自动完成 Wi-Fi 关联、DHCP 地址获取、Captive Portal 探测、Srun 认证和互联网连通性确认；支持认证频率限制、失败退避、掉线重连和断电恢复。账号密码仅存于本地忽略文件，不进入 Git 仓库。**功能默认关闭**，需用户显式配置启用。
+## 仓库包含内容
 
----
-
-## 系统架构
-
-```mermaid
-graph LR
-    A[📱 手机/桌面网页] -->|HTTPS| B[Cloud API<br/>Fastify]
-    B -->|MQTT TLS| C[🌐 MQTT Broker<br/>Mosquitto]
-    C -->|MQTT TLS| D[🔌 ESP8266<br/>NodeMCU]
-    D -->|红外| E[❄️ 空调]
-
-    D -->|支持校园网认证| P[📡 校园 Wi-Fi]
-    P -->|DHCP| Q[🌐 Captive Portal]
-    Q -->|Srun 认证| R[🌍 互联网]
-    R -->|认证后| C
-
-    B --> F[(SQLite)]
-    B --> G[⏰ 定时调度]
-    B --> H[🌡️ 温控自动化]
-    B --> I[☀️ 天气数据]
-    B --> J[🔐 权限会话]
-    B --> K[📊 遥测记录]
-```
-
----
+| 目录 | 内容 |
+|---|---|
+| `firmware/` | ESP8266 固件：`agent-platformio/`（PlatformIO / command-line workflow）与 `arduino-ide/`（Arduino IDE workflow），共享同一业务核心 `shared/RemoteACCore/` |
+| `cloud/` | 云端：`backend/`（Fastify + MQTT 桥接）、`frontend/`（Vue 3 Web UI）、`broker/`、`deploy/` |
+| `hardware/` | PCB 设计与制造文件（Rev 1.0.1）、接线说明 |
+| `tools/` | 红外学习工具、发布与校验脚本 |
+| `docs/` | 完整中英文文档（见[文档](#documentation)） |
 
 ## 快速开始
 
-公开仓库默认配置为**安全/非生产**模式：不发真实红外、不连生产 broker、不含真实凭据。
-
-### 固件（PlatformIO 模式）
+### 1. 编译 ESP8266 固件（PlatformIO）
 
 ```powershell
 cd firmware/agent-platformio
@@ -86,145 +59,98 @@ pwsh ./tools/dev.ps1 verify -Profile public
 pwsh ./tools/dev.ps1 build -Profile public
 ```
 
-### 固件（Arduino IDE 模式）
+详细说明：[Arduino IDE 使用指南](./docs/中文/Arduino-IDE使用指南.md)
 
-在 Arduino IDE 中打开 `firmware/arduino-ide/Remote_AC_Controller/Remote_AC_Controller.ino`，按 [`firmware/arduino-ide/Remote_AC_Controller/README.md`](./firmware/arduino-ide/Remote_AC_Controller/README.md) 配置开发板与依赖即可编译。
+### 2. Arduino IDE workflow
 
-### 云端
+用 Arduino IDE 打开 `firmware/arduino-ide/Remote_AC_Controller/Remote_AC_Controller.ino`，按 sketch 内 README 完成一次性配置后编译上传。
+
+### 3. 部署 Backend 和 Frontend
 
 ```bash
 cd cloud/backend && npm ci && npm test
 cd cloud/frontend && npm ci && npm test && npm run build
 ```
 
-### 统一验证
+完整流程（含 MQTT Broker 与 Nginx）：[部署指南](./docs/中文/部署指南.md)
 
-```powershell
-./tools/test-all.ps1
-./tools/build-all.ps1
+### 4. 制造 PCB
+
+使用 `hardware/pcb/fabrication/` 下的 Gerber、钻孔与飞针测试文件下单制造。制造包内容合同与逐文件校验见 [manufacturing-manifest](./hardware/pcb/fabrication/manufacturing-manifest.md)。**注意：Rev 1.0 制造文件已被取代，请勿使用。**
+
+### 5. 使用红外学习工具
+
+采集你自己的空调遥控器红外帧：[红外学习](./docs/中文/红外学习.md)（工具位于 [`tools/ir-simple-learner/`](./tools/ir-simple-learner/)）
+
+### 6. 配置可选 Srun 校园网认证
+
+针对使用 Srun 的校园网（如西电）：[西电校园网自动认证](./docs/中文/西电校园网自动认证.md) 与 [Srun 校园网移植指南](./docs/中文/Srun校园网移植指南.md)
+
+## 简化架构
+
+```mermaid
+graph LR
+    A[手机 / 桌面浏览器] -->|HTTPS| B[云端后端]
+    B -->|MQTT over TLS| C[MQTT Broker]
+    C -->|MQTT over TLS| D[ESP8266]
+    D -->|红外| E[空调]
+    B --> F[(SQLite)]
 ```
 
----
+## 硬件
 
-## 固件两种使用方式
+- 开发板：**NodeMCU ESP8266 开发板**
+- 温湿度：DHT11（GPIO5）
+- 红外模块：ZJ-IR-V2（GPIO12 TX / GPIO14 RX）
+- PCB：Rev 1.0.1（[PCB 文档](./hardware/pcb/README.md)，接线见[接线说明](./docs/中文/接线说明.md)）
 
-本仓库的 ESP8266 固件支持两种构建方式，共用同一套核心业务源码（`firmware/shared/RemoteACCore/`）。
+## 可选校园网认证
 
-| 方式 | 目录 | 适用场景 |
-|---|---|---|
-| **PlatformIO（Agent 自动化）** | `firmware/agent-platformio/` | CI 构建、命令行烧录、自动化部署 |
-| **Arduino IDE（手动编译）** | `firmware/arduino-ide/` | Arduino IDE 2.x 手动开发与上传 |
-
-两种方式均不内嵌生产 Wi-Fi、MQTT 凭据或真实红外数据。Agent 模式不是特定 AI 产品专用，任何自动化终端或开发人员均可使用。
-
----
-
-## PCB 与硬件资料
-
-| 资源 | 位置 |
-|---|---|
-| PCB 源文件（EasyEDA Pro） | [`hardware/pcb/source/`](./hardware/pcb/source/) |
-| Gerber 制造文件 | [`hardware/pcb/fabrication/gerber/`](./hardware/pcb/fabrication/gerber/) |
-| BOM 与坐标 | [`hardware/pcb/fabrication/`](./hardware/pcb/fabrication/) |
-| PCB 文档 | [`hardware/pcb/README.md`](./hardware/pcb/README.md) |
-| 制造 ZIP（嘉立创下单包） | [v1.0.0 Release 资产](https://github.com/nobodycareme/remote-ac-controller/releases) |
-| 接线说明 | [`docs/中文/接线说明.md`](./docs/中文/接线说明.md) |
-| 硬件说明 | [`docs/中文/硬件说明.md`](./docs/中文/硬件说明.md) |
-
-PCB 设计与制造文件按 Apache-2.0 发布。制造 ZIP 包含完整的 Gerber、钻孔和坐标文件，可直接在嘉立创下单。
-
----
-
-## 红外学习工具
-
-本仓库提供 Windows x64 红外信号采集工具，用于从空调遥控器捕获红外帧。
-
-| 资源 | 位置 |
-|---|---|
-| 源码 | [`tools/ir-simple-learner/`](./tools/ir-simple-learner/) |
-| Windows EXE | [v1.0.0 Release 资产](https://github.com/nobodycareme/remote-ac-controller/releases) |
-| 使用说明 | [`tools/ir-simple-learner/README.md`](./tools/ir-simple-learner/README.md) |
-| 红外学习流程 | [`docs/中文/红外学习.md`](./docs/中文/红外学习.md) |
-
-> 此 EXE 不包含任何真实空调红外帧、不包含生产凭据、不包含 TLS 私钥。使用时需配合 CH9102 USB-UART 模块接收红外接收头的信号。
-
----
-
-## 仓库结构
-
-```
-remote-ac-controller/
-├── firmware/
-│   ├── shared/RemoteACCore/       # 共享核心业务源码
-│   ├── agent-platformio/           # PlatformIO 工程（CI / 命令行）
-│   └── arduino-ide/                # Arduino IDE Sketch
-├── cloud/
-│   ├── backend/                    # Fastify + MQTT 桥接
-│   └── frontend/                   # Vue 3 网页 UI
-├── hardware/
-│   └── pcb/                        # PCB 源文件与制造资料
-├── tools/
-│   ├── ir-simple-learner/          # 红外信号采集工具
-│   ├── test-all.ps1                # 全量测试
-│   └── build-all.ps1               # 全量构建
-├── docs/
-│   ├── 中文/                        # 中文文档（24 篇）
-│   └── English/                     # English documentation（24 docs）
-├── .github/workflows/              # CI 工作流
-├── LICENSE  NOTICE  THIRD_PARTY_NOTICES.md
-└── CHANGELOG.md  CONTRIBUTING.md  SECURITY.md  SUPPORT.md
-```
-
-单次 `git clone` 即可获得全部源码，不依赖 Git 子模块。
-
----
-
-## 安全与默认值
-
-- **不含任何生产密钥**：无 Wi-Fi / MQTT 口令、无 TLS 私钥、无真实红外数据、无数据库、无生产环境文件。
-- 固件与云端的公开默认值均为非生产安全值，详见 [`SECURITY.md`](./docs/中文/安全策略.md)。
-- 真实红外发射受**多重独立开关**保护，全部默认关闭，且只接受 `"true"` / `"1"` 才视为开启。
-- 自建者需自行准备 MQTT 凭据、TLS 证书与红外码。
-
----
+针对使用 Srun 协议的校园网（例如西电），固件可在配置后于上电时自动完成 Portal 认证并在断线后自动恢复连接。该功能默认关闭；公开构建不含任何凭据。详见[西电校园网自动认证](./docs/中文/西电校园网自动认证.md)。
 
 ## 文档
 
-完整的中英文文档位于 [`docs/`](./docs)：完整索引见
-[中文文档导航](./docs/中文/文档导航.md)，英文索引见
-[English documentation index](./docs/English/documentation-index.md)。
+完整中英文文档位于 [`docs/`](./docs)，索引见[中文文档导航](./docs/中文/文档导航.md)（英文文档在 `docs/English/` 下，成对对应）。
 
-| 让它跑起来 | 理解它 | 运维它 |
+| 快速上手 | 理解项目 | 运维与排障 |
 |---|---|---|
-| [硬件选型](./docs/中文/硬件说明.md) | [系统架构](./docs/中文/系统架构.md) | [部署指南](./docs/中文/部署指南.md) |
-| [接线说明](./docs/中文/接线说明.md) | [MQTT 协议](./docs/中文/MQTT协议.md) | [运维指南](./docs/中文/运维指南.md) |
-| [红外学习](./docs/中文/红外学习.md) | [安全模型](./docs/中文/安全模型.md) | [低配服务器部署](./docs/中文/低配置服务器部署.md) |
-| [Arduino IDE 使用指南](./docs/中文/Arduino-IDE使用指南.md) | [定时任务](./docs/中文/定时任务.md) · [温控自动化](./docs/中文/温度自动控制.md) | [故障排查](./docs/中文/故障排查.md) · [备份恢复](./docs/中文/备份与恢复.md) |
-| [西电校园网自动认证](./docs/中文/西电校园网自动认证.md) | [Srun 校园网移植指南](./docs/中文/Srun校园网移植指南.md) | [支持说明](./docs/中文/支持说明.md) |
-| [参与贡献](./docs/中文/参与贡献.md) | [第三方许可说明](./docs/中文/第三方许可说明.md) | [更新日志](./docs/中文/更新日志.md) |
+| [硬件说明](./docs/中文/硬件说明.md) · [接线说明](./docs/中文/接线说明.md) | [系统架构](./docs/中文/系统架构.md) · [安全模型](./docs/中文/安全模型.md) | [部署指南](./docs/中文/部署指南.md) · [运维指南](./docs/中文/运维指南.md) |
+| [Arduino-IDE使用指南](./docs/中文/Arduino-IDE使用指南.md) | [MQTT 协议](./docs/中文/MQTT协议.md) · [定时任务](./docs/中文/定时任务.md) | [故障排查](./docs/中文/故障排查.md) · [备份与恢复](./docs/中文/备份与恢复.md) |
+| [红外学习](./docs/中文/红外学习.md) | [温度自动控制](./docs/中文/温度自动控制.md) | [安全策略](./docs/中文/安全策略.md) · [支持说明](./docs/中文/支持说明.md) |
 
----
+## Development and testing
 
-## 环境要求
+```powershell
+# 全量校验
+./tools/test-all.ps1
+./tools/build-all.ps1
 
-| 组件 | 要求 |
-|---|---|
-| Node.js | ≥ 22.5（推荐 24），使用内置 `node:sqlite` |
-| 编译工具链 | 不需要。所有依赖均无原生编译 |
-| 开发板 | NodeMCU / ESP8266（ESP-12E/F） |
-| 服务器 | 1 GB 内存可用，构建须在本机或 CI 完成 |
+# 文档一致性（中英对等、链接、禁用措辞）
+python tools/check-doc-parity.py
+python tools/check-doc-links.py
+python tools/check-doc-language-links.py
+python tools/check-public-docs.py
 
----
+# 版本与发布完整性
+python tools/check-version.py
+python tools/check-pcb-release.py
+```
 
-## 已知限制
+参与开发请阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
-- **不含具体空调型号的真实红外码** — 需使用红外学习工具自行采集。
-- **单设备模型** — 一个后端实例对应一个 `device_id`。
-- **无内置监控端点** — 无 `/metrics`，监控与备份需自行接入。
-- **数据库迁移无版本账本** — 升级安全，反向降级未经验证。
+## 参与贡献
 
----
+欢迎提交 Issue 与 Pull Request。请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md) 与[参与贡献指南](./docs/中文/参与贡献.md)。
 
-## 许可
+## 支持与安全
 
-[Apache License 2.0](./LICENSE)。中文参考译文见 [`docs/中文/Apache-2.0许可证参考译文.md`](./docs/中文/Apache-2.0许可证参考译文.md)。第三方许可见 [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md)。
+- 使用与配置问题：先查[文档导航](./docs/中文/文档导航.md)，再开 [Issue](https://github.com/nobodycareme/remote-ac-controller/issues)。
+- 安全漏洞：请使用 GitHub Private Vulnerability Reporting，不要公开提交（[SECURITY.md](./SECURITY.md)）。
+
+## 许可协议
+
+本项目采用 [Apache License 2.0](./LICENSE) 许可。第三方组件许可见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
+
+## Repository 说明
+
+本仓库是此项目**唯一正式仓库**，firmware、cloud、hardware、tools 与 docs 全部在此维护。
