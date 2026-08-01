@@ -24,6 +24,11 @@ pick-and-place files**; you must compile those yourself for assembly.
 > design revision (Rev 1.0.1) are independent. The silkscreen still reads v1.0,
 > but Rev 1.0.1 is the only valid manufacturing data.
 
+> **Project-source note**: the repository includes an EasyEDA Pro project
+> container. Its complete editability and component part-number content have
+> not been independently verified. Use the validated Gerber, drill files, and
+> manufacturing manifest for fabrication.
+
 ## Layers and manufacturing files
 
 **2-layer board**; manufacturing files live in `fabrication/gerber/`,
