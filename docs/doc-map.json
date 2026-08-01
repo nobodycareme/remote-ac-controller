@@ -1,34 +1,118 @@
 {
   "_comment": "First-party documentation map (CN <-> EN). Every Chinese doc has an English counterpart and vice versa. Language-switch links at the top of each file are the only permitted cross-language links.",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "readme_cn": "README.md",
   "readme_en": "README.en.md",
   "docs_root_en": "docs/English/README.md",
   "docs_root_cn": "docs/中文/文档导航.md",
   "pairs": [
-    { "zh": "docs/中文/系统架构.md",                 "en": "docs/English/architecture.md" },
-    { "zh": "docs/中文/Arduino-IDE使用指南.md",      "en": "docs/English/arduino-ide-guide.md" },
-    { "zh": "docs/中文/备份与恢复.md",               "en": "docs/English/backup-and-recovery.md" },
-    { "zh": "docs/中文/更新日志.md",                 "en": "docs/English/changelog.md" },
-    { "zh": "docs/中文/行为准则.md",                 "en": "docs/English/code-of-conduct.md" },
-    { "zh": "docs/中文/参与贡献.md",                 "en": "docs/English/contributing.md" },
-    { "zh": "docs/中文/部署指南.md",                 "en": "docs/English/deployment.md" },
-    { "zh": "docs/中文/文档导航.md",                 "en": "docs/English/documentation-index.md" },
-    { "zh": "docs/中文/硬件说明.md",                 "en": "docs/English/hardware.md" },
-    { "zh": "docs/中文/红外学习.md",                 "en": "docs/English/ir-learning.md" },
-    { "zh": "docs/中文/MQTT协议.md",                 "en": "docs/English/mqtt-protocol.md" },
-    { "zh": "docs/中文/运维指南.md",                 "en": "docs/English/operations-guide.md" },
-    { "zh": "docs/中文/低配置服务器部署.md",          "en": "docs/English/resource-constrained-deployment.md" },
-    { "zh": "docs/中文/定时任务.md",                 "en": "docs/English/scheduling.md" },
-    { "zh": "docs/中文/安全模型.md",                 "en": "docs/English/security-model.md" },
-    { "zh": "docs/中文/安全策略.md",                 "en": "docs/English/security.md" },
-    { "zh": "docs/中文/Srun校园网移植指南.md",        "en": "docs/English/srun-campus-network-porting-guide.md" },
-    { "zh": "docs/中文/支持说明.md",                 "en": "docs/English/support.md" },
-    { "zh": "docs/中文/温度自动控制.md",             "en": "docs/English/temperature-automation.md" },
-    { "zh": "docs/中文/第三方许可说明.md",            "en": "docs/English/third-party-notices.md" },
-    { "zh": "docs/中文/故障排查.md",                 "en": "docs/English/troubleshooting.md" },
-    { "zh": "docs/中文/接线说明.md",                 "en": "docs/English/wiring.md" },
-    { "zh": "docs/中文/西电校园网自动认证.md",        "en": "docs/English/xidian-campus-network-authentication.md" },
-    { "zh": "docs/中文/Apache-2.0许可证参考译文.md",  "en": "LICENSE" }
+    {
+      "zh": "docs/中文/系统架构.md",
+      "en": "docs/English/architecture.md"
+    },
+    {
+      "zh": "docs/中文/Arduino-IDE使用指南.md",
+      "en": "docs/English/arduino-ide-guide.md"
+    },
+    {
+      "zh": "docs/中文/备份与恢复.md",
+      "en": "docs/English/backup-and-recovery.md"
+    },
+    {
+      "zh": "docs/中文/更新日志.md",
+      "en": "docs/English/changelog.md"
+    },
+    {
+      "zh": "docs/中文/行为准则.md",
+      "en": "docs/English/code-of-conduct.md"
+    },
+    {
+      "zh": "docs/中文/参与贡献.md",
+      "en": "docs/English/contributing.md"
+    },
+    {
+      "zh": "docs/中文/部署指南.md",
+      "en": "docs/English/deployment.md"
+    },
+    {
+      "zh": "docs/中文/文档导航.md",
+      "en": "docs/English/documentation-index.md"
+    },
+    {
+      "zh": "docs/中文/硬件说明.md",
+      "en": "docs/English/hardware.md"
+    },
+    {
+      "zh": "docs/中文/红外学习.md",
+      "en": "docs/English/ir-learning.md"
+    },
+    {
+      "zh": "docs/中文/MQTT协议.md",
+      "en": "docs/English/mqtt-protocol.md"
+    },
+    {
+      "zh": "docs/中文/运维指南.md",
+      "en": "docs/English/operations-guide.md"
+    },
+    {
+      "zh": "docs/中文/低配置服务器部署.md",
+      "en": "docs/English/resource-constrained-deployment.md"
+    },
+    {
+      "zh": "docs/中文/定时任务.md",
+      "en": "docs/English/scheduling.md"
+    },
+    {
+      "zh": "docs/中文/安全模型.md",
+      "en": "docs/English/security-model.md"
+    },
+    {
+      "zh": "docs/中文/安全策略.md",
+      "en": "docs/English/security.md"
+    },
+    {
+      "zh": "docs/中文/Srun校园网移植指南.md",
+      "en": "docs/English/srun-campus-network-porting-guide.md"
+    },
+    {
+      "zh": "docs/中文/支持说明.md",
+      "en": "docs/English/support.md"
+    },
+    {
+      "zh": "docs/中文/温度自动控制.md",
+      "en": "docs/English/temperature-automation.md"
+    },
+    {
+      "zh": "docs/中文/第三方许可说明.md",
+      "en": "docs/English/third-party-notices.md"
+    },
+    {
+      "zh": "docs/中文/故障排查.md",
+      "en": "docs/English/troubleshooting.md"
+    },
+    {
+      "zh": "docs/中文/接线说明.md",
+      "en": "docs/English/wiring.md"
+    },
+    {
+      "zh": "docs/中文/西电校园网自动认证.md",
+      "en": "docs/English/xidian-campus-network-authentication.md"
+    },
+    {
+      "zh": "docs/中文/维护者发布流程.md",
+      "en": "docs/English/maintainer-release-process.md"
+    },
+    {
+      "zh": "docs/中文/版本管理.md",
+      "en": "docs/English/versioning.md"
+    },
+    {
+      "zh": "docs/中文/PCB发布流程.md",
+      "en": "docs/English/hardware-release-process.md"
+    },
+    {
+      "zh": "docs/中文/Apache-2.0许可证参考译文.md",
+      "en": "LICENSE"
+    }
   ]
 }
