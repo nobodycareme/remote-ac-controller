@@ -324,6 +324,20 @@ jobs:
             test/host/test_campus_auth_policy.cpp -o /tmp/test_policy
           /tmp/test_policy
 
+      - name: Compile & run WifiManager connect-decision tests
+        run: |
+          set -euo pipefail
+          for s in "-DENABLE_WIFI=1" \
+                   "-DENABLE_WIFI=1 -DENABLE_WIFI_CREDENTIALS=1" \
+                   "-DENABLE_WIFI=1 -DENABLE_WIFI_CREDENTIALS=1 -DENABLE_AUTO_WIFI_CONNECT=1" \
+                   "-DENABLE_WIFI=1 -DENABLE_CAMPUS_AUTH=1" \
+                   "-DENABLE_WIFI=1 -DENABLE_WIFI_CREDENTIALS=1 -DENABLE_CLOUD=1"; do
+            echo "== wifi connect decision: [$s] =="
+            g++ -std=c++11 -Wall -I firmware/shared/RemoteACCore/src $s \
+              test/host/test_wifi_connect.cpp -o /tmp/test_wifi
+            /tmp/test_wifi
+          done
+
       - name: Compile feature_gates invariants under legal flag sets
         run: |
           set -euo pipefail
@@ -336,6 +350,9 @@ jobs:
             "-DENABLE_WIFI=1 -DENABLE_CLOUD=1"
             "-DENABLE_WIFI=1 -DENABLE_CLOUD=1 -DENABLE_CAMPUS_AUTH=1 -DENABLE_AUTO_CAMPUS_AUTH=0"
             "-DENABLE_WIFI=1 -DENABLE_CLOUD=1 -DENABLE_CLOUD_CREDENTIALS=1"
+            "-DENABLE_WIFI=1 -DENABLE_WIFI_CREDENTIALS=1"
+            "-DENABLE_WIFI=1 -DENABLE_WIFI_CREDENTIALS=1 -DENABLE_AUTO_WIFI_CONNECT=1"
+            "-DENABLE_WIFI=1 -DENABLE_WIFI_CREDENTIALS=1 -DENABLE_AUTO_WIFI_CONNECT=1 -DENABLE_CLOUD=1"
           )
           for s in "${sets[@]}"; do
             echo "== feature_gates: [$s] =="
@@ -356,6 +373,9 @@ jobs:
             "-DENABLE_AUTO_CAMPUS_AUTH=1"           # auto auth without campus/live
             "-DENABLE_WIFI=1 -DENABLE_CAMPUS_AUTH=1 -DENABLE_AUTO_CAMPUS_AUTH=1"  # auto without live auth
             "-DENABLE_IR_LAB_LEARNING_COMMANDS=1"   # lab IR without IR mutating
+            "-DENABLE_WIFI_CREDENTIALS=1"           # wifi creds without wifi
+            "-DENABLE_AUTO_WIFI_CONNECT=1"          # auto wifi connect without wifi
+            "-DENABLE_WIFI=1 -DENABLE_WIFI_CREDENTIALS=1 -DENABLE_CAMPUS_AUTH=1"  # creds + campus conflict
           )
           fail=0
           for s in "${bad[@]}"; do
@@ -736,3 +756,100 @@ jobs:
           fi
           echo 'REAL_IR_EXCLUSION_PASS=True'
           echo 'CANONICAL_REAL_IR_HITS=0'
+
+
+  # ---------------------------------------------------------------------------
+  # ir-simple-learner-windows
+  # ---------------------------------------------------------------------------
+  # Official IR-learner Windows release-build gate:
+  #   1. Python 3.12 x64 with Tk
+  #   2. locked (hash-verified) dependency install
+  #   3. both IR unit test trees + 20 stability rounds
+  #   4. source parity between the two tool copies
+  #   5. official build.ps1 -Clean (never manual PyInstaller)
+  #   6. EXE --self-test
+  #   7. credential / real-IR / private-path scan of the EXE
+  #   8. upload the EXE as a CI artifact for review
+  ir-simple-learner-windows:
+    name: ir-simple-learner-windows
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12 x64
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: 'x64'
+
+      - name: Verify Python version, arch and Tk
+        run: |
+          python --version
+          python -c "import platform; assert platform.architecture()[0] == '64bit'; print('PYTHON_ARCH=x64')"
+          python -c "import tkinter; print('TKINTER_OK', tkinter.TkVersion)"
+          python -c "import sys; assert sys.version_info[:2] == (3, 12); print('PYTHON_312_OK')"
+
+      - name: Install locked dependencies (hash-verified)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --require-hashes -r tools/ir-simple-learner/requirements-lock.txt
+
+      - name: Run both IR unit test trees
+        run: |
+          python -m unittest discover -s tools/ir-simple-learner/src/tests -p "test_*.py" -v
+          python -m unittest discover -s firmware/agent-platformio/tools/ir_simple_learner/tests -p "test_*.py" -v
+
+      - name: IR source parity check
+        run: |
+          python tools/check-ir-tool-parity.py
+
+      - name: Stability - 20 consecutive rounds
+        run: |
+          $pass = 0
+          for ($i = 1; $i -le 20; $i++) {
+            $out = python -m unittest discover -s tools/ir-simple-learner/src/tests -p "test_*.py" 2>&1 | Select-Object -Last 1
+            if ($out -match '^OK') { $pass++ } else { Write-Host "RUN $i FAILED: $out"; exit 1 }
+          }
+          Write-Host "IR_STABILITY_RUN_TOTAL=20"
+          Write-Host "IR_STABILITY_RUN_PASS=$pass"
+
+      - name: Official build.ps1 -Clean (Python 3.12)
+        run: |
+          ./tools/ir-simple-learner/build.ps1 -Clean -PythonPath (Get-Command python).Source
+
+      - name: EXE self-test (re-run on the built artifact)
+        run: |
+          $exe = "tools/ir-simple-learner/dist/IR_Simple_Learner_v4_windows_x64.exe"
+          if (-not (Test-Path $exe)) { throw "EXE missing: $exe" }
+          $proc = Start-Process -FilePath (Resolve-Path $exe) -ArgumentList '--self-test' -Wait -PassThru
+          if ($proc.ExitCode -ne 0) { throw "EXE self-test failed: $($proc.ExitCode)" }
+          Write-Host "IR_EXE_SELF_TEST_PASS=True"
+
+      - name: EXE SHA-256 and security scan
+        run: |
+          $exe = "tools/ir-simple-learner/dist/IR_Simple_Learner_v4_windows_x64.exe"
+          $h = (Get-FileHash -Algorithm SHA256 -LiteralPath $exe).Hash
+          Write-Host "IR_EXE_SHA256=$h"
+          $data = [System.IO.File]::ReadAllBytes((Resolve-Path $exe))
+          $text = [System.Text.Encoding]::ASCII.GetString($data)
+          $hits = 0
+          if ($text -match 'BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY') { $hits++ }
+          if ($text -match 'gh[pousr]_[A-Za-z0-9]{20,}') { $hits++ }
+          if ($text -match 'Private[\\/](Evidence|Archives|Deliverables)') { $hits++ }
+          if ($text -match 'rawData\\[\\d{3,}\\]') { $hits++ }
+          if ($hits -ne 0) { throw "EXE security scan found $hits hits" }
+          Write-Host "IR_EXE_SECURITY_SCAN_PASS=True"
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: IR_Simple_Learner_v4_windows_x64
+          path: tools/ir-simple-learner/dist/IR_Simple_Learner_v4_windows_x64.exe
+          if-no-files-found: error

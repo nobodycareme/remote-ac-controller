@@ -32,7 +32,11 @@
 [CmdletBinding()]
 param(
     [switch] $SkipFirmware,
-    [switch] $SkipCloud
+    [switch] $SkipCloud,
+    # Python interpreter for the IR-learner unit tests / parity check.
+    # The IR learner imports tkinter, so pass a Python 3.12 x64 with Tk
+    # (e.g. the official release interpreter). Defaults to `python` on PATH.
+    [string] $IRPythonPath = ''
 )
 
 Set-StrictMode -Version Latest
@@ -197,6 +201,51 @@ else {
                             -WorkingDirectory $pkg.Path `
                             -Executable 'npm' -Arguments @('test')
         }
+    }
+}
+
+# --- ir-simple-learner (both tool trees) ------------------------------------
+if ($IRPythonPath -and (Test-Path -LiteralPath $IRPythonPath)) {
+    $IRPy = $IRPythonPath
+}
+else {
+    $IRPyCmd = Get-Command python -ErrorAction SilentlyContinue
+    if ($IRPyCmd) { $IRPy = $IRPyCmd.Source } else { $IRPy = '' }
+}
+if (-not $IRPy) {
+    Add-Result -Name 'ir-simple-learner' -Status 'SKIP' -Detail 'python not found (pass -IRPythonPath)'
+    Write-Host 'ir-simple-learner: python not found, skipped' -ForegroundColor Yellow
+}
+else {
+    $IRTestRoots = @(
+        (Join-Path $RepoRoot 'tools/ir-simple-learner/src/tests'),
+        (Join-Path $RepoRoot 'firmware/agent-platformio/tools/ir_simple_learner/tests')
+    )
+    foreach ($root in $IRTestRoots) {
+        if (-not (Test-Path -LiteralPath $root)) {
+            Add-Result -Name "ir-simple-learner :: $root" -Status 'SKIP' -Detail 'test dir not found'
+            continue
+        }
+        Invoke-Step -Name "ir-simple-learner :: unittest $(Split-Path (Split-Path $root -Parent) -Leaf)" -Action {
+            $prevEap = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            try {
+                & $IRPy -m unittest discover -s $root -p 'test_*.py' 2>&1 | ForEach-Object { Write-Host $_ }
+                $nativeCode = $LASTEXITCODE
+            }
+            finally { $ErrorActionPreference = $prevEap }
+            if ($nativeCode -ne 0) { throw "unittest exit code $nativeCode" }
+        }
+    }
+    Invoke-Step -Name 'ir-simple-learner :: parity (both copies identical)' -Action {
+        $prevEap = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            & $IRPy (Join-Path $RepoRoot 'tools/check-ir-tool-parity.py') 2>&1 | ForEach-Object { Write-Host $_ }
+            $nativeCode = $LASTEXITCODE
+        }
+        finally { $ErrorActionPreference = $prevEap }
+        if ($nativeCode -ne 0) { throw "parity exit code $nativeCode" }
     }
 }
 
