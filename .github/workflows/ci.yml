@@ -645,7 +645,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Unified version 1.2.0 across root/firmware/cloud
+      - name: Unified version across root, firmware, and cloud
         run: python3 tools/check-version.py
 
   # ---------------------------------------------------------------------------

@@ -37,7 +37,9 @@ def main():
         ("cloud/backend/package.json", read_json("cloud/backend/package.json")["version"]),
         ("cloud/frontend/package.json", read_json("cloud/frontend/package.json")["version"]),
         ("cloud/backend/package-lock.json", read_json("cloud/backend/package-lock.json")["version"]),
+        ("cloud/backend/package-lock.json packages[\"\"]", read_json("cloud/backend/package-lock.json")["packages"][""]["version"]),
         ("cloud/frontend/package-lock.json", read_json("cloud/frontend/package-lock.json")["version"]),
+        ("cloud/frontend/package-lock.json packages[\"\"]", read_json("cloud/frontend/package-lock.json")["packages"][""]["version"]),
     ]
 
     # firmware serial constant
@@ -74,7 +76,7 @@ def main():
     ok = ok and banner_ok
 
     print(f"ROOT_VERSION={expected}")
-    print(f"FIRMWARE_VERSION={expected}")
+    print(f"FIRMWARE_VERSION={firmware_const}")  # raw constant, includes 'v' prefix
     print(f"BACKEND_VERSION={expected}")
     print(f"FRONTEND_VERSION={expected}")
     print(f"STARTUP_BANNER_DOUBLE_V={'False' if banner_ok else 'True'}")
