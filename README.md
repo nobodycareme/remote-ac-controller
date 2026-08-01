@@ -26,7 +26,7 @@ Remote AC Controller 是一个基于 ESP8266 的空调远程控制项目。设�
 
 如果你只有一台 NodeMCU 开发板、一个红外发射模块和一个小型温湿度传感器，就可以搭建这套系统；核心红外码由你自己的遥控器学习得到，因此适用于大多数支持红外遥控的空调型号。
 
-项目从日常使用出发设计：网页端可以在手机上直接操作，也可以部署在局域网或公网服务器上；固件端支持多种网络接入方式，方便适配不同的使用环境。
+网页端可以在手机上直接操作，也可以部署在局域网或公网服务器上；固件端支持普通 WiFi 和可选校园网等多种接入方式，方便适配不同的使用环境。
 
 ## 界面预览
 
@@ -49,7 +49,7 @@ Remote AC Controller 是一个基于 ESP8266 的空调远程控制项目。设�
 - 支持普通 WPA/WPA2 WiFi 和可选 Srun 校园网认证；
 - 红外学习工具用于采集用户自己的遥控器数据。
 
-整个系统可以按需拆开使用：只在家里用手机控制空调，可以只部署固件；想远程访问，再部署云端服务；想自己做 PCB，可以参考 `hardware/` 下的制造资料。各部分之间通过明确的 MQTT 消息协议协作，单独替换某一端不会影响其他部分。
+手机网页控制需要前端、后端、MQTT Broker 和 ESP8266 固件共同运行。固件本身也可以单独使用，用于串口交互、传感器采集和红外硬件调试。各部分可以分别开发和部署；替换前端、后端、Broker 或固件时，需要保持现有 API 与 MQTT 协议兼容。
 
 ## 快速开始
 
@@ -84,9 +84,9 @@ cd firmware/agent-platformio
 
 服务端使用 Fastify，前端使用 Vue 3，设备端为 NodeMCU ESP8266。
 
-项目按目录组织：`firmware/` 是 ESP8266 固件（PlatformIO 与 Arduino IDE 两种使用方式），`cloud/` 是云端后端与网页前端，`hardware/` 是 PCB 资料，`tools/` 是红外学习工具与辅助脚本。各部分独立维护，接口通过 MQTT 消息协议衔接，详细约定见 [MQTT 协议](./docs/中文/MQTT协议.md)。
+项目按目录组织：`firmware/` 是 ESP8266 固件（PlatformIO 与 Arduino IDE 两种使用方式），`cloud/` 是云端后端与网页前端，`hardware/` 是 PCB 资料，`tools/` 是红外学习工具与辅助脚本。各部分通过 MQTT 消息协议衔接，详细约定见 [MQTT 协议](./docs/中文/MQTT协议.md)。
 
-如果你只想快速体验网页控制，也可以先用模拟设备或仅运行云端部分；固件、云端和前端各自独立，方便按需启动。固件内部支持多种网络接入方式，配置方法见对应的[首次配置指南](./docs/中文/首次配置.md)。
+云端后端、网页前端和固件可以分别启动和调试；完整的手机网页控制需要三部分与一个 MQTT Broker 一起运行。固件内部支持多种网络接入方式，配置方法见对应的[首次配置指南](./docs/中文/首次配置.md)。
 
 ## 硬件
 
@@ -95,7 +95,7 @@ cd firmware/agent-platformio
 - 红外模块：ZJ-IR-V2
 - PCB：Rev 1.0.1
 
-这些是项目开发和验证时使用的硬件组合，并非唯一选择——ESP8266 系列开发板配合支持红外发射的模块即可运行固件，接线方式可参考 `hardware/` 目录下的文档。
+项目已在 NodeMCU ESP8266、DHT11 和 ZJ-IR-V2 上完成开发和验证。使用其他 ESP8266 开发板或红外模块时，需要重新核对引脚、电平和通信协议。
 
 公开仓库不提供真实空调红外码，也未提供经过验证的 BOM 和贴片坐标文件。你可以用[红外学习工具](./docs/中文/红外学习.md)从自己的遥控器上采集红外数据，再按[首次配置指南](./docs/中文/首次配置.md)烧录进设备。
 
@@ -114,8 +114,8 @@ cd firmware/agent-platformio
 
 ## 参与贡献与支持
 
-欢迎提交 Issue 和 Pull Request，请先阅读[贡献指南](./docs/中文/参与贡献.md)。如果你在使用中发现了问题，欢迎在 [Issues](https://github.com/nobodycareme/remote-ac-controller/issues) 中描述现象和环境信息，这样能帮助维护者更快定位。安全漏洞请通过 GitHub 的 Private Vulnerability Reporting 报告，见[安全策略](./docs/中文/安全策略.md)。使用问题请先查阅[文档导航](./docs/中文/文档导航.md)，或在 Issues 中提问。
+欢迎提交 Issue 和 Pull Request，请先阅读[贡献指南](./docs/中文/参与贡献.md)。如果你希望为项目贡献代码或文档，请先查看贡献指南中的约定，确保改动符合项目的结构和风格。如果你在使用中发现了问题，欢迎在 [Issues](https://github.com/nobodycareme/remote-ac-controller/issues) 中描述现象和环境信息，这样能帮助维护者更快定位。安全漏洞请通过 GitHub 的 Private Vulnerability Reporting 报告，见[安全策略](./docs/中文/安全策略.md)。使用问题请先查阅[文档导航](./docs/中文/文档导航.md)，或在 Issues 中提问。
 
 项目使用 [Apache License 2.0](./LICENSE) 许可，第三方组件许可见[第三方组件许可声明](./docs/中文/第三方许可说明.md)。所有代码与文档均在本仓库内维护，发布说明见[更新日志](./docs/中文/更新日志.md)与 [GitHub Releases](https://github.com/nobodycareme/remote-ac-controller/releases)。
 
-项目仍在持续维护，功能与文档会不定期更新，欢迎关注。
+如果某个功能的行为与文档描述不一致，也欢迎通过 Issue 反馈。

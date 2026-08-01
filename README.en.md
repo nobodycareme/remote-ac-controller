@@ -26,7 +26,7 @@ Remote AC Controller is an ESP8266-based air conditioner remote control project.
 
 With a NodeMCU board, an IR transmitter, and a small temperature/humidity sensor, you can build the whole system. The IR codes are learned from your own remote, so it works with most infrared-controlled air conditioners.
 
-The project is designed for everyday use: the web UI works on phones, and you can deploy it on a LAN or on a public server. The firmware supports several network options to fit different environments.
+The project is designed for everyday use: the web UI works on phones, and you can deploy it on a LAN or on a public server. The firmware supports home Wi-Fi and optional campus network access to fit different environments.
 
 ## Interface preview
 
@@ -49,7 +49,7 @@ Desktop and mobile use the same responsive page; the data in the screenshots is 
 - Supports home WPA/WPA2 Wi-Fi and optional Srun campus network auth;
 - IR learning tool to capture data from your own remote.
 
-You can use the parts independently: run only the firmware for home use, add the cloud for remote access, or build your own PCB from the hardware files. The parts communicate over a documented MQTT protocol, so each side can be replaced without touching the others.
+Phone web control requires the frontend, backend, MQTT broker, and ESP8266 firmware running together. The firmware can also be used standalone for serial interaction, sensor reading, and IR hardware debugging. The parts can be developed and deployed separately; when replacing the frontend, backend, broker, or firmware, keep the existing API and MQTT protocol compatible.
 
 ## Quick start
 
@@ -82,9 +82,9 @@ Phone web page → Cloud → MQTT → ESP8266 → IR → AC
 
 The server uses Fastify, the frontend uses Vue 3, and the device is a NodeMCU ESP8266.
 
-The repository is organized by directory: `firmware/` holds the ESP8266 firmware (PlatformIO and Arduino IDE workflows), `cloud/` holds the backend and web frontend, `hardware/` holds the PCB files, and `tools/` holds the IR learning tool and helper scripts. The parts are maintained separately and communicate over the MQTT message protocol, documented in [MQTT protocol](./docs/English/mqtt-protocol.md).
+The repository is organized by directory: `firmware/` holds the ESP8266 firmware (PlatformIO and Arduino IDE workflows), `cloud/` holds the backend and web frontend, `hardware/` holds the PCB files, and `tools/` holds the IR learning tool and helper scripts. The parts communicate over the MQTT message protocol, documented in [MQTT protocol](./docs/English/mqtt-protocol.md).
 
-You can also run only the cloud part or use a simulated device to try the web UI first; the firmware, cloud, and frontend are independent.
+The backend, web frontend, and firmware can be started and debugged separately; complete phone control needs all three plus an MQTT broker. The firmware supports several network access methods — see the [first-time setup guide](./docs/English/first-time-setup.md).
 
 ## Hardware
 
@@ -93,7 +93,7 @@ You can also run only the cloud part or use a simulated device to try the web UI
 - IR module: ZJ-IR-V2
 - PCB: Rev 1.0.1
 
-These are the components used during development and testing, not the only option — any ESP8266-family board with an IR transmitter can run the firmware; wiring is described in the `hardware/` documentation.
+The project has been developed and validated on NodeMCU ESP8266, DHT11, and ZJ-IR-V2. When using other ESP8266 boards or IR modules, re-check the pin mapping, voltage levels, and communication protocol.
 
 The public repository does not ship real AC IR codes, and no validated BOM or pick-and-place files are provided. Use the [IR learning guide](./docs/English/ir-learning.md) to capture data from your own remote, then follow the [first-time setup guide](./docs/English/first-time-setup.md) to flash it.
 
@@ -115,5 +115,3 @@ All documents are provided in both Chinese and English with the same structure, 
 Issues and pull requests are welcome — please read the [contributing guide](./docs/English/contributing.md) first. If you find a problem, describing what you did and the environment helps maintainers fix it faster. Security vulnerabilities should be reported through GitHub Private Vulnerability Reporting; see the [security policy](./docs/English/security.md). For usage questions, check the [documentation index](./docs/English/documentation-index.md) or open an [Issue](https://github.com/nobodycareme/remote-ac-controller/issues).
 
 The project is licensed under the [Apache License 2.0](./LICENSE); third-party component licenses are listed in the [third-party notices](./docs/English/third-party-notices.md). All code and docs are maintained in this repository; release notes are in the [changelog](./docs/English/changelog.md) and [GitHub Releases](https://github.com/nobodycareme/remote-ac-controller/releases).
-
-The project is under active maintenance; features and docs are updated from time to time.
