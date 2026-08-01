@@ -23,8 +23,24 @@ static_assert(CAMPUS_AUTH_IS_AUTOMATIC ==
               "CAMPUS_AUTH_IS_AUTOMATIC must equal (campus && auto)");
 
 static_assert(WIFI_AUTOCONNECT_ON_BOOT ==
-                  (ENABLE_WIFI && (ENABLE_CLOUD || ENABLE_AUTO_CAMPUS_AUTH)),
+                  (ENABLE_WIFI && (ENABLE_CLOUD || ENABLE_AUTO_CAMPUS_AUTH || ENABLE_AUTO_WIFI_CONNECT)),
               "WIFI_AUTOCONNECT_ON_BOOT predicate mismatch");
+
+// ---- Local WPA/WPA2 credentials (v1.2.2) ------------------------------------
+#if ENABLE_WIFI_CREDENTIALS
+static_assert(ENABLE_WIFI,
+              "ENABLE_WIFI_CREDENTIALS must imply ENABLE_WIFI (already a #error, belt-and-braces)");
+#endif
+#if ENABLE_AUTO_WIFI_CONNECT
+static_assert(ENABLE_WIFI,
+              "ENABLE_AUTO_WIFI_CONNECT must imply ENABLE_WIFI (already a #error, belt-and-braces)");
+static_assert(WIFI_AUTOCONNECT_ON_BOOT,
+              "AUTO_WIFI_CONNECT must bring the link up at boot");
+#endif
+#if ENABLE_WIFI_CREDENTIALS && !ENABLE_CAMPUS_AUTH
+static_assert(__builtin_strcmp(BUILD_PROFILE_NET, "wifi") == 0,
+              "a local-WPA build without campus auth must report itself as wifi");
+#endif
 
 // ---- Build profile string matches the chosen axis ---------------------------
 #if ENABLE_CLOUD
