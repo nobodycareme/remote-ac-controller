@@ -140,6 +140,74 @@ FALSE_CAMPUS_LIVE_AUTH_CLAIMS = [
     "this profile authenticates at boot",
 ]
 
+# ---- v1.2.3 factual-accuracy claims (section 10) ----------------------------
+# Claims that have NO code basis and must never appear (positive assertions;
+# negated statements are fine and are excluded below by sentence context).
+FIRMWARE_ONLY_PHONE_CONTROL_CLAIMS = [
+    "只在家里用手机控制空调，可以只部署固件",
+    "只部署固件即可手机控制",
+    "只部署固件",
+    "run only the firmware for home use",
+    "only the firmware to control",
+]
+SIMULATOR_CLAIMS = [
+    "模拟设备",
+    "先用模拟设备",
+    "simulated device",
+    "a simulator",
+]
+COMPONENT_REPLACEMENT_OVERCLAIMS = [
+    "单独替换某一端不会影响其他部分",
+    "can be replaced without touching the others",
+    "can be replaced without touching",
+]
+HARDWARE_COMPATIBILITY_OVERCLAIMS = [
+    "ESP8266 系列开发板配合支持红外发射的模块即可运行固件",
+    "any ESP8266-family board with an IR transmitter can run",
+]
+PUBLIC_PROFILE_AUTO_CONNECT_FALSE = [
+    "Cloud 启用就会自动联网",
+    "Cloud启用就会自动联网",
+    "cloud builds autoconnect",
+]
+# "完全离线" positive claims are already covered by FALSE_OFFLINE_CLAIMS;
+# PUBLIC_PROFILE_OFFLINE_FALSE_CLAIM adds the explicit "public is fully
+# offline / sensors only" phrasing that must never be used.
+PUBLIC_PROFILE_OFFLINE_FALSE = [
+    "public 是完全离线",
+    "public 只编译传感器",
+    "public is fully offline",
+    "public builds sensors only",
+]
+# First-time setup accuracy.
+SETUP_ARDUINO_GLOBALS_WRONG = [
+    "编辑 `globals.h`",
+    "在 `globals.h` 中配置",
+    "configure `globals.h`",
+    "in `globals.h`",
+    "`globals.h` 中",
+]
+SETUP_LWC_COMPILE_ONLY_FALSE = [
+    "local-wifi-cloud 只编译 Cloud 代码",
+    "local-wifi-cloud 无需 Cloud 凭据",
+    "local-wifi-cloud does not need cloud credentials",
+    "local-wifi-cloud compile-only",
+]
+# Campus guide internal audit language (never user-facing).
+CAMPUS_GUIDE_AUDIT_LANGUAGE = [
+    "XIDIAN_PROFILE_PUBLIC_PARAMETERS_VERIFIED",
+    "只读实证核验",
+    "只读复验",
+    "逐字符一致",
+    "实证确认",
+    "参数核验时间",
+    "verified read-only",
+    "character for character",
+    "re-verification on",
+    "confirmed by portal probing",
+    "Verification status:",
+]
+
 
 def read(p):
     return open(os.path.join(ROOT, p), encoding="utf-8", errors="replace").read()
@@ -436,6 +504,7 @@ def main():
         "README.md": cn,
         "README.en.md": en,
         ".github/release-notes/v1.2.2.md": read(".github/release-notes/v1.2.2.md"),
+        ".github/release-notes/v1.2.3.md": read(".github/release-notes/v1.2.3.md"),
     }
     for f, txt in targets.items():
         for w in INTERNAL_RELEASE_LANGUAGE:
@@ -446,7 +515,8 @@ def main():
     print(f"README_INTERNAL_RELEASE_LANGUAGE_COUNT={cnt_internal}")
 
     # 14b) release notes must not embed repo-relative image paths or <img>
-    rn = targets[".github/release-notes/v1.2.2.md"]
+    rn = targets[".github/release-notes/v1.2.2.md"] + \
+         targets[".github/release-notes/v1.2.3.md"]
     rn_img = 0
     for m in re.finditer(r"<img|!\[", rn):
         # an image markdown/HTML reference in release notes is an error
@@ -487,6 +557,144 @@ def main():
     print(f"README_EN_H2_COUNT={len(en_h2)}")
 
     print(f"README_AGENT_LANGUAGE_COUNT={sum(1 for w in ['Agent自动化','Agent模式','Agent automation','Agent mode'] if w in cn or w in en)}")
+
+    # 17) v1.2.3 factual-accuracy claims (README / setup / campus guide)
+    setup_cn = read("docs/中文/首次配置.md")
+    setup_en = read("docs/English/first-time-setup.md")
+    campus_cn = read("docs/中文/西电校园网自动认证.md")
+    campus_en = read("docs/English/xidian-campus-network-authentication.md")
+
+    cnt_fw = cnt_sim = cnt_rep = cnt_hw = 0
+    cnt_pub_auto = cnt_pub_off = 0
+    cnt_lwc_compile = cnt_lwc_guide = cnt_globals = 0
+    cnt_campus_auto = cnt_campus_cred = cnt_campus_audit = 0
+
+    def sentence_negated(txt, pos):
+        # Only an IMMEDIATE negation right before the claim counts ("不是完全
+        # 离线构建" is the correct disclaimer). A negation anywhere earlier in
+        # the sentence ("不包含真实凭据，Cloud 启用就会自动联网") must NOT
+        # exempt the claim.
+        pre = txt[max(0, pos - 8):pos]
+        return bool(re.search(r"(不是|并非|not |never )", pre))
+
+    for f, txt in [("README.md", cn), ("README.en.md", en)]:
+        for pat in FIRMWARE_ONLY_PHONE_CONTROL_CLAIMS:
+            for m in re.finditer(re.escape(pat), txt):
+                if sentence_negated(txt, m.start()):
+                    continue
+                cnt_fw += 1
+                print(f"FIRMWARE_ONLY_PHONE_CONTROL_CLAIM {f}: {pat!r}")
+                ok = False
+        for pat in SIMULATOR_CLAIMS:
+            for m in re.finditer(re.escape(pat), txt):
+                if sentence_negated(txt, m.start()):
+                    continue
+                cnt_sim += 1
+                print(f"UNDOCUMENTED_SIMULATOR_CLAIM {f}: {pat!r}")
+                ok = False
+        for pat in COMPONENT_REPLACEMENT_OVERCLAIMS:
+            if pat in txt:
+                cnt_rep += 1
+                print(f"COMPONENT_REPLACEMENT_OVERCLAIM {f}: {pat!r}")
+                ok = False
+        for pat in HARDWARE_COMPATIBILITY_OVERCLAIMS:
+            if pat in txt:
+                cnt_hw += 1
+                print(f"UNVERIFIED_HARDWARE_COMPATIBILITY_CLAIM {f}: {pat!r}")
+                ok = False
+        for pat in PUBLIC_PROFILE_AUTO_CONNECT_FALSE:
+            for m in re.finditer(re.escape(pat), txt):
+                if sentence_negated(txt, m.start()):
+                    continue
+                cnt_pub_auto += 1
+                print(f"PUBLIC_PROFILE_AUTO_CONNECT_FALSE_CLAIM {f}: {pat!r}")
+                ok = False
+        for pat in PUBLIC_PROFILE_OFFLINE_FALSE:
+            for m in re.finditer(re.escape(pat), txt):
+                if sentence_negated(txt, m.start()):
+                    continue
+                cnt_pub_off += 1
+                print(f"PUBLIC_PROFILE_OFFLINE_FALSE_CLAIM {f}: {pat!r}")
+                ok = False
+    print(f"README_FIRMWARE_ONLY_PHONE_CONTROL_CLAIM_COUNT={cnt_fw}")
+    print(f"README_UNDOCUMENTED_SIMULATOR_CLAIM_COUNT={cnt_sim}")
+    print(f"README_COMPONENT_REPLACEMENT_OVERCLAIM_COUNT={cnt_rep}")
+    print(f"README_UNVERIFIED_HARDWARE_COMPATIBILITY_CLAIM_COUNT={cnt_hw}")
+    print(f"README_PUBLIC_PROFILE_AUTO_CONNECT_FALSE_CLAIM_COUNT={cnt_pub_auto}")
+    print(f"README_PUBLIC_PROFILE_OFFLINE_FALSE_CLAIM_COUNT={cnt_pub_off}")
+
+    for f, txt in [("docs/中文/首次配置.md", setup_cn),
+                   ("docs/English/first-time-setup.md", setup_en)]:
+        for pat in SETUP_LWC_COMPILE_ONLY_FALSE:
+            if pat in txt:
+                cnt_lwc_compile += 1
+                print(f"SETUP_LOCAL_WIFI_CLOUD_COMPILE_ONLY_FALSE_CLAIM {f}: {pat!r}")
+                ok = False
+        for pat in SETUP_ARDUINO_GLOBALS_WRONG:
+            # wrong generic "globals.h" wording; the correct form always
+            # carries the full file name, so no exemption is needed
+            if pat in txt:
+                cnt_globals += 1
+                print(f"SETUP_ARDUINO_GLOBALS_PATH_ERROR {f}: {pat!r}")
+                ok = False
+    # capability check: the local-wifi-cloud section must show the cloud
+    # secrets step and the ENABLE_CLOUD_CREDENTIALS=1 flag
+    for f, txt in [("docs/中文/首次配置.md", setup_cn),
+                   ("docs/English/first-time-setup.md", setup_en)]:
+        lwc = txt.split("local-wifi-cloud")[1:] if "local-wifi-cloud" in txt else []
+        joined = " ".join(lwc)
+        if not lwc or ("cloud_secrets" not in joined and "cloud_secrets.example.h" not in joined):
+            cnt_lwc_guide += 1
+            print(f"SETUP_LOCAL_WIFI_CLOUD_MISSING_CLOUD_SECRETS_GUIDE {f}")
+            ok = False
+    print(f"SETUP_LOCAL_WIFI_CLOUD_COMPILE_ONLY_FALSE_CLAIM_COUNT={cnt_lwc_compile}")
+    print(f"SETUP_LOCAL_WIFI_CLOUD_MISSING_CLOUD_SECRETS_GUIDE_COUNT={cnt_lwc_guide}")
+    print(f"SETUP_ARDUINO_GLOBALS_PATH_ERROR_COUNT={cnt_globals}")
+
+    campus_guides = {"docs/中文/西电校园网自动认证.md": campus_cn,
+                     "docs/English/xidian-campus-network-authentication.md": campus_en}
+    for f, txt in campus_guides.items():
+        # false claim: local-campus-example expands with AUTO_CAMPUS_AUTH=1
+        if re.search(r"(展开为|expands to)[^。\n]{0,90}ENABLE_AUTO_CAMPUS_AUTH=1", txt) or \
+           re.search(r"local-campus-example[^。\n]{0,90}ENABLE_AUTO_CAMPUS_AUTH=1", txt):
+            cnt_campus_auto += 1
+            print(f"CAMPUS_GUIDE_EXAMPLE_AUTO_AUTH_FALSE_CLAIM {f}")
+            ok = False
+        # false claim: the example profile accepts/uses real credentials
+        for pat in ["需要真实学号密码", "填写真实凭据后即可使用", "fill in real credentials",
+                    "用真实凭据登录", "使用真实凭据"]:
+            for m in re.finditer(re.escape(pat), txt):
+                # only flag claims tied to the local-campus-example profile
+                ctx = txt[max(0, m.start()-80):m.end()+40]
+                if "local-campus-example" in ctx:
+                    cnt_campus_cred += 1
+                    print(f"CAMPUS_GUIDE_REAL_CREDENTIAL_EXAMPLE_CLAIM {f}: {pat!r}")
+                    ok = False
+        for pat in CAMPUS_GUIDE_AUDIT_LANGUAGE:
+            if pat in txt:
+                cnt_campus_audit += 1
+                print(f"CAMPUS_GUIDE_INTERNAL_AUDIT_LANGUAGE {f}: {pat!r}")
+                ok = False
+    print(f"CAMPUS_GUIDE_EXAMPLE_AUTO_AUTH_FALSE_CLAIM_COUNT={cnt_campus_auto}")
+    print(f"CAMPUS_GUIDE_REAL_CREDENTIAL_EXAMPLE_CLAIM_COUNT={cnt_campus_cred}")
+    print(f"CAMPUS_GUIDE_INTERNAL_AUDIT_LANGUAGE_COUNT={cnt_campus_audit}")
+
+    # 18) v1.2.3 firmware guards that the public docs describe must exist
+    #     (empty-SSID hard guard; autoconnect decoupled from ENABLE_CLOUD).
+    fw_mgr = read("firmware/shared/RemoteACCore/src/network/wifi_manager.cpp")
+    fw_plan = read("firmware/shared/RemoteACCore/src/network/wifi_connect_plan.h")
+    fw_gates = read("firmware/shared/RemoteACCore/src/config/feature_gates.h")
+    cnt_fw_guard = 0
+    if "WIFI_CONNECT_SKIPPED" not in fw_mgr or "SSID_NOT_CONFIGURED" not in fw_plan:
+        cnt_fw_guard += 1
+        print("FIRMWARE_EMPTY_SSID_GUARD_MISSING wifi_manager.cpp/wifi_connect_plan.h")
+        ok = False
+    if re.search(r"WIFI_AUTOCONNECT_ON_BOOT[^\n]*ENABLE_CLOUD", fw_gates):
+        cnt_fw_guard += 1
+        print("FIRMWARE_AUTOCONNECT_CLOUD_DEPENDENT feature_gates.h")
+        ok = False
+    print(f"FIRMWARE_PUBLIC_DOC_GUARD_ERROR_COUNT={cnt_fw_guard}")
+
     print(f"PUBLIC_DOCS_PASS={'True' if ok else 'False'}")
     return 0 if ok else 1
 

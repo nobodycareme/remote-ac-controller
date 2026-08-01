@@ -35,6 +35,7 @@ FILES = [
     "README.md",
     "README.en.md",
     ".github/release-notes/v1.2.2.md",
+    ".github/release-notes/v1.2.3.md",
 ]
 SCREENSHOTS = ["dashboard-desktop.png", "dashboard-mobile.png"]
 
@@ -121,7 +122,7 @@ def main():
                 ok = False
 
         # ---- image path checks (source-level) ---------------------------
-        if name == "v1.2.2.md":
+        if name.startswith("v1.2.2.md") or name.startswith("v1.2.3.md"):
             if "../../docs/" in txt or "<img" in txt:
                 print("RELEASE_NOTES_IMAGE_PATH_ERROR: ../../docs or <img found")
                 ok = False
