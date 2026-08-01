@@ -70,7 +70,7 @@ pwsh ./tools/dev.ps1 verify -Profile public
 pwsh ./tools/dev.ps1 build -Profile public
 ```
 
-Full guide: [Arduino IDE 使用指南 (zh)](./docs/English/arduino-ide-guide.md)
+Full guide: [Arduino IDE guide](./docs/English/arduino-ide-guide.md)
 
 ### 2. Arduino IDE workflow
 
@@ -86,7 +86,7 @@ cd cloud/frontend && npm ci && npm test && npm run build
 ```
 
 Complete deployment (including MQTT broker and reverse proxy):
-[部署指南 (zh)](./docs/English/deployment.md)
+[deployment guide](./docs/English/deployment.md)
 
 ### 4. Manufacture the PCB
 
@@ -98,14 +98,14 @@ The package contract and per-file hashes are in
 ### 5. Use the IR learning tool
 
 Capture IR frames from your own AC remote:
-[红外学习 (zh)](./docs/English/ir-learning.md) — tool in
+[IR learning](./docs/English/ir-learning.md) — tool in
 [`tools/ir-simple-learner/`](./tools/ir-simple-learner/).
 
 ### 6. Optional Srun campus authentication
 
 For Srun-based campus networks (e.g. Xidian):
-[西电校园网自动认证 (zh)](./docs/English/xidian-campus-network-authentication.md) and
-[Srun 移植指南 (zh)](./docs/English/srun-campus-network-porting-guide.md).
+[Xidian campus authentication](./docs/English/xidian-campus-network-authentication.md) and
+[Srun porting guide](./docs/English/srun-campus-network-porting-guide.md).
 
 ## Simplified architecture
 
@@ -124,20 +124,20 @@ graph LR
 - Temperature/humidity: DHT11 (GPIO5)
 - IR module: ZJ-IR-V2 (GPIO12 TX / GPIO14 RX)
 - PCB: Rev 1.0.1 ([PCB docs](./hardware/pcb/README.en.md), wiring in
-  [接线说明 (zh)](./docs/English/wiring.md))
+  [wiring guide](./docs/English/wiring.md))
 
 ## Optional campus authentication
 
 For Srun-based campus networks (e.g. Xidian), the firmware can automatically
 complete the captive-portal login after boot and recover after disconnects.
 This is off by default; public builds contain no credentials. See
-[西电校园网自动认证 (zh)](./docs/English/xidian-campus-network-authentication.md).
+[Xidian campus authentication](./docs/English/xidian-campus-network-authentication.md).
 
 ## Documentation
 
 All bilingual documentation lives under [`docs/`](docs/):
-[English documentation index](./docs/English/documentation-index.md) and
-[中文文档导航](./docs/中文/文档导航.md).
+[English documentation index](./docs/English/documentation-index.md)
+([中文文档导航](./docs/中文/文档导航.md)).
 
 ## Development and testing
 
@@ -163,7 +163,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) before contributing.
 
 Issues and pull requests are welcome. Please read
 [CONTRIBUTING.md](./CONTRIBUTING.md) and the
-[参与贡献指南 (zh)](./docs/English/contributing.md) first.
+[contributing guide](./docs/English/contributing.md) first.
 
 ## Support and security
 
