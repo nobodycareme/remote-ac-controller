@@ -344,7 +344,8 @@ jobs:
           set -euo pipefail
           INC="-I firmware/shared/RemoteACCore/src"
           pass=0; total=0
-          while IFS='|' read -r name flags macro; do
+          run_case() {
+            name="$1"; flags="$2"; macro="$3"
             total=$((total+1))
             echo "== policy case: $name =="
             if g++ -std=c++11 -Wall $INC -DV123_CASE_$macro $flags \
@@ -354,15 +355,14 @@ jobs:
             else
               echo "POLICY_CASE_FAILED: $name"
             fi
-          done <<'MATRIX'
-public|-DENABLE_WIFI=1 -DENABLE_CLOUD=1|PUBLIC
-public-cloud-example|-DENABLE_WIFI=1 -DENABLE_CLOUD=1|PUBLIC_CLOUD_EXAMPLE
-local-wifi|-DENABLE_WIFI=1 -DENABLE_WIFI_CREDENTIALS=1 -DENABLE_AUTO_WIFI_CONNECT=1|LOCAL_WIFI
-local-wifi-cloud|-DENABLE_WIFI=1 -DENABLE_WIFI_CREDENTIALS=1 -DENABLE_AUTO_WIFI_CONNECT=1 -DENABLE_CLOUD=1 -DENABLE_CLOUD_CREDENTIALS=1|LOCAL_WIFI_CLOUD
-local-campus-example|-DENABLE_WIFI=1 -DENABLE_CAMPUS_AUTH=1 -DENABLE_AUTO_CAMPUS_AUTH=0 -DCAMPUS_PROFILE_HEADER=\"profiles/xidian.example.h\"|LOCAL_CAMPUS_EXAMPLE
-campus-auto-live|-DENABLE_WIFI=1 -DENABLE_CAMPUS_AUTH=1 -DENABLE_AUTO_CAMPUS_AUTH=1 -DENABLE_CONTROLLED_LIVE_AUTH=1 -DCAMPUS_PROFILE_HEADER=\"profiles/xidian.example.h\"|CAMPUS_AUTO
-wifi-off||WIFI_OFF
-MATRIX
+          }
+          run_case public "-DENABLE_WIFI=1 -DENABLE_CLOUD=1" PUBLIC
+          run_case public-cloud-example "-DENABLE_WIFI=1 -DENABLE_CLOUD=1" PUBLIC_CLOUD_EXAMPLE
+          run_case local-wifi "-DENABLE_WIFI=1 -DENABLE_WIFI_CREDENTIALS=1 -DENABLE_AUTO_WIFI_CONNECT=1" LOCAL_WIFI
+          run_case local-wifi-cloud "-DENABLE_WIFI=1 -DENABLE_WIFI_CREDENTIALS=1 -DENABLE_AUTO_WIFI_CONNECT=1 -DENABLE_CLOUD=1 -DENABLE_CLOUD_CREDENTIALS=1" LOCAL_WIFI_CLOUD
+          run_case local-campus-example "-DENABLE_WIFI=1 -DENABLE_CAMPUS_AUTH=1 -DENABLE_AUTO_CAMPUS_AUTH=0 -DCAMPUS_PROFILE_HEADER=\"profiles/xidian.example.h\"" LOCAL_CAMPUS_EXAMPLE
+          run_case campus-auto-live "-DENABLE_WIFI=1 -DENABLE_CAMPUS_AUTH=1 -DENABLE_AUTO_CAMPUS_AUTH=1 -DENABLE_CONTROLLED_LIVE_AUTH=1 -DCAMPUS_PROFILE_HEADER=\"profiles/xidian.example.h\"" CAMPUS_AUTO
+          run_case wifi-off "" WIFI_OFF
           echo "WIFI_AUTOCONNECT_POLICY_CASE_TOTAL=$total"
           echo "WIFI_AUTOCONNECT_POLICY_CASE_PASS=$pass"
           [ "$total" -eq 7 ] || exit 1
