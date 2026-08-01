@@ -35,6 +35,8 @@ firmware/**/secrets.h
 firmware/**/cloud_secrets.h
 # Real campus profile / secret files (commit *.example.h, ignore the real ones)
 firmware/shared/RemoteACCore/src/config/campus_secrets.h
+# Real home/lab WPA/WPA2 Wi-Fi credentials (commit wifi_secrets.example.h only)
+firmware/shared/RemoteACCore/src/config/wifi_secrets.h
 # Arduino IDE puts cloud credentials on the shared library's include path
 firmware/shared/RemoteACCore/src/cloud_secrets.h
 firmware/shared/RemoteACCore/src/secrets.h
@@ -139,6 +141,16 @@ __pycache__/
 venv/
 .pytest_cache/
 .mypy_cache/
+
+# ---- IR Simple Learner build artefacts (official build.ps1 output) ----
+tools/ir-simple-learner/dist/
+tools/ir-simple-learner/build/
+tools/ir-simple-learner/spec-tmp/
+tools/ir-simple-learner/*.spec
+firmware/agent-platformio/tools/ir_simple_learner/dist/
+firmware/agent-platformio/tools/ir_simple_learner/build/
+firmware/agent-platformio/tools/ir_simple_learner/spec-tmp/
+ir_learner_self_test.txt
 
 # ---- Monorepo CI artifacts ----
 .github/ci-artifacts/
