@@ -1,4 +1,8 @@
-"""15 AC state presets for Hisense air conditioner."""
+"""Public AC state capture presets for the IR learning tool.
+
+The actual preset count is len(PRESETS); do not hardcode a number in the
+docstring. This file must stay byte-identical with its counterpart copy in
+the repository (see tools/check-public-docs.py for the drift check)."""
 PRESETS = [
     {"name": "关机", "codeId": "hisense_power_off_v1",
      "power": "off", "mode": "cool", "temp": "24", "fan": "auto",
