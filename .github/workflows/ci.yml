@@ -584,6 +584,8 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/check-pcb-release.py
+          python3 tools/check-pcb-release.py --negative-test
+          python3 tools/check-pcb-release.py --determinism-test
 
   # ---------------------------------------------------------------------------
   # docs-check — bilingual first-party documentation structure and links
