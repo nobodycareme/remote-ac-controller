@@ -37,9 +37,9 @@ static_assert(ENABLE_WIFI,
 static_assert(WIFI_AUTOCONNECT_ON_BOOT,
               "AUTO_WIFI_CONNECT must bring the link up at boot");
 #endif
-#if ENABLE_WIFI_CREDENTIALS && !ENABLE_CAMPUS_AUTH
+#if ENABLE_WIFI_CREDENTIALS && !ENABLE_CAMPUS_AUTH && !ENABLE_CLOUD
 static_assert(__builtin_strcmp(BUILD_PROFILE_NET, "wifi") == 0,
-              "a local-WPA build without campus auth must report itself as wifi");
+              "a local-WPA build without campus auth and without cloud must report itself as wifi");
 #endif
 
 // ---- Build profile string matches the chosen axis ---------------------------
