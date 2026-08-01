@@ -10,35 +10,33 @@ SHA-256 of source ZIP: not retained (ZIP is not checked into git; it is a Releas
 
 | File | Size (bytes) | SHA-256 | Description |
 |---|---|---|---|
-| `Gerber_BoardOutlineLayer.GKO` | 885 | `7cc20d58987d37c1e48df1f18b183f08e89b8d9576de14b4956017328f5fc5dc` | Gerber layer |
-| `Gerber_BottomLayer.GBL` | 43,792 | `26eeaa523c9bcfab8dffae6c2740ac2c4968441baf4c1ba586a7ad7eddd34b41` | Gerber layer |
-| `Gerber_BottomSilkscreenLayer.GBO` | 121,299 | `7f2bd96e02bd688822b5a844830c917ae764d051becb3afada7d08d4d4d8d287` | Gerber layer |
-| `Gerber_BottomSolderMaskLayer.GBS` | 1,948 | `15ef036b9663358119c0fa88e01aa8eff1dd2ab6df6eabf135d66e147785a805` | Gerber layer |
-| `Gerber_DrillDrawingLayer.GDD` | 123,276 | `bd1740df1e1b0258795ab766933355123d1f927ef5b1610c7bca1bbef48573f1` | Gerber layer |
-| `Gerber_TopLayer.GTL` | 42,046 | `b0c6e7afb2f122b318d78ec9063c847b915a3579c1f767a85c8a9fe96dd961b8` | Gerber layer |
-| `Gerber_TopSilkscreenLayer.GTO` | 149,826 | `59b57e62728e68c7bb1a2392c5c9854c45977e03f603dd5c5621428465687070` | Gerber layer |
-| `Gerber_TopSolderMaskLayer.GTS` | 1,945 | `612d52759b0f241dd9672c41bc77815878dc88d38b639ccfb912c2747a1d732b` | Gerber layer |
+| `Gerber_BoardOutlineLayer.GKO` | 885 | `7cc20d58987d37c1e48df1f18b183f08e89b8d9576de14b4956017328f5fc5dc` | Board outline |
+| `Gerber_BottomLayer.GBL` | 43,792 | `26eeaa523c9bcfab8dffae6c2740ac2c4968441baf4c1ba586a7ad7eddd34b41` | Bottom copper layer |
+| `Gerber_BottomSilkscreenLayer.GBO` | 121,299 | `7f2bd96e02bd688822b5a844830c917ae764d051becb3afada7d08d4d4d8d287` | Bottom silkscreen |
+| `Gerber_BottomSolderMaskLayer.GBS` | 1,948 | `15ef036b9663358119c0fa88e01aa8eff1dd2ab6df6eabf135d66e147785a805` | Bottom solder mask |
+| `Gerber_DrillDrawingLayer.GDD` | 123,276 | `bd1740df1e1b0258795ab766933355123d1f927ef5b1610c7bca1bbef48573f1` | Drill drawing/legend |
+| `Gerber_TopLayer.GTL` | 42,046 | `b0c6e7afb2f122b318d78ec9063c847b915a3579c1f767a85c8a9fe96dd961b8` | Top copper layer |
+| `Gerber_TopSilkscreenLayer.GTO` | 149,826 | `59b57e62728e68c7bb1a2392c5c9854c45977e03f603dd5c5621428465687070` | Top silkscreen |
+| `Gerber_TopSolderMaskLayer.GTS` | 1,945 | `612d52759b0f241dd9672c41bc77815878dc88d38b639ccfb912c2747a1d732b` | Top solder mask |
 
 ### Drill Files (`fabrication/drill/`)
 
 | File | Size (bytes) | SHA-256 | Description |
 |---|---|---|---|
-| `Drill_PTH_Through.DRL` | 1,130 | `028f629baba8dbbc961054f89956635068ea3a2e3d78aa9e20fe71e020ddb282` | Drill file |
-| `Drill_PTH_Through_Via.DRL` | 424 | `d0026e650645e644b98b49cb215b4145463bb5399e02267789dfb4cffc223abb` | Drill file |
+| `Drill_PTH_Through.DRL` | 1,130 | `028f629baba8dbbc961054f89956635068ea3a2e3d78aa9e20fe71e020ddb282` | Plated through-hole component + mounting holes (6 sizes: 0.305-3.000 mm) |
+| `Drill_PTH_Through_Via.DRL` | 424 | `d0026e650645e644b98b49cb215b4145463bb5399e02267789dfb4cffc223abb` | Plated through-hole vias (3 sizes: 0.305, 2.744, 3.000 mm) |
 
 ### Test Data (`fabrication/test/`)
 
 | File | Size (bytes) | SHA-256 | Description |
 |---|---|---|---|
-| `FlyingProbeTesting.json` | 7,259 | `e8ae9a9185143f103b4171b41c01bdfa8d062ff29cb8ceae4e3b0a4c753d36ed` | Test fixture |
+| `FlyingProbeTesting.json` | 7,259 | `e8ae9a9185143f103b4171b41c01bdfa8d062ff29cb8ceae4e3b0a4c753d36ed` | Flying probe test netlist (3 components, 74 test points) |
 
 ## Component Summary (from Flying Probe Test)
 
 | Component | Position | Rotation | Description |
 |---|---|---|---|
 ## Drill Summary
-
-### `fabrication/drill/<file>`
 
 ## Notes
 
