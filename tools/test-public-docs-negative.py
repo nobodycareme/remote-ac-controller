@@ -151,6 +151,112 @@ def sabotage_10(root):
     open(p, "w", encoding="utf-8").write(txt)
 
 
+def sabotage_11(root):
+    # claim that cloud-enablement auto-connects at boot (v1.2.3 policy)
+    p = os.path.join(root, "README.md")
+    txt = open(p, encoding="utf-8").read()
+    txt = txt.replace(
+        "默认也不会在开机时自动连接网络",
+        "Cloud 启用就会自动联网")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_12(root):
+    # remove the empty-SSID hard guard from wifi_manager.cpp
+    p = os.path.join(root, "firmware/shared/RemoteACCore/src/network/wifi_manager.cpp")
+    txt = open(p, encoding="utf-8").read()
+    txt = txt.replace('Serial.print(F("WIFI_CONNECT_SKIPPED reason="));', "")
+    txt = txt.replace('Serial.println(wifiPlanReasonLabel(plan.reason));', "")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_13(root):
+    # re-claim "deploy firmware only for phone control"
+    p = os.path.join(root, "README.md")
+    txt = open(p, encoding="utf-8").read()
+    txt = txt.replace(
+        "手机网页控制需要前端、后端、MQTT Broker 和 ESP8266 固件共同运行。",
+        "只在家里用手机控制空调，可以只部署固件。")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_14(root):
+    # re-claim an undocumented simulated device
+    p = os.path.join(root, "README.md")
+    txt = open(p, encoding="utf-8").read()
+    txt = txt.replace(
+        "云端后端、网页前端和固件可以分别启动和调试",
+        "可以先用模拟设备体验网页控制")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_15(root):
+    # re-claim any ESP8266 board runs the firmware unmodified
+    p = os.path.join(root, "README.md")
+    txt = open(p, encoding="utf-8").read()
+    txt = txt.replace(
+        "项目已在 NodeMCU ESP8266、DHT11 和 ZJ-IR-V2 上完成开发和验证。",
+        "ESP8266 系列开发板配合支持红外发射的模块即可运行固件。")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_16(root):
+    # re-claim components can be swapped freely
+    p = os.path.join(root, "README.md")
+    txt = open(p, encoding="utf-8").read()
+    txt = txt.replace(
+        "需要保持现有 API 与 MQTT 协议兼容。",
+        "单独替换某一端不会影响其他部分。")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_17(root):
+    # claim local-wifi-cloud needs no cloud credentials
+    p = os.path.join(root, "docs/中文/首次配置.md")
+    txt = open(p, encoding="utf-8").read()
+    txt = txt.replace(
+        "该 Profile 现在会启用 `ENABLE_CLOUD_CREDENTIALS=1`",
+        "local-wifi-cloud 无需 Cloud 凭据，只编译 Cloud 代码")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_18(root):
+    # write the generic "编辑 globals.h" instead of the real file name
+    p = os.path.join(root, "docs/中文/首次配置.md")
+    txt = open(p, encoding="utf-8").read()
+    txt = txt.replace("然后编辑 `Remote_AC_Controller.ino.globals.h`",
+                      "然后编辑 `globals.h`")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_19(root):
+    # campus guide: local-campus-example expands with AUTO_CAMPUS_AUTH=1
+    p = os.path.join(root, "docs/中文/西电校园网自动认证.md")
+    txt = open(p, encoding="utf-8").read()
+    txt = txt.replace(
+        "-DENABLE_AUTO_CAMPUS_AUTH=0 -DENABLE_CONTROLLED_LIVE_AUTH=0",
+        "-DENABLE_AUTO_CAMPUS_AUTH=1 -DENABLE_CONTROLLED_LIVE_AUTH=0")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_20(root):
+    # campus guide: restore an internal PASS field
+    p = os.path.join(root, "docs/中文/西电校园网自动认证.md")
+    txt = open(p, encoding="utf-8").read()
+    txt += "\n核验状态：XIDIAN_PROFILE_PUBLIC_PARAMETERS_VERIFIED=True（只读复验）。\n"
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_21(root):
+    # claim the public profile is fully offline / sensors only
+    p = os.path.join(root, "README.md")
+    txt = open(p, encoding="utf-8").read()
+    txt = txt.replace(
+        "这是无凭据公开构建，不是完全离线构建",
+        "这是完全离线构建，public 只编译传感器")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
 def main():
     results = [
         case(1, "markdown_in_html_block", sabotage_1),
@@ -163,6 +269,17 @@ def main():
         case(8, "internal_test_language", sabotage_8),
         case(9, "release_image_path", sabotage_9),
         case(10, "h2_structure_drift", sabotage_10),
+        case(11, "cloud_autoconnect_claim", sabotage_11),
+        case(12, "empty_ssid_guard_removed", sabotage_12),
+        case(13, "firmware_only_phone_control", sabotage_13),
+        case(14, "undocumented_simulator", sabotage_14),
+        case(15, "hardware_compat_overclaim", sabotage_15),
+        case(16, "component_replacement_overclaim", sabotage_16),
+        case(17, "lwc_no_cloud_creds", sabotage_17),
+        case(18, "generic_globals_path", sabotage_18),
+        case(19, "campus_example_auto_auth", sabotage_19),
+        case(20, "campus_audit_field", sabotage_20),
+        case(21, "public_fully_offline", sabotage_21),
     ]
     total = len(results)
     passed = sum(results)

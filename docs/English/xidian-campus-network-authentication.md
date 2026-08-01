@@ -60,7 +60,7 @@ cd firmware/shared/RemoteACCore/src/config/profiles
 cp xidian.example.h xidian.h        # xidian.h is git-ignored
 ```
 
-The parameters in `xidian.example.h` have been verified read-only and can be used as-is; no edits are required.
+The parameters in `xidian.example.h` are all public information and can be used as-is; no edits are required.
 
 ### 2. Enable Campus Authentication
 
@@ -88,17 +88,17 @@ The ESP8266 core's `mkbuildoptglobals.py` prebuild step force-includes this file
 ./tools/dev.ps1 build -Profile local-campus-example
 ```
 
-That profile expands to `-DENABLE_CAMPUS_AUTH=1 -DENABLE_AUTO_CAMPUS_AUTH=1 -DCAMPUS_PROFILE_HEADER=\"profiles/xidian.example.h\"`. Note that the double quotes in a string-valued `-D` macro **must be escaped**; otherwise PlatformIO strips them and the build fails with `#include expects "FILENAME" or <FILENAME>`.
+This profile only verifies that the public campus authentication code compiles. It expands to `-DENABLE_CAMPUS_AUTH=1 -DENABLE_AUTO_CAMPUS_AUTH=0 -DENABLE_CONTROLLED_LIVE_AUTH=0 -DCAMPUS_PROFILE_HEADER=\"profiles/xidian.example.h\"`: it reads no real campus credentials, never logs in automatically, and cannot be used as a flash configuration for real campus authentication. For real authentication use the Arduino IDE local globals configuration below. Note that the double quotes in a string-valued `-D` macro **must be escaped**; otherwise PlatformIO strips them and the build fails with `#include expects "FILENAME" or <FILENAME>`.
 
-### 3. Xidian Campus Network Parameters (Verified, Public, Non-Secret)
+### 3. Xidian Campus Network Parameters (Public, Non-Secret)
 
-The table below is taken from `config/profiles/xidian.example.h` and matches the code character for character. Verification status: `XIDIAN_PROFILE_PUBLIC_PARAMETERS_VERIFIED=True` (read-only re-verification on 2026-07-31).
+The table below is taken from `config/profiles/xidian.example.h`:
 
 | Parameter | Macro | Value | Notes |
 |-----------|-------|-------|-------|
 | Wi-Fi SSID | `CAMPUS_SSID` | `stu-xdwlan` | Open campus SSID, no WPA pre-shared key |
 | Portal host | `CAMPUS_PORTAL_HOST` | `w.xidian.edu.cn` | base_url is exactly `https://w.xidian.edu.cn`, no path suffix |
-| ac_id | `CAMPUS_AC_ID` | `8` | Access-controller ID, confirmed by portal probing |
+| ac_id | `CAMPUS_AC_ID` | `8` | Access-controller ID |
 | Domain suffix | `CAMPUS_DOMAIN` | `""` (empty) | Do **not** append `@lt`/`@yd`/`@dx`; the srun `info` field is built with an empty domain |
 | Auth algorithm | — | Srun 4000 | Challenge-response with `srun_bx1` encoding |
 
@@ -159,7 +159,7 @@ When it is off, the authentication path prints `CAMPUS_CREDS_READY=DISABLED REAL
 
 ## Serial Output Status
 
-During authentication the serial monitor (115200 baud) emits the following markers (taken from the firmware source, not illustrative):
+During authentication the serial monitor (115200 baud) emits the following markers:
 
 ```
 WIFI_CONNECT ssid=stu-xdwlan
@@ -221,7 +221,7 @@ The complete set of campus subcommands in the serial CLI is `status | login | lo
 
 ## Limitations
 
-- This profile is **specific to the Xidian campus network (Srun 4000)**; parameters were verified on 2026-07-31;
+- This profile is **specific to the Xidian campus network (Srun 4000)**;
 - The TLS fingerprint expires on **2026-11-17**, after which it must be re-extracted or authentication will fail closed;
 - Other institutions' Srun deployments require profile adjustments — see the [Srun Campus Network Porting Guide](./srun-campus-network-porting-guide.md);
 - Automatic authentication is off by default and requires explicit configuration;

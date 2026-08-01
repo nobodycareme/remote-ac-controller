@@ -32,20 +32,40 @@ Edit `wifi_secrets.h`:
 
 `dev.ps1` exposes two local-Wi-Fi profiles:
 
-| Profile | Meaning | ENABLE_CLOUD |
+| Profile | Meaning | Key switches |
 |---|---|---|
-| `local-wifi` | Home / lab Wi-Fi, no cloud | 0 |
-| `local-wifi-cloud` | Home / lab Wi-Fi + cloud (MQTT/HTTPS) | 1 |
+| `local-wifi` | Home / lab Wi-Fi, no cloud | `ENABLE_CLOUD=0` |
+| `local-wifi-cloud` | Home / lab Wi-Fi + cloud (MQTT) | `ENABLE_CLOUD=1` `ENABLE_CLOUD_CREDENTIALS=1` |
+
+**local-wifi (local WPA/WPA2 only, no cloud)**:
 
 ```powershell
 cd firmware/agent-platformio
 ./tools/dev.ps1 build -Profile local-wifi
+```
+
+**local-wifi-cloud (requires two local files)**:
+
+1. Copy `wifi_secrets.example.h` to `wifi_secrets.h` and fill in your own router SSID and password;
+2. Copy `cloud_secrets.example.h` to `cloud_secrets.h` and fill in your own MQTT broker settings (host, port, username, password, device ID, CA certificate or TLS fingerprint — fields follow the example template in the repository);
+3. Run:
+
+```powershell
 ./tools/dev.ps1 build -Profile local-wifi-cloud
 ```
 
+This profile now enables `ENABLE_CLOUD_CREDENTIALS=1`: if either `wifi_secrets.h` or `cloud_secrets.h` is missing, the build stops and prints the missing file and the template path — there is no fallback to a credentials-free example. Both real files are Git-ignored and never committed.
+
 ### A.3 Arduino IDE workflow
 
-Open `firmware/arduino-ide/Remote_AC_Controller/Remote_AC_Controller.ino` in Arduino IDE and configure `globals.h`:
+Open `firmware/arduino-ide/Remote_AC_Controller/Remote_AC_Controller.ino` in Arduino IDE. First copy the template to the local config file (the Arduino ESP8266 build applies it automatically; you do not edit the main `.ino` file):
+
+```powershell
+cd firmware/arduino-ide/Remote_AC_Controller
+Copy-Item Remote_AC_Controller.ino.globals.example.h Remote_AC_Controller.ino.globals.h
+```
+
+Then edit `Remote_AC_Controller.ino.globals.h`:
 
 ```cpp
 #define ENABLE_WIFI              1
@@ -94,7 +114,14 @@ cd firmware/agent-platformio
 
 ### B.2 Real campus authentication (Arduino IDE)
 
-The verifiable entry point for real authentication in the public repository is the local `globals.h` configuration in `firmware/arduino-ide/Remote_AC_Controller/Remote_AC_Controller.ino`:
+The verifiable entry point for real authentication in the public repository is the local globals configuration. First copy the template:
+
+```powershell
+cd firmware/arduino-ide/Remote_AC_Controller
+Copy-Item Remote_AC_Controller.ino.globals.example.h Remote_AC_Controller.ino.globals.h
+```
+
+Then edit `Remote_AC_Controller.ino.globals.h` (applied automatically by the Arduino ESP8266 build; do not edit the main `.ino` file):
 
 ```cpp
 #define ENABLE_WIFI                 1
@@ -120,7 +147,7 @@ Edit `campus_secrets.h`:
 #define CAMPUS_PASSWORD "your_campus_password"
 ```
 
-> `xidian.h` and `campus_secrets.h` are never committed; do not put plaintext passwords into `platformio.ini` or `globals.h`.
+> `xidian.h` and `campus_secrets.h` are never committed; do not put plaintext passwords into `platformio.ini` or `Remote_AC_Controller.ino.globals.h`.
 
 Security requirements:
 
@@ -136,6 +163,8 @@ Full details in [xidian-campus-network-authentication](xidian-campus-network-aut
 
 > Use case: compile once to verify the public firmware builds safely, with no real credentials.
 
+**public (full public firmware compile check)**:
+
 ```powershell
 cd firmware/agent-platformio
 ./tools/dev.ps1 build -Profile public
@@ -143,8 +172,17 @@ cd firmware/agent-platformio
 
 The `public` profile compiles the Wi-Fi and cloud modules, but:
 
-- it does not compile real Wi-Fi, campus, or MQTT credentials (`cloud_secrets.h` stays an example placeholder);
-- it does not auto-connect at boot (`ENABLE_AUTO_WIFI_CONNECT=0`);
-- it is suitable for checking that the public firmware compiles safely.
+- it contains no real credentials (`wifi_secrets.h`, `cloud_secrets.h` are not involved);
+- it does not auto-associate at boot (there is no auto-connect configuration);
+- it does not connect to a real MQTT broker;
+- it is suitable for public CI and toolchain verification.
 
-This is not a fully offline build: the firmware still includes the Wi-Fi and cloud code paths, just without any real credentials.
+This is not a fully offline build and not "sensors only": the firmware still compiles the Wi-Fi and cloud code paths, just without any real credentials and without auto-connecting.
+
+**public-cloud-example (cloud module compile example)**:
+
+```powershell
+./tools/dev.ps1 build -Profile public-cloud-example
+```
+
+This profile only verifies that credentials-free cloud code builds safely: it compiles the cloud module with `ENABLE_CLOUD_CREDENTIALS=0`, connects to no real MQTT broker, and does not auto-associate Wi-Fi.

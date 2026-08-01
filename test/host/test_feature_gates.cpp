@@ -23,8 +23,9 @@ static_assert(CAMPUS_AUTH_IS_AUTOMATIC ==
               "CAMPUS_AUTH_IS_AUTOMATIC must equal (campus && auto)");
 
 static_assert(WIFI_AUTOCONNECT_ON_BOOT ==
-                  (ENABLE_WIFI && (ENABLE_CLOUD || ENABLE_AUTO_CAMPUS_AUTH || ENABLE_AUTO_WIFI_CONNECT)),
-              "WIFI_AUTOCONNECT_ON_BOOT predicate mismatch");
+                  (ENABLE_WIFI && (ENABLE_AUTO_CAMPUS_AUTH || ENABLE_AUTO_WIFI_CONNECT)),
+              "WIFI_AUTOCONNECT_ON_BOOT predicate mismatch (v1.2.3: "
+              "cloud alone must NOT trigger auto-association)");
 
 // ---- Local WPA/WPA2 credentials (v1.2.2) ------------------------------------
 #if ENABLE_WIFI_CREDENTIALS
@@ -71,14 +72,16 @@ static_assert(WIFI_AUTOCONNECT_ON_BOOT,
               "unattended campus auth must bring the link up without the cloud");
 #endif
 
-#if ENABLE_CLOUD
-static_assert(WIFI_AUTOCONNECT_ON_BOOT,
-              "cloud builds autoconnect regardless of campus authentication");
+#if ENABLE_CLOUD && !ENABLE_AUTO_CAMPUS_AUTH && !ENABLE_AUTO_WIFI_CONNECT
+// v1.2.3: compiling the cloud module provides no SSID and no connection
+// identity — it must never auto-associate on its own.
+static_assert(!WIFI_AUTOCONNECT_ON_BOOT,
+              "cloud without auto wifi/campus must not autoconnect at boot");
 #endif
 
-#if !ENABLE_CLOUD && !ENABLE_AUTO_CAMPUS_AUTH && !ENABLE_AUTO_WIFI_CONNECT
+#if !ENABLE_AUTO_CAMPUS_AUTH && !ENABLE_AUTO_WIFI_CONNECT
 static_assert(!WIFI_AUTOCONNECT_ON_BOOT,
-              "offline-first default: no autoconnect without cloud, auto-auth, "
+              "offline-first default: no autoconnect without auto-auth "
               "or auto local-Wi-Fi connect");
 #endif
 

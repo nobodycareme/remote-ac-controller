@@ -92,7 +92,7 @@ void Cli::banner() {
   Serial.println(F(" Wi-Fi: wifi connect [ssid] | wifi disconnect | wifi scan | wifi status"));
   Serial.println(F("        net check - captive-portal + internet reachability probe"));
 #if WIFI_AUTOCONNECT_ON_BOOT
-  Serial.println(F(" Wi-Fi auto-connects on boot (cloud and/or auto campus auth build)."));
+  Serial.println(F(" Wi-Fi auto-connects on boot (auto wifi connect and/or auto campus auth build)."));
 #else
   Serial.println(F(" Wi-Fi does NOT auto-connect; issue `wifi connect` to associate."));
 #endif
