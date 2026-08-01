@@ -252,7 +252,14 @@ class TestEndToEndExport(unittest.TestCase):
 
 class TestPresets(unittest.TestCase):
     def test_preset_count(self):
-        self.assertEqual(len(presets.PRESETS), 15)
+        # The public contract is exactly 10 AC state capture presets. The
+        # presets module itself is the single source of truth; this test pins
+        # the contract number so a regression to 11/15 etc. is caught.
+        self.assertEqual(len(presets.PRESETS), 10)
+
+    def test_preset_ids_unique(self):
+        ids = [p["codeId"] for p in presets.PRESETS]
+        self.assertEqual(len(ids), len(set(ids)), "preset codeId values must be unique")
 
 
 if __name__ == "__main__":
