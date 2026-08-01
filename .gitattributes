@@ -1,6 +1,18 @@
+# Ordinary text files: force LF so checkouts are identical on Windows and
+# Linux, independent of the local core.autocrlf setting. PCB-specific rules
+# below are listed AFTER these patterns because Git attributes take the LAST
+# matching rule (there is no path-specificity precedence).
+*.md text eol=lf
+*.py text eol=lf
+*.ps1 text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+
 # Manufacturing data is audited byte-for-byte. These files must never be
 # altered by OS line-ending conversion (core.autocrlf) or any filter, because
-# their SHA-256 values are part of the PCB release contract.
+# their SHA-256 values are part of the PCB release contract. The rules in this
+# block must stay below the type patterns above so they win the last-match.
 hardware/pcb/fabrication/gerber/** -text
 hardware/pcb/fabrication/drill/** -text
 hardware/pcb/fabrication/test/** -text
@@ -11,6 +23,10 @@ hardware/pcb/source/*.eprj2 binary
 # EasyEDA source projects are binary (SQLite containers).
 hardware/pcb/source/** binary
 
-# Keep published archives deterministic regardless of the checkout platform.
+# PCB metadata documents are ordinary text (LF), kept apart from the
+# manufacturing-byte contract above.
 hardware/pcb/REVISION text eol=lf
 hardware/pcb/CHANGELOG.md text eol=lf
+
+# The attribute file itself must stay LF everywhere.
+.gitattributes text eol=lf
