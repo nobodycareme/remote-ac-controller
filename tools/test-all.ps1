@@ -40,7 +40,7 @@ $ErrorActionPreference = 'Stop'
 
 # --- constants ---------------------------------------------------------------
 $RepoRoot     = Split-Path -Parent $PSScriptRoot
-$FirmwareDir  = Join-Path $RepoRoot 'firmware'
+$FirmwareDir  = Join-Path $RepoRoot 'firmware/agent-platformio'
 $DevScript    = Join-Path $FirmwareDir 'tools/dev.ps1'
 $CloudBackend = Join-Path $RepoRoot 'cloud/backend'
 $CloudFront   = Join-Path $RepoRoot 'cloud/frontend'
@@ -107,8 +107,21 @@ function Invoke-NodeStep {
     Invoke-Step -Name $Name -Action {
         Push-Location -LiteralPath $WorkingDirectory
         try {
-            & $Executable @Arguments
-            if ($LASTEXITCODE -ne 0) { throw "exit code $LASTEXITCODE" }
+            # PowerShell 5.1 + $ErrorActionPreference='Stop' converts native
+            # stderr lines (e.g. Vite CJS deprecation warnings) into
+            # terminating errors even when the process exits 0, which would
+            # false-FAIL the step. Drop EAP for the native call, keep the real
+            # exit code, then restore.
+            $prevEap = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            try {
+                & $Executable @Arguments 2>&1 | ForEach-Object { Write-Host $_ }
+                $nativeCode = $LASTEXITCODE
+            }
+            finally {
+                $ErrorActionPreference = $prevEap
+            }
+            if ($nativeCode -ne 0) { throw "exit code $nativeCode" }
         }
         finally { Pop-Location }
     }
