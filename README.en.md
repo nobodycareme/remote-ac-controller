@@ -22,6 +22,25 @@ A full-stack open-source system to control an air conditioner remotely: phone
 web app → cloud backend → MQTT (TLS) → ESP8266 → IR → AC. Firmware, cloud,
 frontend, and PCB design files are all open source.
 
+> **Canonical-repository statement**: this repository
+> (`nobodycareme/remote-ac-controller`) is the **only** official Monorepo of the
+> project — firmware, cloud backend/frontend, PCB, IR learning tools and the
+> full bilingual documentation live in a **single clone**. There is **no**
+> separate firmware or cloud repository to clone; the split
+> `remote-ac-firmware` / `remote-ac-cloud` repositories are retained only as
+> private archived migration records.
+>
+> - Build boundary: `public` (no credentials, no real IR, unattended auth off)
+>   and `private` (automatic campus authentication + MQTT v2; credentials live
+>   in git-ignored files).
+> - Xidian campus-network auto-authentication: off by default; when enabled in
+>   a private build the device logs in via Srun and recovers MQTT on cold boot
+>   (verified on hardware).
+> - Current version: **v1.2.0** ([Releases](https://github.com/nobodycareme/remote-ac-controller/releases)).
+> - Security: the public repository contains no production credentials, no
+>   private keys and no real IR frames; GitHub Secret Scanning + Push
+>   Protection stay enabled.
+
 ---
 
 ## Core Capabilities
