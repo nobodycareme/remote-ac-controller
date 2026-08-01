@@ -9,7 +9,7 @@
 #include "config/feature_gates.h"
 
 // Firmware version (printed at boot, used by `version` CLI command)
-#define FIRMWARE_VERSION "v1.2.1"
+#define FIRMWARE_VERSION "v1.2.2"
 
 // USB debug serial baud rate (NOT the IR module baud rate)
 #define USB_SERIAL_BAUD 115200
