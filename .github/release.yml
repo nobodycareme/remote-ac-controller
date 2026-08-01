@@ -1,0 +1,39 @@
+# GitHub automatic release-note categorization.
+# The generated notes are only a DRAFT basis — a human must curate the final
+# Release body (see docs/维护者发布流程.md / maintainer-release-process.md).
+changelog:
+  categories:
+    - title: Features
+      labels:
+        - feature
+        - enhancement
+        - feat
+    - title: Fixes
+      labels:
+        - bug
+        - fix
+        - bugfix
+    - title: Hardware
+      labels:
+        - hardware
+        - pcb
+    - title: Documentation
+      labels:
+        - documentation
+        - docs
+    - title: Security
+      labels:
+        - security
+    - title: Dependencies
+      labels:
+        - dependencies
+        - dependabot
+    - title: Maintenance
+      labels:
+        - maintenance
+        - chore
+        - refactor
+  exclude:
+    labels:
+      - skip-changelog
+      - internal-ci
