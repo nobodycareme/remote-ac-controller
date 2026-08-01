@@ -580,6 +580,11 @@ jobs:
           git diff --quiet -- firmware/agent-platformio/lib/srun-c
           echo 'SRUN_ADAPTER_DETERMINISTIC_PASS=True'
 
+      - name: PCB Rev 1.0.1 release contract
+        run: |
+          set -euo pipefail
+          python3 tools/check-pcb-release.py
+
   # ---------------------------------------------------------------------------
   # docs-check — bilingual first-party documentation structure and links
   # ---------------------------------------------------------------------------
@@ -603,6 +608,9 @@ jobs:
 
       - name: Cross-language link hygiene
         run: python3 tools/check-doc-language-links.py
+
+      - name: Public documentation surface (README wording, semantic links)
+        run: python3 tools/check-public-docs.py
 
   doc-links:
     name: doc-links
