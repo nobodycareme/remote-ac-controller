@@ -2,6 +2,38 @@
 
 # 更新日志 / Changelog
 
+## [1.2.2] - 2026-08-01
+
+### 新增
+
+- **普通家庭/实验室 WPA/WPA2 Wi-Fi 配置**：`firmware/shared/RemoteACCore/src/config/wifi_secrets.example.h` 占位符模板 + `ENABLE_WIFI_CREDENTIALS` / `ENABLE_AUTO_WIFI_CONNECT` 编译宏 + `local-wifi` / `local-wifi-cloud` PlatformIO Profile + `wifi connect`（无参数）使用编译进固件的本地凭据。密码从不出现在串口日志、build_flags、平台配置文件、CI 环境或 README 示例。
+- **首次配置指南（成对中英文）**：`docs/中文/首次配置.md` / `docs/English/first-time-setup.md`。
+- **Windows CI IR 学习工具门禁**：新增 `ir-simple-learner-windows` Job（`windows-latest` + Python 3.12），运行：安装锁定依赖 → 单元测试 → 稳定性测试 → 正式 `build.ps1 -Clean` → EXE `--self-test` → EXE SHA-256 计算 → 凭据/真实 IR 扫描 → 上传 EXE 为 CI Artifact。
+- **正式 build.ps1（Python 3.12 + PyInstaller 6.21.0）**：原生命令执行辅助函数（System.Diagnostics.Process）解决 PS5.1 stderr 误判；`requirements-lock.txt` 精确锁定 8 个包；`make_zip_info()` 统一构造 ZipInfo 字段（不再依赖任何平台默认值）；EXE `--self-test` / `--version` 写报告文件供 CI 读取退出码。
+
+### Changed
+
+- GitHub 仓库 About 改为中文优先：description=基于 ESP8266 的手机远程空调控制系统，包含云端、MQTT/TLS、PCB、红外学习工具和中英文文档。
+- v1.2.1 Release 资产保持**完全不可变**（v1.2.1 tag 未移动，4 资产 ID/名称/大小不变）；v1.2.1 Release 正文改为中文优先并标记由 v1.2.2 取代。
+- `feature_gates.h` 增加 WiFi 凭据相关依赖规则：`ENABLE_WIFI_CREDENTIALS=1` / `ENABLE_AUTO_WIFI_CONNECT=1` 必须有 `ENABLE_WIFI=1`，否则编译期 `#error`。
+- 红外学习工具：`test_simple_learner.py` 修复 `test_A` / `test_H` 在 `State.EXITING` 卡住的无声 bug（重构 `handle_event` 控制流——`EXITING` 状态在通用 `cancelled` 处理之前检查），并加入 `test_preset_ids_unique`；20 轮稳定性测试全部通过。
+
+### Fixed
+
+- 红外学习工具 `build.ps1` 在 PowerShell 5.1 + `EnableWIFI=Stop` 下因 PyInstaller stderr 被误判为构建失败（之前必须用 D:/python 3.14 手工绕过；现在 3.12 走完官方脚本即可）。
+- 红外学习工具 `requirements-lock.txt` 锁定的 PyInstaller 6.11.1 在 Python 3.14 上不可用——已升级到 6.21.0 全家桶精确锁。
+- README 顶部导航修复、`.md` 后缀链接清理（[CONTRIBUTING.md] → [贡献指南]）、增加桌面+移动端界面预览截图、首次配置入口。
+- `firmware/agent-platformio/README.md` 等固件文档中 v0.4.0-cloud-foundation 等过时表述清除。
+
+### Known issues
+
+- 未提供经过验证的 BOM 或 pick-and-place 文件。
+- EasyEDA 工程容器（`eprj2`）的完整可编辑性与器件型号未独立验证；制造请以已校验的 Gerber / 钻孔 / `manufacturing-manifest.md` 为准。
+- 实际空调红外帧不在公开仓库中，需使用红外学习工具自行采集。
+- v1.2.0 / v1.2.1 自动源码归档中的 PCB 文件**均已失效**——制板请使用 v1.2.2 的 Rev 1.0.1 制造包。
+
+云端 API 与数据库模式均无变更。
+
 ## [1.2.1] - 2026-08-01
 
 ### Changed
