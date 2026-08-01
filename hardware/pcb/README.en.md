@@ -20,7 +20,7 @@ pick-and-place files**; you must compile those yourself for assembly.
 - Project file: `source/Remote_AC_Controller_PCB_Rev1.0.1.eprj2`
 - Logical revision: **Rev 1.0.1** (`hardware/pcb/REVISION`)
 
-> **Revision separation**: the software release version (v1.2.1) and the PCB
+> **Revision separation**: the software release version (v1.2.2) and the PCB
 > design revision (Rev 1.0.1) are independent. The silkscreen still reads v1.0,
 > but Rev 1.0.1 is the only valid manufacturing data.
 

@@ -148,13 +148,19 @@ cp generic_srun.example.h generic_srun.h   # 其他 srun 校园，需自行填�
 
 | 项目          | 位置                                                   | 生效条件                          |
 |---------------|--------------------------------------------------------|-----------------------------------|
-| Wi-Fi SSID    | 串口命令 `wifi connect <ssid>`（无自动连接）            | `ENABLE_WIFI=1`                   |
+| 普通 WiFi 凭据 | `RemoteACCore/src/config/wifi_secrets.h`（`wifi connect` 无参数使用） | `ENABLE_WIFI=1 ENABLE_WIFI_CREDENTIALS=1` |
+| 开放 SSID     | 串口命令 `wifi connect <ssid>`（显式开放 SSID）         | `ENABLE_WIFI=1`                   |
 | 校园网参数    | Profile 头文件（SSID / Portal Host / ac_id / 证书指纹） | `ENABLE_CAMPUS_AUTH=1`            |
 | 校园网账号密码| `RemoteACCore/src/config/campus_secrets.h`             | `ENABLE_CONTROLLED_LIVE_AUTH=1`   |
 | MQTT Broker   | `RemoteACCore/src/cloud_secrets.h`                     | `ENABLE_CLOUD_CREDENTIALS=1`      |
 
 ```bash
-# 校园网账号（仅在你确需真实认证时创建）
+# 普通 WiFi 凭据（家庭/实验室 WPA/WPA2，与校园网账号互斥）
+cp ~/Arduino/libraries/RemoteACCore/src/config/wifi_secrets.example.h \
+   ~/Arduino/libraries/RemoteACCore/src/config/wifi_secrets.h
+# 编辑 wifi_secrets.h：LOCAL_WIFI_SSID / LOCAL_WIFI_PASSWORD
+
+# 校园网账号（仅在你确需真实认证时创建，与普通 WiFi 凭据互斥）
 cp ~/Arduino/libraries/RemoteACCore/src/config/campus_secrets.example.h \
    ~/Arduino/libraries/RemoteACCore/src/config/campus_secrets.h
 
@@ -224,8 +230,10 @@ campus logout         - 注销
 campus unblock        - 解除硬失败锁存（latch），重新探测 Portal
 ```
 
-> `wifi connect` 使用 `WiFi.begin(ssid)`（**开放 SSID，不带密码**），
-> 面向 srun 类校园网的开放接入 SSID 场景。
+> `wifi connect`（无参数）在 `ENABLE_WIFI_CREDENTIALS=1` 时使用
+> `wifi_secrets.h` 中的本地 WPA/WPA2 凭据（`WiFi.begin(ssid, password)`）；
+> `wifi connect <ssid>` 显式连接开放 SSID（`WiFi.begin(ssid)`），面向
+> srun 类校园网的开放接入 SSID 场景。密码从不出现在串口日志。
 
 ---
 

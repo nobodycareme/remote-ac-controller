@@ -38,46 +38,86 @@ DO NOT run `pio` directly. Use the development script:
 
 ```powershell
 # Public build (safe defaults, no credentials)
-.\tools\dev.ps1
+.\tools\dev.ps1 build -Profile public
 
-# With cloud features (requires cloud_secrets.h)
-.\tools\dev.ps1 -WithCloud
+# Home/lab WPA or WPA2 Wi-Fi (requires wifi_secrets.h)
+.\tools\dev.ps1 build -Profile local-wifi
+
+# Xidian campus network (example profile; requires campus_secrets.h and
+# profiles/xidian.h)
+.\tools\dev.ps1 build -Profile local-campus-example
 ```
 
-### Configuration
+Full validation: `.\tools\dev.ps1 test -Profile public`; upload:
+`.\tools\dev.ps1 upload -Profile public`.
 
-1. **Cloud credentials** (for MQTT connectivity):
+### Configuration (read before first setup)
+
+See the [first-time setup guide](../../docs/English/first-time-setup.md).
+Home Wi-Fi passwords and Xidian campus account passwords are two independent
+sets of credentials and cannot be interchanged.
+
+1. **Home Wi-Fi credentials** (WPA/WPA2, required by the `local-wifi` profile):
    ```bash
+   cd shared/RemoteACCore/src/config
+   cp wifi_secrets.example.h wifi_secrets.h
+   # Edit wifi_secrets.h:
+   #   #define LOCAL_WIFI_SSID     "your_wifi_name"
+   #   #define LOCAL_WIFI_PASSWORD "your_wifi_password"
+   ```
+   The real `wifi_secrets.h` is git-ignored; only the `.example.h` template is
+   committed. Passwords never appear in serial logs.
+
+2. **Xidian campus credentials** (srun portal auth, required by the
+   `local-campus-example` profile):
+   ```bash
+   cd shared/RemoteACCore/src/config
+   cp profiles/xidian.example.h profiles/xidian.h
+   cp campus_secrets.example.h campus_secrets.h
+   # Edit campus_secrets.h:
+   #   #define CAMPUS_USERNAME "your_student_id"
+   #   #define CAMPUS_PASSWORD "your_campus_password"
+   ```
+   Xidian `stu-xdwlan` is an open SSID (no WPA password at the Wi-Fi layer);
+   the campus account/password belongs to the portal authentication. All real
+   credential files are git-ignored.
+
+3. **Cloud credentials** (for MQTT connectivity, optional):
+   ```bash
+   cd agent-platformio
    cp include/cloud_secrets.example.h include/cloud_secrets.h
    # Edit include/cloud_secrets.h with your MQTT broker details
    ```
 
-2. **Campus network** (for srun authentication):
-   Edit `shared/RemoteACCore/src/config/campus_credentials.h`
-
-3. **Private IR codes**:
-   IR mutating commands require `src/private_ir_codes/`. Generated codes go in `src/private_ir_codes/generated/`.
-
 ### Building Profiles
 
-| Profile    | ENABLE_CLOUD | ENABLE_IR_MUTATING | Use Case              |
-|-----------|-------------|-------------------|-----------------------|
-| Public    | 1           | 0                 | Safe default build    |
-| Private   | 1           | 1                 | IR lab / full feature |
+| Profile | ENABLE_CLOUD | ENABLE_WIFI_CREDENTIALS | ENABLE_CAMPUS_AUTH | Use Case |
+|---|---|---|---|---|
+| `public` | 1 | 0 | 0 | Safe default build (open SSID, no local credentials) |
+| `local-wifi` | 0 | 1 | 0 | Home/lab WPA/WPA2 (requires wifi_secrets.h) |
+| `local-wifi-cloud` | 1 | 1 | 0 | Home Wi-Fi + cloud (requires wifi_secrets.h + cloud_secrets.h) |
+| `local-campus-example` | 0 | 0 | 1 | Xidian campus example (requires profiles/xidian.h + campus_secrets.h) |
+| `public-cloud-example` | 1 | 0 | 0 | Explicit name for the public cloud-transport matrix entry |
 
-Set via `dev.ps1 -Profile Public|Private`.
+All public profiles keep `ENABLE_CONTROLLED_LIVE_AUTH=0` and
+`ENABLE_IR_MUTATING_COMMANDS=0`. Real credentials live only in git-ignored
+files and never in this repository.
 
 ### Upload
 
 ```powershell
-.\tools\dev.ps1 -Upload
+.\tools\dev.ps1 upload -Profile public
 ```
 
 ## Testing
 
-```bash
-pio test -e nodemcuv2
+```powershell
+.\tools\dev.ps1 test -Profile public
 ```
+
+Pure-logic parts of the firmware core (feature-gate dependencies, the Wi-Fi
+connect decision, CampusAuthPolicy) additionally have host tests in
+`test/host/`, compiled and run by the CI `firmware-host-tests` job.
 
 ## Dependencies
 
@@ -85,4 +125,5 @@ Libraries in `lib/` are vendored. PlatformIO will auto-download missing dependen
 
 ## Version
 
-See `VERSION` file. Current: v0.4.0-cloud-foundation.
+Software version: see `VERSION` (currently v1.2.2). PCB revision is Rev 1.0.1,
+independent from the software version.
