@@ -20,17 +20,23 @@ never from the working tree, so Windows core.autocrlf conversion cannot alter
 the published bytes.
 
 Determinism policy:
-  * ZIP_STORED (no compression) — byte-identical ZIPs across any Python/zlib
-    combination. (ZIP_DEFLATED would tie bytes to the zlib version.)
-  * fixed entry order (PACKAGE_ENTRIES insertion order)
-  * fixed timestamps, fixed permissions, no extra fields, no ZIP comment.
+  * ZIP_STORED (no compression) — no zlib-version dependency.
+  * every ZIP entry header field is explicitly pinned via make_zip_info
+    (create_system=3, create/extract_version=20, flag_bits=0, volume=0,
+    internal_attr=0, external_attr=0644<<16, extra=b"", comment=b"",
+    fixed date_time) — no reliance on OS/platform defaults.
+  * archive-level comment forced empty (z.comment = b"").
+  * fixed entry order (PACKAGE_ENTRIES insertion order).
+
+The EasyEDA project container is NOT part of the manufacturing ZIP; it is
+delivered through the GitHub source archive. There is no option to include it.
 
 Options:
   --ref <ref>          commit/tag to package from (default: HEAD)
   --out <dir>          output directory (repository-external)
-  --name <name>        package file name (default remote-ac-controller-pcb-rev1.0.1.zip)
-  --include-eprj2      also include the EasyEDA source file (not part of the
-                       default manufacturing contract)
+  --name <name>        must equal the contract package name
+                       (remote-ac-controller-pcb-rev1.0.1.zip); anything else
+                       is rejected
   --verify             verify the ZIP against the exact contract after writing
   --list-manifest      print the 12-row manifest inventory table and exit
 
@@ -43,15 +49,12 @@ from pcb_release_contract import (
     PACKAGE_ENTRIES,
     HASHED_MANIFEST_ENTRIES,
     MANIFEST_ZIP_PATH,
-    EASYEDA_SOURCE_PATH,
     PACKAGE_NAME as CONTRACT_PACKAGE_NAME,
+    make_zip_info,
     self_check as contract_self_check,
 )
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-EPRJ2_ZIP_NAME = "source/" + os.path.basename(EASYEDA_SOURCE_PATH)
-
-ZIP_MTIME = (2026, 8, 1, 0, 0, 0)  # fixed timestamp for determinism
 
 
 def git_show(ref, path):
@@ -88,24 +91,28 @@ def read_manifest_rows(manifest_text):
     return rows, sorted(dups)
 
 
-def build_entries(ref, include_eprj2):
-    """Fetch git-controlled bytes for every contract entry."""
+def build_entries(ref):
+    """Fetch git-controlled bytes for every contract entry (exactly 13)."""
     entries = []
     for zname, gpath in PACKAGE_ENTRIES.items():
         entries.append((zname, git_show(ref, gpath)))
-    if include_eprj2:
-        entries.append((EPRJ2_ZIP_NAME, git_show(ref, EASYEDA_SOURCE_PATH)))
+    if len(entries) != len(PACKAGE_ENTRIES):
+        raise SystemExit(f"PACKAGE_ENTRY_COUNT={len(entries)} (want {len(PACKAGE_ENTRIES)}) -> FAIL")
     return entries
 
 
 def write_zip(out_path, entries):
-    """Write a deterministic ZIP (STORED, fixed order/timestamp/permissions)."""
+    """Write a deterministic ZIP (STORED, fixed order/timestamps/permissions).
+
+    ZIP header metadata is explicitly pinned via make_zip_info (imported from
+    the contract module), and the archive-level comment is forced empty, so
+    the byte output does not depend on the platform (win32 vs linux) or the
+    Python/zlib version.
+    """
     with zipfile.ZipFile(out_path, "w", zipfile.ZIP_STORED) as z:
+        z.comment = b""
         for name, data in entries:  # insertion order == PACKAGE_ENTRIES order
-            zi = zipfile.ZipInfo(name, date_time=ZIP_MTIME)
-            zi.compress_type = zipfile.ZIP_STORED
-            zi.external_attr = 0o100644 << 16
-            z.writestr(zi, data)
+            z.writestr(make_zip_info(name), data)
 
 
 def verify_zip(out_path, ref):
@@ -208,11 +215,17 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ref", default="HEAD")
     ap.add_argument("--out", required=True)
+    # --name is kept only for explicitness; anything other than the contract
+    # package name is rejected so no command line can produce a differently
+    # named archive with the contract content (or vice versa).
     ap.add_argument("--name", default=CONTRACT_PACKAGE_NAME)
-    ap.add_argument("--include-eprj2", action="store_true")
     ap.add_argument("--verify", action="store_true")
     ap.add_argument("--list-manifest", action="store_true")
     args = ap.parse_args()
+
+    if args.name != CONTRACT_PACKAGE_NAME:
+        print(f"PACKAGE_NAME_MISMATCH: {args.name!r} (contract requires {CONTRACT_PACKAGE_NAME!r}) -> FAIL")
+        return 1
 
     ok, errs = contract_self_check()
     for e in errs:
@@ -222,7 +235,7 @@ def main():
         return 1
     print("PCB_CONTRACT_SINGLE_SOURCE=True")
 
-    entries = build_entries(args.ref, args.include_eprj2)
+    entries = build_entries(args.ref)
 
     if args.list_manifest:
         # ONLY the 12 hashed entries; the manifest itself is never listed.

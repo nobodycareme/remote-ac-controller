@@ -25,8 +25,13 @@ The EasyEDA project container lives in the tagged source tree under
 ``hardware/pcb/source/`` and is NOT part of the manufacturing ZIP by default.
 """
 
+import zipfile
+
 PCB_REVISION = "1.0.1"
 PACKAGE_NAME = "remote-ac-controller-pcb-rev1.0.1.zip"
+
+# Fixed timestamp for deterministic ZIP output (contract-wide).
+ZIP_MTIME = (2026, 8, 1, 0, 0, 0)
 
 # zip-relative path -> git path (dict keeps insertion order; keys are unique)
 PACKAGE_ENTRIES = {
@@ -93,6 +98,33 @@ def self_check():
             f"extra={sorted(set(HASHED_MANIFEST_ENTRIES) - expected_hashed)}"
         )
     return (len(errors) == 0, errors)
+
+
+def make_zip_info(name):
+    """Build a ZipInfo with every platform/version-sensitive field pinned.
+
+    This is the ONLY place ZipInfo objects are constructed for the contract
+    package (used by package-pcb-release.py's write_zip and by every test
+    ZIP generator in check-pcb-release.py). Overriding the OS or the Python
+    version must not be able to change the ZIP bytes.
+
+    Note: CPython's zipfile writestr() rewrites ``create_system`` from 0 to
+    3 on POSIX at write time; pinning it explicitly here (and pinning every
+    other header field) removes that platform default entirely.
+    """
+    zi = zipfile.ZipInfo(name, date_time=ZIP_MTIME)
+    zi.compress_type = zipfile.ZIP_STORED
+    zi.create_system = 3
+    zi.create_version = 20
+    zi.extract_version = 20
+    zi.reserved = 0
+    zi.flag_bits = 0
+    zi.volume = 0
+    zi.internal_attr = 0
+    zi.external_attr = 0o100644 << 16
+    zi.extra = b""
+    zi.comment = b""
+    return zi
 
 
 def contract_check():

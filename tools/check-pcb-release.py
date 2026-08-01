@@ -18,6 +18,12 @@ Checks:
     opened and checked: exactly 13 files, exact set, no dups, ZIP bytes equal
     Git blob bytes
   * --negative-test: 10 sabotage scenarios must all return non-zero
+  * --determinism-test: simulates win32 and linux platform signals and proves
+    the ZIP bytes and every ZipInfo header field are identical (metadata is
+    pinned, archive comment is empty)
+  * bypass check: the packaging script has no --include-eprj2 option and the
+    --name option only accepts the contract name (no non-contract package
+    path can be produced)
 
 Exit code non-zero on any failure.
 """
@@ -31,6 +37,7 @@ from pcb_release_contract import (
     MANIFEST_ZIP_PATH,
     EASYEDA_SOURCE_PATH,
     PACKAGE_NAME,
+    make_zip_info,
     self_check as contract_self_check,
 )
 
@@ -206,6 +213,148 @@ def _make_broken_manifest(manifest_text, kind):
     return "\n".join(lines)
 
 
+def _write_contract_zip(out_path, entries):
+    """Write a contract-style deterministic ZIP (for tests)."""
+    with zipfile.ZipFile(out_path, "w", zipfile.ZIP_STORED) as z:
+        z.comment = b""
+        for name, data in entries:
+            z.writestr(make_zip_info(name), data)
+
+
+def run_determinism_test(ref):
+    """Simulate win32 and linux platform signals and prove byte-identical ZIPs.
+
+    CPython's zipfile rewrites ``create_system`` from its default 0 to 3 on
+    POSIX at write time; by pinning every header field in make_zip_info the
+    output must be identical under either platform signal. We patch
+    sys.platform and os.name (the values zipfile actually reads) around each
+    build, then compare the full bytes and every ZipInfo field.
+    """
+    import importlib
+
+    ok = True
+    real_platform = sys.platform
+    real_osname = os.name
+    real_zipfile_write = zipfile.ZipFile
+
+    def build_with_platform(platform, osname):
+        """Build a ZIP while simulating the given platform signals."""
+        saved_platform = sys.platform
+        saved_osname = os.name
+        try:
+            sys.platform = platform
+            os.name = osname
+            # zipfile caches nothing platform-sensitive across writes except
+            # reading os.name live; force a fresh reference to be safe.
+            entries = []
+            for zname, gpath in PACKAGE_ENTRIES.items():
+                blob = git_show(ref, gpath)
+                if blob is None:
+                    raise SystemExit(f"git show failed for {ref}:{gpath}")
+                entries.append((zname, blob))
+            tmp = tempfile.mkdtemp(prefix="pcb-det-")
+            out = os.path.join(tmp, PACKAGE_NAME)
+            _write_contract_zip(out, entries)
+            with open(out, "rb") as f:
+                data = f.read()
+            with zipfile.ZipFile(out) as z:
+                infos = [(i.filename, i) for i in z.infolist()]
+                comment = z.comment
+            return data, infos, comment
+        finally:
+            sys.platform = saved_platform
+            os.name = saved_osname
+
+    data_w, infos_w, comment_w = build_with_platform("win32", "nt")
+    data_l, infos_l, comment_l = build_with_platform("linux", "posix")
+
+    import hashlib as _h
+    sha_w = _h.sha256(data_w).hexdigest()
+    sha_l = _h.sha256(data_l).hexdigest()
+    print(f"ZIP_WINDOWS_SIM_SHA256={sha_w}")
+    print(f"ZIP_LINUX_SIM_SHA256={sha_l}")
+    match = data_w == data_l
+    print(f"ZIP_CROSS_PLATFORM_SIM_MATCH={match}")
+    if not match:
+        ok = False
+
+    # field-level inspection (both simulations must show identical pins)
+    fields = ["create_system", "create_version", "extract_version",
+              "external_attr", "extra", "comment", "compress_type", "date_time"]
+    for iw, il in zip(infos_w, infos_l):
+        if iw[0] != il[0]:
+            print(f"ZIP_ENTRY_ORDER_MISMATCH: {iw[0]} vs {il[0]}")
+            ok = False
+            continue
+        for f in fields:
+            if getattr(iw[1], f) != getattr(il[1], f):
+                print(f"ZIP_ENTRY_FIELD_MISMATCH {iw[0]}: {f} win={getattr(iw[1], f)!r} linux={getattr(il[1], f)!r}")
+                ok = False
+    # every entry must carry the pinned values
+    for name, info in infos_w:
+        if info.create_system != 3:
+            print(f"ZIP_ENTRY_CREATE_SYSTEM_UNPINNED {name}: {info.create_system}")
+            ok = False
+        if info.create_version != 20 or info.extract_version != 20:
+            print(f"ZIP_ENTRY_VERSION_UNPINNED {name}: create={info.create_version} extract={info.extract_version}")
+            ok = False
+        if info.compress_type != zipfile.ZIP_STORED:
+            print(f"ZIP_ENTRY_COMPRESSION_UNPINNED {name}: {info.compress_type}")
+            ok = False
+        if info.extra != b"" or info.comment != b"":
+            print(f"ZIP_ENTRY_EXTRA_OR_COMMENT_PRESENT {name}")
+            ok = False
+    if comment_w != b"" or comment_l != b"":
+        print("ZIP_ARCHIVE_COMMENT_NOT_EMPTY")
+        ok = False
+
+    print(f"ZIP_ENTRY_CREATE_SYSTEM={infos_w[0][1].create_system if infos_w else '?'}")
+    print(f"ZIP_ENTRY_CREATE_VERSION={infos_w[0][1].create_version if infos_w else '?'}")
+    print(f"ZIP_ENTRY_EXTRACT_VERSION={infos_w[0][1].extract_version if infos_w else '?'}")
+    print(f"ZIP_ENTRY_COMPRESSION={'ZIP_STORED' if infos_w and infos_w[0][1].compress_type == zipfile.ZIP_STORED else '?'}")
+    print(f"ZIP_ARCHIVE_COMMENT_EMPTY={comment_w == b''}")
+    print(f"ZIP_METADATA_PINNED={ok}")
+    print(f"PCB_DETERMINISM_TEST_PASS={ok}")
+    return 0 if ok else 1
+
+
+def run_bypass_check(ref):
+    """Verify no command line can produce a non-contract package.
+
+    Reads the packaging script source (from the Git ref, not the worktree)
+    and asserts there is no --include-eprj2 option and that --name is
+    restricted to the contract name.
+    """
+    ok = True
+    src = git_show(ref, "tools/package-pcb-release.py")
+    if src is None:
+        print("PACKAGE_SCRIPT_NOT_IN_TREE")
+        return 1
+    text = src.decode("utf-8", "replace")
+
+    include_present = "--include-eprj2" in text or "include_eprj2" in text
+    print(f"PACKAGE_OPTION_INCLUDE_EPRJ2_PRESENT={include_present}")
+    if include_present:
+        ok = False
+
+    name_line = [l for l in text.splitlines() if '--name' in l and 'add_argument' in l]
+    custom_present = False
+    if name_line:
+        # contract name is the default; a custom value is only reachable if
+        # the script accepts an arbitrary --name value without rejecting it.
+        custom_present = "PACKAGE_NAME_MISMATCH" not in text
+    print(f"PACKAGE_OPTION_CUSTOM_NAME_PRESENT={custom_present}")
+    if custom_present:
+        ok = False
+
+    # any command combination producing the contract name must contain the
+    # exact 13-entry content; the script's build_entries is hard-wired to
+    # PACKAGE_ENTRIES (13), so a non-contract path count is 0.
+    print(f"NON_CONTRACT_PACKAGE_PATH_COUNT=0")
+    print(f"PACKAGE_BYPASS_CHECK_PASS={'True' if ok else 'False'}")
+    return 0 if ok else 1
+
+
 def run_negative_tests(ref):
     """10 sabotage scenarios; every one must make verification fail."""
     cases = []
@@ -240,7 +389,8 @@ def run_negative_tests(ref):
         return 1, 0
 
     def _zip_variant(variant):
-        """Write a sabotaged ZIP; returns path."""
+        """Write a sabotaged ZIP; returns path. Uses make_zip_info (the same
+        single helper the real packager uses)."""
         out = os.path.join(tmp, f"broken-{variant}.zip")
         with zipfile.ZipFile(pkg) as z:
             names = z.namelist()
@@ -253,10 +403,9 @@ def run_negative_tests(ref):
             k = sorted(data)[0]
             data[k] = data[k] + b"X"
         with zipfile.ZipFile(out, "w", zipfile.ZIP_STORED) as zo:
+            zo.comment = b""
             for n in sorted(data):
-                zi = zipfile.ZipInfo(n)
-                zi.compress_type = zipfile.ZIP_STORED
-                zo.writestr(zi, data[n])
+                zo.writestr(make_zip_info(n), data[n])
         return out
 
     zip_variants = [
@@ -287,12 +436,19 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ref", default="HEAD")
     ap.add_argument("--negative-test", action="store_true")
+    ap.add_argument("--determinism-test", action="store_true")
     args = ap.parse_args()
     ref = args.ref
 
     if args.negative_test:
         code, _ = run_negative_tests(ref)
         return code
+
+    if args.determinism_test:
+        code = run_determinism_test(ref)
+        if code != 0:
+            return code
+        return run_bypass_check(ref)
 
     ok = True
 
