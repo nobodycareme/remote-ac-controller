@@ -652,6 +652,16 @@ jobs:
       - name: No broken first-party relative links
         run: python3 tools/check-doc-links.py
 
+      - name: Public homepage and setup-doc checks (with negative tests)
+        run: |
+          python3 tools/check-public-docs.py
+          python3 tools/test-public-docs-negative.py
+
+      - name: README GFM render check (GitHub Markdown API)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 tools/check-readme-render.py
+
   version-consistency:
     name: version-consistency
     runs-on: ubuntu-latest

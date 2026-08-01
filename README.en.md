@@ -1,279 +1,119 @@
-**English** | [简体中文](./README.md)
+<p align="center">
+  <a href="#overview">Overview</a> ·
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="./docs/English/documentation-index.md">Documentation</a> ·
+  <a href="./README.md">简体中文</a>
+</p>
 
 <p align="center">
   <img src="./docs/assets/logo.svg" alt="Remote AC Controller" width="240" />
 </p>
 
 <h1 align="center">Remote AC Controller</h1>
-<p align="center"><strong>Full-stack open-source AC remote control (v1.2.2)</strong></p>
+<p align="center">Control an ordinary air conditioner from your phone with an ESP8266, an IR module, and a web page.</p>
 
 <p align="center">
   <a href="https://github.com/nobodycareme/remote-ac-controller/actions/workflows/ci.yml"><img src="https://github.com/nobodycareme/remote-ac-controller/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License" /></a>
-  <a href="https://github.com/nobodycareme/remote-ac-controller/releases"><img src="https://img.shields.io/github/v/release/nobodycareme/remote-ac-controller?include_prereleases" alt="Latest Release" /></a>
-  <a href="#quick-start"><img src="https://img.shields.io/badge/PlatformIO-ESP8266-orange" alt="PlatformIO" /></a>
-  <a href="#quick-start"><img src="https://img.shields.io/badge/Arduino-IDE-00979D" alt="Arduino IDE" /></a>
-</p>
-
-<p align="center">
-  [Quick Start](#quick-start) ·
-  [Documentation](./docs/English/documentation-index.md) ·
-  [简体中文](./README.md) ·
-  [Hardware](#hardware) ·
-  [License](#license)
+  <a href="https://github.com/nobodycareme/remote-ac-controller/releases"><img src="https://img.shields.io/github/v/release/nobodycareme/remote-ac-controller" alt="Latest Release" /></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="Apache-2.0" /></a>
 </p>
 
 ---
 
-A full-stack open-source system that controls an air conditioner remotely: phone
-web app → cloud backend → MQTT (TLS) → ESP8266 → IR → AC. Firmware, cloud,
-frontend, PCB, and IR learning tools are all open source — self-hostable,
-extensible, and ready for your own remotes. **Software v1.2.2 · PCB Rev 1.0.1.**
+## Overview
 
----
+Remote AC Controller is an ESP8266-based air conditioner remote control project. The device controls the AC through infrared and reports temperature, humidity, and device status to a web page. The repository includes firmware, cloud services, PCB files, and an IR learning tool.
 
-## Core features
+With a NodeMCU board, an IR transmitter, and a small temperature/humidity sensor, you can build the whole system. The IR codes are learned from your own remote, so it works with most infrared-controlled air conditioners.
 
-- **Responsive remote web UI** — Vue 3 single-page app for desktop and mobile.
-- **10 IR capture presets** + **11 cloud-registered AC state metadata entries** —
-  covering off, cool, dry, heat, and common temperature/fan/swing
-  combinations, each independently enabled. The public repository ships no
-  real AC IR frames; capture your own with the
-  [IR learning tool](#ir-learning-tool).
-- **Temperature & humidity monitoring** — DHT11 on GPIO5.
-- **Scheduling & temperature automation** — weekly cron-style tasks with
-  hysteresis-based temperature control to avoid rapid cycling.
-- **Two-role access model** — Owner / Guest with trusted devices and persistent
-  sessions.
-- **Home/lab WPA Wi-Fi and Srun campus-network first-time setup** — local
-  WPA/WPA2 credentials via `ENABLE_WIFI_CREDENTIALS`; campus open SSID with
-  Portal login (off by default).
-- **English UI, Chinese & English documentation, full bilingual stack.**
-
-## Repository contents
-
-| Path | Contents |
-|---|---|
-| `firmware/` | ESP8266 firmware: `agent-platformio/` (PlatformIO / command-line workflow) and `arduino-ide/` (Arduino IDE workflow) sharing `shared/RemoteACCore/` |
-| `cloud/` | `backend/` (Fastify + MQTT bridge), `frontend/` (Vue 3 web UI), `broker/`, `deploy/` |
-| `hardware/` | PCB design & manufacturing files (Rev 1.0.1), wiring docs |
-| `tools/` | IR learning tool, packaging and validation scripts |
-| `docs/` | Full bilingual documentation (see [Documentation](#documentation)) |
+The project is designed for everyday use: the web UI works on phones, and you can deploy it on a LAN or on a public server. The firmware supports several network options to fit different environments.
 
 ## Interface preview
 
 <p align="center">
-  <img src="./docs/assets/screenshots/dashboard-desktop.png"
-       alt="Remote AC Controller desktop web UI demo"
-       width="820" />
+  <img src="./docs/assets/screenshots/dashboard-desktop.png" alt="Desktop control interface" width="820" />
 </p>
 
 <p align="center">
-  <img src="./docs/assets/screenshots/dashboard-mobile.png"
-       alt="Remote AC Controller mobile web UI demo"
-       width="320" />
+  <img src="./docs/assets/screenshots/dashboard-mobile.png" alt="Mobile control interface" width="320" />
 </p>
 
-> Demo data: device "Demo AC" / 26.0°C / 45% RH / control: cool 24°C, auto fan, dual-swing. Screenshots come from the real local frontend with synthetic demo data; no real session, credentials, or IR frames are shown.
+Desktop and mobile use the same responsive page; the data in the screenshots is demo data shown for layout illustration only.
+
+## Features
+
+- Control AC power, mode, and common states from the phone web page;
+- DHT11 temperature and humidity monitoring;
+- Scheduled tasks and temperature-based automation;
+- ESP8266 communicates with the cloud over MQTT;
+- Supports home WPA/WPA2 Wi-Fi and optional Srun campus network auth;
+- IR learning tool to capture data from your own remote.
+
+You can use the parts independently: run only the firmware for home use, add the cloud for remote access, or build your own PCB from the hardware files. The parts communicate over a documented MQTT protocol, so each side can be replaced without touching the others.
 
 ## Quick start
 
-<a id="quick-start"></a>
+| Goal | Start here |
+|---|---|
+| Home or lab Wi-Fi | [First-time setup](./docs/English/first-time-setup.md) |
+| Xidian campus network | [Xidian campus authentication](./docs/English/xidian-campus-network-authentication.md) |
+| Build the ESP8266 firmware | [PlatformIO firmware guide](./firmware/agent-platformio/README.en.md) |
+| Use Arduino IDE | [Arduino IDE guide](./docs/English/arduino-ide-guide.md) |
+| Deploy your own server | [Deployment guide](./docs/English/deployment.md) |
+| Learn your own remote | [IR learning guide](./docs/English/ir-learning.md) |
+| Manufacture the PCB | [PCB documentation](./hardware/pcb/README.en.md) |
 
-This section lists the three most common first-time paths. Every command shown here is runnable in this repository. **A home/lab Wi-Fi password** and the **Xidian Srun campus account** belong in *different* untracked secret files; they are **not interchangeable**.
-
-### A. Home or lab WPA / WPA2 Wi-Fi
-
-<a id="first-time-wifi"></a>
-
-```powershell
-# 1. one-time: copy the template and fill in your router SSID + password
-cd firmware/shared/RemoteACCore/src/config
-cp wifi_secrets.example.h wifi_secrets.h
-# edit wifi_secrets.h:
-#   #define LOCAL_WIFI_SSID     "your_wifi_name"
-#   #define LOCAL_WIFI_PASSWORD "your_wifi_password"
-```
-
-```powershell
-# 2. build and flash (auto-joins the home network at boot)
-cd firmware/agent-platformio
-./tools/dev.ps1 build -Profile local-wifi
-# or with cloud: ./tools/dev.ps1 build -Profile local-wifi-cloud
-```
-
-Full walkthrough: [First-time setup — home Wi-Fi](./docs/English/first-time-setup.md)
-
-### B. Xidian Srun campus network
-
-<a id="first-time-campus"></a>
-
-Xidian Wi-Fi is an open SSID (no WPA password); the Portal login uses your student credentials.
-
-```powershell
-# 1. one-time: copy the public Xidian example profile and the campus secrets template
-cd firmware/shared/RemoteACCore/src/config
-cp profiles/xidian.example.h profiles/xidian.h
-# campus_secrets.h carries the Srun username / password:
-#   #define CAMPUS_USERNAME "your_student_id"
-#   #define CAMPUS_PASSWORD "your_campus_password"
-```
-
-```powershell
-# 2. build and flash
-cd firmware/agent-platformio
-./tools/dev.ps1 build -Profile local-campus-example
-```
-
-Full walkthrough: [First-time setup — campus](./docs/English/first-time-setup.md) / [Xidian campus authentication](./docs/English/xidian-campus-network-authentication.md)
-
-### C. Offline / credentials-free build
-
-<a id="first-time-offline"></a>
-
-Compile the local sensor / serial / read-only path with no real credentials compiled in:
+A minimal public build:
 
 ```powershell
 cd firmware/agent-platformio
 ./tools/dev.ps1 build -Profile public
-# defaults: ENABLE_WIFI=1 ENABLE_CLOUD=1 ENABLE_CAMPUS_AUTH=0, no credentials compiled in
 ```
 
-> Public builds never include real credentials. `wifi_secrets.h` and `campus_secrets.h` are git-ignored; only the `.example.h` templates may be committed.
+This is a credentials-free public build, not an offline build: the firmware still compiles the Wi-Fi and cloud modules, just without real credentials, and it does not auto-connect at boot.
 
-### 1. Build the ESP8266 firmware (PlatformIO)
+To set up local credentials for a home router or the Xidian campus network and to flash the firmware, start with the [first-time setup guide](./docs/English/first-time-setup.md). To check that your toolchain works, run the command above — no credential files are needed.
 
-```powershell
-cd firmware/agent-platformio
-./tools/dev.ps1 test -Profile public
-./tools/dev.ps1 verify -Profile public
-./tools/dev.ps1 build -Profile public
+## System layout
+
+```
+Phone web page → Cloud → MQTT → ESP8266 → IR → AC
 ```
 
-Full guide: [PlatformIO firmware guide](./firmware/agent-platformio/README.en.md)
+The server uses Fastify, the frontend uses Vue 3, and the device is a NodeMCU ESP8266.
 
-### 2. Arduino IDE workflow
+The repository is organized by directory: `firmware/` holds the ESP8266 firmware (PlatformIO and Arduino IDE workflows), `cloud/` holds the backend and web frontend, `hardware/` holds the PCB files, and `tools/` holds the IR learning tool and helper scripts. The parts are maintained separately and communicate over the MQTT message protocol, documented in [MQTT protocol](./docs/English/mqtt-protocol.md).
 
-Open `firmware/arduino-ide/Remote_AC_Controller/Remote_AC_Controller.ino`
-in Arduino IDE, follow the one-time setup in the sketch README, then compile
-and upload.
-
-Full guide: [Arduino IDE guide](./docs/English/arduino-ide-guide.md)
-
-### 3. Deploy backend and frontend
-
-```bash
-cd cloud/backend && npm ci && npm test
-cd cloud/frontend && npm ci && npm test && npm run build
-```
-
-Complete deployment (including MQTT broker and reverse proxy):
-[deployment guide](./docs/English/deployment.md)
-
-### 4. Manufacture the PCB
-
-Use the Gerber, drill, and flying-probe files under `hardware/pcb/fabrication/`.
-The package contract and per-file hashes are in
-[manufacturing-manifest](./hardware/pcb/fabrication/manufacturing-manifest.md).
-**Note: the Rev 1.0 manufacturing files are superseded — do not use them.**
-
-### 5. Use the IR learning tool
-
-Capture IR frames from your own AC remote:
-[IR learning](./docs/English/ir-learning.md) — tool in
-[`tools/ir-simple-learner/`](./tools/ir-simple-learner/). Download
-`IR_Simple_Learner_v4_windows_x64.exe` from the
-[Releases](https://github.com/nobodycareme/remote-ac-controller/releases) page.
-
-### 6. Optional Srun campus authentication
-
-For Srun-based campus networks (e.g. Xidian):
-[Xidian campus authentication](./docs/English/xidian-campus-network-authentication.md) and
-[Srun porting guide](./docs/English/srun-campus-network-porting-guide.md).
-
-## Simplified architecture
-
-```mermaid
-graph LR
-    A[Phone / Desktop] -->|HTTPS| B[Cloud Backend]
-    B -->|MQTT over TLS| C[MQTT Broker]
-    C -->|MQTT over TLS| D[ESP8266]
-    D -->|IR| E[AC]
-    B --> F[(SQLite)]
-```
+You can also run only the cloud part or use a simulated device to try the web UI first; the firmware, cloud, and frontend are independent.
 
 ## Hardware
 
-<a id="hardware"></a>
+- Board: NodeMCU ESP8266
+- Temperature/humidity: DHT11
+- IR module: ZJ-IR-V2
+- PCB: Rev 1.0.1
 
-- Board: **NodeMCU ESP8266 development board**
-- Temperature/humidity: DHT11 (GPIO5)
-- IR module: ZJ-IR-V2 (GPIO12 TX / GPIO14 RX)
-- PCB: Rev 1.0.1 ([PCB docs](./hardware/pcb/README.en.md), wiring in
-  [wiring guide](./docs/English/wiring.md))
+These are the components used during development and testing, not the only option — any ESP8266-family board with an IR transmitter can run the firmware; wiring is described in the `hardware/` documentation.
 
-## Optional campus authentication
-
-For Srun-based campus networks (e.g. Xidian), the firmware can automatically
-complete the captive-portal login after boot and recover after disconnects.
-This is off by default; public builds contain no credentials. See
-[Xidian campus authentication](./docs/English/xidian-campus-network-authentication.md).
+The public repository does not ship real AC IR codes, and no validated BOM or pick-and-place files are provided. Use the [IR learning guide](./docs/English/ir-learning.md) to capture data from your own remote, then follow the [first-time setup guide](./docs/English/first-time-setup.md) to flash it.
 
 ## Documentation
 
-<a id="documentation"></a>
-
-All bilingual documentation lives under [`docs/`](docs/):
-[English documentation index](./docs/English/documentation-index.md)
-([中文文档导航](./docs/中文/文档导航.md)).
-
-| Quick start | Understand the project | Operations & troubleshooting |
+| Understand the project | Use and configure | Maintain and troubleshoot |
 |---|---|---|
-| [Hardware overview](./docs/English/hardware.md) · [Wiring](./docs/English/wiring.md) · [First-time setup](./docs/English/first-time-setup.md) | [Architecture](./docs/English/architecture.md) · [Security model](./docs/English/security-model.md) | [Deployment](./docs/English/deployment.md) · [Operations guide](./docs/English/operations-guide.md) |
-| [Arduino IDE guide](./docs/English/arduino-ide-guide.md) | [MQTT protocol](./docs/English/mqtt-protocol.md) · [Scheduling](./docs/English/scheduling.md) | [Troubleshooting](./docs/English/troubleshooting.md) · [Backup and recovery](./docs/English/backup-and-recovery.md) |
-| [IR learning](./docs/English/ir-learning.md) | [Temperature automation](./docs/English/temperature-automation.md) | [Security policy](./SECURITY.md) · [Support](./docs/English/support.md) |
+| [Architecture](./docs/English/architecture.md) | [First-time setup](./docs/English/first-time-setup.md) | [Operations guide](./docs/English/operations-guide.md) |
+| [Security model](./docs/English/security-model.md) | [Arduino IDE guide](./docs/English/arduino-ide-guide.md) | [Troubleshooting](./docs/English/troubleshooting.md) |
+| [MQTT protocol](./docs/English/mqtt-protocol.md) | [Deployment guide](./docs/English/deployment.md) | [Backup and recovery](./docs/English/backup-and-recovery.md) |
+| [Changelog](./docs/English/changelog.md) | [IR learning](./docs/English/ir-learning.md) | [Security policy](./docs/English/security.md) |
 
-## Development and testing
+Chinese documentation is available from the [简体中文文档导航](./docs/中文/文档导航.md).
 
-```powershell
-# Full validation
-./tools/test-all.ps1
-./tools/build-all.ps1
+All documents are provided in both Chinese and English with the same structure, so you can switch languages side by side. If a topic is not listed in the table, check the [documentation index](./docs/English/documentation-index.md).
 
-# Documentation consistency (parity, links, forbidden wording)
-python tools/check-doc-parity.py
-python tools/check-doc-links.py
-python tools/check-doc-language-links.py
-python tools/check-public-docs.py
+## Contributing and support
 
-# Version and release integrity
-python tools/check-version.py
-python tools/check-pcb-release.py
-```
+Issues and pull requests are welcome — please read the [contributing guide](./docs/English/contributing.md) first. If you find a problem, describing what you did and the environment helps maintainers fix it faster. Security vulnerabilities should be reported through GitHub Private Vulnerability Reporting; see the [security policy](./docs/English/security.md). For usage questions, check the [documentation index](./docs/English/documentation-index.md) or open an [Issue](https://github.com/nobodycareme/remote-ac-controller/issues).
 
-See [contributing guide](./docs/English/contributing.md) before contributing.
+The project is licensed under the [Apache License 2.0](./LICENSE); third-party component licenses are listed in the [third-party notices](./docs/English/third-party-notices.md). All code and docs are maintained in this repository; release notes are in the [changelog](./docs/English/changelog.md) and [GitHub Releases](https://github.com/nobodycareme/remote-ac-controller/releases).
 
-## Contributing
-
-Issues and pull requests are welcome. Please read
-[contributing guide](./docs/English/contributing.md) first.
-
-## Support and security
-
-- Usage and configuration questions: check the
-  [documentation index](./docs/English/documentation-index.md) first, then open
-  an [Issue](https://github.com/nobodycareme/remote-ac-controller/issues).
-- Security vulnerabilities: use GitHub Private Vulnerability Reporting — do not
-  post them publicly ([security policy](./SECURITY.md)).
-
-## License
-
-<a id="license"></a>
-
-Licensed under the [Apache License 2.0](./LICENSE). Third-party component
-licenses are listed in [third-party notices](./THIRD_PARTY_NOTICES.md).
-
-## Repository note
-
-This repository is the single official open-source home of the project;
-firmware, cloud, hardware, tools, and docs are all maintained here.
+The project is under active maintenance; features and docs are updated from time to time.
