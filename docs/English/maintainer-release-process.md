@@ -63,5 +63,3 @@ from commit to a v1.2.x release.
 
 - [versioning](./versioning.md)
 - [hardware-release-process](./hardware-release-process.md)
-- 简体中文: [维护者发布流程](../中文/维护者发布流程.md)、
-  [版本管理](../中文/版本管理.md)、[PCB 发布流程](../中文/PCB发布流程.md)

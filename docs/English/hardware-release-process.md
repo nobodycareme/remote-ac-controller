@@ -64,5 +64,4 @@ tree and is **not** part of the manufacturing ZIP by default.
 ## Related documents
 
 - [Manufacturing manifest](../../hardware/pcb/fabrication/manufacturing-manifest.md)
-- 简体中文: [PCB 发布流程](../中文/PCB发布流程.md)、
-  [版本管理](../中文/版本管理.md)
+- [versioning](./versioning.md)

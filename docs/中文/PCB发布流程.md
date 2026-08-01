@@ -56,5 +56,4 @@ EasyEDA 源文件（`source/Remote_AC_Controller_PCB_Rev1.0.1.eprj2`）保留在
 ## 相关文档
 
 - [制造清单](../../hardware/pcb/fabrication/manufacturing-manifest.md)
-- English: [hardware-release-process](./hardware-release-process.md)、
-  [versioning](./versioning.md)
+- [版本管理](./版本管理.md)

@@ -46,5 +46,4 @@ version change and vice versa.
 ## Related documents
 
 - [maintainer-release-process](./maintainer-release-process.md)
-- 简体中文: [版本管理](../中文/版本管理.md)、
-  [维护者发布流程](../中文/维护者发布流程.md)
+- [hardware-release-process](./hardware-release-process.md)
