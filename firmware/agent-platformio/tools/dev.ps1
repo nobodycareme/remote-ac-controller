@@ -21,7 +21,8 @@ param(
     [string]$Command = 'help',
 
     [Parameter()]
-    [ValidateSet('public', 'local-campus-example', 'public-cloud-example')]
+    [ValidateSet('public', 'local-campus-example', 'public-cloud-example',
+                 'local-wifi', 'local-wifi-cloud')]
     [string]$Profile = 'public',
 
     [Parameter()]
@@ -198,12 +199,36 @@ switch ($Profile) {
   'public-cloud-example' {
     $env:BUILD_FLAGS_PUBLIC  = '-DENABLE_CONTROLLED_LIVE_AUTH=0 -DENABLE_IR_MUTATING_COMMANDS=0 -DENABLE_CLOUD=1 -DENABLE_CLOUD_CREDENTIALS=0'
   }
+  'local-wifi' {
+    # Home/lab WPA/WPA2 with compiled-in credentials (wifi_secrets.h) and
+    # unattended connect at boot. Cloud/campus auth stay off.
+    $env:BUILD_FLAGS_PUBLIC  = '-DENABLE_CONTROLLED_LIVE_AUTH=0 -DENABLE_IR_MUTATING_COMMANDS=0 -DENABLE_CLOUD=0 -DENABLE_CLOUD_CREDENTIALS=0 -DENABLE_CAMPUS_AUTH=0 -DENABLE_WIFI_CREDENTIALS=1 -DENABLE_AUTO_WIFI_CONNECT=1'
+  }
+  'local-wifi-cloud' {
+    # local-wifi + cloud transport. Cloud consumes the same WPA link.
+    $env:BUILD_FLAGS_PUBLIC  = '-DENABLE_CONTROLLED_LIVE_AUTH=0 -DENABLE_IR_MUTATING_COMMANDS=0 -DENABLE_CLOUD=1 -DENABLE_CLOUD_CREDENTIALS=0 -DENABLE_CAMPUS_AUTH=0 -DENABLE_WIFI_CREDENTIALS=1 -DENABLE_AUTO_WIFI_CONNECT=1'
+  }
   default {
     # public: cloud module compiled, credentials/live campus auth/IR-mutating off.
     $env:BUILD_FLAGS_PUBLIC  = '-DENABLE_CONTROLLED_LIVE_AUTH=0 -DENABLE_IR_MUTATING_COMMANDS=0 -DENABLE_CLOUD=1 -DENABLE_CLOUD_CREDENTIALS=0'
   }
 }
 $env:BUILD_FLAGS_PRIVATE = ''
+
+# ------------------------------------------------------------
+# local-wifi profiles require the untracked wifi_secrets.h file
+# ------------------------------------------------------------
+if ($Profile -in @('local-wifi', 'local-wifi-cloud')) {
+    $WifiSecrets = Join-Path $RepoRoot 'shared/RemoteACCore/src/config/wifi_secrets.h'
+    if (-not (Test-Path -LiteralPath $WifiSecrets)) {
+        Write-Output 'WIFI_SECRETS_MISSING=True'
+        Write-Output 'Copy firmware/shared/RemoteACCore/src/config/wifi_secrets.example.h to'
+        Write-Output 'firmware/shared/RemoteACCore/src/config/wifi_secrets.h and fill in your'
+        Write-Output 'router SSID and password. The real file is git-ignored.'
+        exit 5
+    }
+    Write-Output 'WIFI_SECRETS_PRESENT=True'
+}
 
 # ------------------------------------------------------------
 # Safety gates
@@ -542,9 +567,12 @@ try {
             Write-Output '                          off, IR emission disabled. Compile-only demonstration.'
             Write-Output '  public-cloud-example    Same as public, kept as an explicit name for the cloud'
             Write-Output '                          transport matrix entry.'
+            Write-Output '  local-wifi              Home/lab WPA/WPA2 with compiled-in credentials'
+            Write-Output '                          (wifi_secrets.h) and unattended connect. Cloud off.'
+            Write-Output '  local-wifi-cloud        local-wifi + cloud transport.'
             Write-Output ''
             Write-Output 'All profiles keep ENABLE_CONTROLLED_LIVE_AUTH=0 and ENABLE_IR_MUTATING_COMMANDS=0.'
-            Write-Output 'Real credentials belong in an untracked campus_secrets.h, never in this repository.'
+            Write-Output 'Real credentials belong in an untracked campus_secrets.h / wifi_secrets.h, never in this repository.'
             Write-Output ''
             Write-Output 'Never call pio/platformio/esptool directly - this script owns the build'
             Write-Output 'environment and the safety gates.'

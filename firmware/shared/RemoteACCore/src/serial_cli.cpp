@@ -132,7 +132,8 @@ void Cli::help() {
   Serial.println(F("  ir_learn_clear              - clear temporary captured frame"));
 #endif
 #if ENABLE_WIFI
-  Serial.println(F("  wifi connect [ssid] - associate with OPEN campus SSID (default stu-xdwlan)"));
+  Serial.println(F("  wifi connect [ssid] - connect: no-arg uses local wifi_secrets.h (WPA)"));
+  Serial.println(F("                       or explicit OPEN campus SSID (default stu-xdwlan)"));
   Serial.println(F("  wifi disconnect - drop Wi-Fi association"));
   Serial.println(F("  wifi scan       - list nearby APs (read-only)"));
   Serial.println(F("  wifi status     - NET_STATE / LOCAL_IP / MAC / SSID"));
@@ -1147,7 +1148,20 @@ void Cli::doWifi(const char* arg) {
   if (sp) { *sp = '\0'; subarg = sp + 1; while (*subarg == ' ') subarg++; }
 
   if (strcmp(sub, "connect") == 0) {
-    if (*subarg) _net->begin(subarg); else _net->begin();
+    if (*subarg) {
+      // Explicit open SSID (e.g. campus): `wifi connect <ssid>`.
+      _net->begin(subarg);
+    } else {
+#if ENABLE_WIFI_CREDENTIALS
+      // No-argument `wifi connect`: use the compiled-in home/lab WPA/WPA2
+      // credentials from wifi_secrets.h. A password is NEVER accepted on the
+      // command line (it would land in the serial console / terminal history).
+      _net->beginLocalWifi();
+#else
+      // No credentials build: fall back to the default campus OPEN SSID.
+      _net->begin();
+#endif
+    }
     _net->connect();
     return;
   }

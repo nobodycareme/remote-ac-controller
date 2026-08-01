@@ -66,11 +66,17 @@ enum BackoffReason {
 
 class WifiManager {
 public:
-  void begin(const char* ssid = nullptr);
-  void connect();                 // start association to the OPEN campus SSID
+  void begin(const char* ssid = nullptr, const char* password = nullptr);
+  void connect();                 // start association to the configured SSID
   void disconnect();
   void scan();                    // list nearby APs (read-only)
   void update();                  // non-blocking state-machine tick; call every loop
+#if ENABLE_WIFI_CREDENTIALS
+  // Load LOCAL_WIFI_SSID / LOCAL_WIFI_PASSWORD from wifi_secrets.h into the
+  // manager and reset for a connect. Used by the no-argument `wifi connect`
+  // serial command. The password never appears in any log.
+  void beginLocalWifi();
+#endif
 
 #if ENABLE_CAMPUS_AUTH
   void campusLogin();             // protected, one-shot request (gated)
@@ -123,6 +129,7 @@ private:
 #endif
 
   String  _cfgSsid = CAMPUS_SSID;
+  String  _cfgPass = "";           // WPA/WPA2 password (never logged)
   WifiState _state = WIFI_DISCONNECTED;
   uint32_t _stateEnterMs = 0;
   uint32_t _nextRetryMs = 0;

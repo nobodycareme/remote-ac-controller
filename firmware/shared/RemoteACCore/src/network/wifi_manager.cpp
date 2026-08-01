@@ -9,11 +9,15 @@
  * single-source portal logic.
  */
 #include "network/wifi_manager.h"
+#include "network/wifi_connect_plan.h"
 #include <ESP8266HTTPClient.h>
 #include "network/net_telemetry.h"
 
 #if ENABLE_CAMPUS_AUTH
 #include "config/campus_credentials.h"
+#endif
+#if ENABLE_WIFI_CREDENTIALS
+#include "config/wifi_secrets.h"
 #endif
 #include "config/campus_config.h"
 
@@ -26,8 +30,9 @@ static const uint32_t NET_CHECK_MS = 5UL * 60UL * 1000UL;        // ONLINE re-ch
 static const uint8_t  MAX_AUTH_RETRIES = 2;                      // manual mode: initial + 2 retries
 #endif
 
-void WifiManager::begin(const char* ssid) {
+void WifiManager::begin(const char* ssid, const char* password) {
   if (ssid && *ssid) _cfgSsid = ssid;
+  if (password) _cfgPass = password;   // may be "" to clear a previous password
   WiFi.persistent(false);
   WiFi.setAutoReconnect(true);
 #if ENABLE_CAMPUS_AUTH
@@ -38,14 +43,50 @@ void WifiManager::begin(const char* ssid) {
   enterState(WIFI_DISCONNECTED);
 }
 
+#if ENABLE_WIFI_CREDENTIALS
+void WifiManager::beginLocalWifi() {
+  // Compiled-in home/lab WPA/WPA2 credentials from wifi_secrets.h. The
+  // password is stored in _cfgPass for WiFi.begin() only; it is never
+  // printed, hashed into logs, or exposed via any status command.
+  _cfgSsid = LOCAL_WIFI_SSID;
+  _cfgPass = LOCAL_WIFI_PASSWORD;
+  WiFi.persistent(false);
+  WiFi.setAutoReconnect(true);
+#if ENABLE_CAMPUS_AUTH
+  _autoAuth.resetAll();
+  _authInProgress = false;
+#endif
+  _lastLocalIp = "";
+  enterState(WIFI_DISCONNECTED);
+}
+#endif
+
 void WifiManager::connect() {
   if (_state == WIFI_BLOCKED) {
     Serial.println(F("WIFI_BLOCKED clear block first (power-cycle or fix creds/TLS)"));
     return;
   }
+  // Single source of truth for the connection decision (pure, host-tested):
+  //   - local WPA credentials enabled -> WiFi.begin(ssid, password)
+  //   - otherwise -> WiFi.begin(ssid) (OPEN campus SSID)
+  // The password VALUE is never logged; only its presence selects the path.
+#if ENABLE_WIFI_CREDENTIALS
+  const char* localSsid = LOCAL_WIFI_SSID;
+  const bool hasLocalPass = true;
+#else
+  const char* localSsid = nullptr;
+  const bool hasLocalPass = false;
+#endif
+  const WifiConnectPlan plan = makeWifiConnectPlan(_cfgSsid.c_str(), localSsid, hasLocalPass);
   Serial.print(F("WIFI_CONNECT ssid="));
-  Serial.println(_cfgSsid);
-  WiFi.begin(_cfgSsid.c_str());   // OPEN SSID, no password
+  Serial.print(_cfgSsid);
+  Serial.print(F(" security="));
+  Serial.println(wifiSecurityLabel(plan.securityType));
+  if (plan.securityType == WIFI_SECURITY_WPA_OR_WPA2 && !_cfgPass.isEmpty()) {
+    WiFi.begin(_cfgSsid.c_str(), _cfgPass.c_str());   // WPA/WPA2 home/lab router
+  } else {
+    WiFi.begin(_cfgSsid.c_str());                     // OPEN campus SSID
+  }
   enterState(WIFI_ASSOCIATING);
 }
 
