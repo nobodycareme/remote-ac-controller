@@ -79,7 +79,7 @@ void Cli::begin() {
 
 void Cli::banner() {
   Serial.println(F("=========================================="));
-  Serial.print(F(" Remote AC Controller  firmware v"));
+  Serial.print(F(" Remote AC Controller  firmware "));
   Serial.println(F(FIRMWARE_VERSION));
   Serial.println(F(" Local integration build (DHT11 + ZJ-IR-V2)"));
   Serial.println(F(" USB debug: help | status | version | dht read | dht test"));

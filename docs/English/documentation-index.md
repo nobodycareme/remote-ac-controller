@@ -62,6 +62,9 @@ Back to the repository root: [`README.md`](./README.md)
 - [Contributing](./contributing.md) — development workflow, commit conventions, required gates
 - [Code of conduct](./code-of-conduct.md) — community behaviour standards
 - [Support](./support.md) — support scope and help channels
+- [Maintainer release process](./maintainer-release-process.md) — end-to-end release flow
+- [Versioning](./versioning.md) — software version vs PCB revision
+- [Hardware release process](./hardware-release-process.md) — PCB packaging and verification
 - [Changelog](./changelog.md) — release history
 
 ## Licensing

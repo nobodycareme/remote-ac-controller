@@ -2,45 +2,65 @@
 
 # Changelog
 
+## [1.2.1] - 2026-08-01
+
+### Changed
+
+- Bilingual READMEs re-architected for developers.
+- Community files (CONTRIBUTING / SECURITY / SUPPORT) are now actionable
+  guides instead of stub redirects.
+- PCB revision is separated as Rev 1.0.1 (software release vs PCB design
+  revision).
+
+### Fixed
+
+- Corrected PCB manufacturing files (Gerber, drill, flying-probe data, and
+  EasyEDA project).
+- Corrected the ESP32 misstatement in the PCB README (the board is a
+  NodeMCU ESP8266 development board).
+- Removed stale release links and non-existent BOM/coordinate claims from the
+  READMEs.
+- Fixed the double-"v" startup banner (now `firmware v1.2.1`).
+- Fixed English README semantic links (Chinese entries point to Chinese docs,
+  English entries to English docs).
+
+### Security
+
+- Manufacturing data is now published byte-for-byte (`.gitattributes` +
+  deterministic packaging) so line-ending conversion can no longer drift the
+  published hashes.
+
+### Known issues
+
+- A verified BOM or pick-and-place file is not provided.
+- Real AC IR frames are not shipped in the public repository; capture your own
+  with the IR learning tool.
+- The v1.2.0 auto-generated source archives still contain the old PCB files;
+  use v1.2.1 for PCB manufacturing.
+
+No cloud API or database schema changes.
+
 ## [1.2.0] - 2026-08-01
 
-Canonical monorepo consolidation release.
+First Monorepo unified release.
 
-- Single authoritative monorepo established; the two split repositories are
-  retained only as private archived records (histories not merged; zero secret
-  leakage).
-- Production-grade automatic Xidian campus authentication: authEpoch cycle
-  model + policy backoff/quota/hard-block + compile-time feature-gate
-  dependency constraints; recovery on Wi-Fi drop, DHCP change and portal
-  re-appearance; 30/60/120s backoff ladder.
-- Host tests: CampusAuthPolicy / feature gates / auth epoch / campus profiles.
-- Cloud security consolidation (backend_verify.js credentials come only from
-  the environment).
-- Complete bilingual documentation paths (24 doc-map pairs + three checkers).
-- Unified CI (11 jobs) + unified version v1.2.0 + BOM/mojibake cleanup.
-
-All notable changes to this project are documented here. This repository
-follows a Monorepo layout combining the ESP8266 firmware and the cloud
-backend/frontend into a single published history.
+- Optional Xidian/Srun campus-network authentication (off by default; public
+  builds contain no credentials).
+- Disconnect and session recovery: automatic reconnection after Wi-Fi drop,
+  IP change, or portal re-appearance.
+- PlatformIO and Arduino IDE build verification.
+- Complete bilingual documentation and unified CI.
+- Monorepo unified publishing (firmware, cloud, PCB, tools, docs in one shot).
 
 ## [1.0.0] - 2026-07-31
 
 Initial public release.
 
 ### Added
-- Initial public open-source release of the Remote AC Controller system.
-- **Complete Monorepo**: firmware, cloud, frontend, docs in a single repo.
-- **Dual firmware modes**: PlatformIO Agent automation + Arduino IDE manual, sharing one core codebase.
-- **ESP8266 firmware**: DHT11 sensing, MQTT/TLS secure transport, 11-state IR AC control.
-- **Cloud backend**: Fastify + MQTT bridge, scheduling engine, dual-threshold temperature automation, weather data caching, Owner/Guest auth model, trusted devices, telemetry logging.
-- **Vue 3 frontend**: responsive cross-device UI, 11-state control panel, schedule & automation management.
-- **PCB design files**: EasyEDA Pro source, Gerber manufacturing files, drill files, BOM, JLCPCB fabrication pack.
-- **IR learning tool**: source code + Windows x64 EXE (CH9102 serial capture).
-- **Complete bilingual docs**: 21 Chinese + 20 English documents.
-- **GitHub Actions CI**: PlatformIO + Arduino CLI + Cloud + Repo Hygiene.
-- Licensed under Apache License 2.0.
 
-### Security
-- No production credentials, private keys, real IR data, databases, or
-  production environment files are included.
-- Public firmware and cloud defaults are non-production safe.
+- ESP8266 firmware (PlatformIO and Arduino IDE workflows) with DHT11 sensing
+  and MQTT/TLS transport.
+- Cloud backend (Fastify + MQTT bridge) and Vue 3 frontend.
+- IR learning tool (source + Windows EXE).
+- Basic security model (dual-role, trusted sessions).
+- Licensed under Apache License 2.0.
