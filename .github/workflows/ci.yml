@@ -694,7 +694,7 @@ jobs:
           # Documentation and templates legitimately show the SHAPE of a
           # credential using obvious placeholders. Only a value that is neither
           # empty nor an obvious placeholder counts as a real secret.
-          PLACEHOLDER='"(|<[^"]*>|\$\{[^"]*\}|(your|YOUR|my|MY)[_A-Za-z0-9]*|[Cc]hange[Mm]e|CHANGEME|[Pp]laceholder|PLACEHOLDER|[Ee]xample[_A-Za-z0-9]*|EXAMPLE[_A-Za-z0-9]*|x{3,}|X{3,}|\.{3}|TODO|REPLACE[_A-Za-z0-9]*|20[0-9]{8,}|student_id|password|username)"'
+          PLACEHOLDER='"(|<[^"]*>|\$\{[^"]*\}|(your|YOUR|my|MY)[_A-Za-z0-9]*|(你的|我的)[^"]{0,20}|[Cc]hange[Mm]e|CHANGEME|[Pp]laceholder|PLACEHOLDER|[Ee]xample[_A-Za-z0-9]*|EXAMPLE[_A-Za-z0-9]*|x{3,}|X{3,}|\.{3}|TODO|REPLACE[_A-Za-z0-9]*|20[0-9]{8,}|student_id|password|username)"'
 
           scan() {
             local label="$1" pattern="$2" allow="${3:-}"

@@ -76,9 +76,17 @@ static_assert(WIFI_AUTOCONNECT_ON_BOOT,
               "cloud builds autoconnect regardless of campus authentication");
 #endif
 
-#if !ENABLE_CLOUD && !ENABLE_AUTO_CAMPUS_AUTH
+#if !ENABLE_CLOUD && !ENABLE_AUTO_CAMPUS_AUTH && !ENABLE_AUTO_WIFI_CONNECT
 static_assert(!WIFI_AUTOCONNECT_ON_BOOT,
-              "offline-first default: no autoconnect without cloud or auto-auth");
+              "offline-first default: no autoconnect without cloud, auto-auth, "
+              "or auto local-Wi-Fi connect");
+#endif
+
+// With local WPA credentials and auto-connect enabled, the link must come up
+// on its own at boot (home/lab router joins unattended).
+#if ENABLE_AUTO_WIFI_CONNECT
+static_assert(WIFI_AUTOCONNECT_ON_BOOT,
+              "ENABLE_AUTO_WIFI_CONNECT must imply boot autoconnect");
 #endif
 
 #if ENABLE_CAMPUS_AUTH && !ENABLE_CLOUD
