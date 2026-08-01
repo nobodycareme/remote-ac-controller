@@ -166,14 +166,18 @@
 
 // Boot-time association policy. The project's default philosophy is
 // offline-first: the radio stays idle until an operator issues `wifi connect`.
-// Three features legitimately need the link up without an operator present:
-//   - ENABLE_CLOUD              a remotely controllable device must dial home;
+// Compiling the Cloud module does NOT provide an SSID or a connection
+// identity — Cloud is a consumer of the network link, not a provider of it.
+// Only two features legitimately need the link up without an operator
+// present, and both carry a concrete SSID source of their own:
 //   - ENABLE_AUTO_CAMPUS_AUTH   unattended re-auth after a power cut is the
-//                               entire point of the feature;
-//   - ENABLE_AUTO_WIFI_CONNECT  unattended join of a home/lab WPA network or
-//                               the campus open SSID at boot.
+//                               entire point of the feature (campus SSID);
+//   - ENABLE_AUTO_WIFI_CONNECT  unattended join of a home/lab WPA network
+//                               (local wifi_secrets.h) at boot.
+// A plain ENABLE_CLOUD build with no credentials therefore keeps the manual
+// behaviour: it must never attempt WiFi.begin("") on boot.
 // Any other build keeps the manual behaviour.
-#define WIFI_AUTOCONNECT_ON_BOOT (ENABLE_WIFI && (ENABLE_CLOUD || ENABLE_AUTO_CAMPUS_AUTH || ENABLE_AUTO_WIFI_CONNECT))
+#define WIFI_AUTOCONNECT_ON_BOOT (ENABLE_WIFI && (ENABLE_AUTO_CAMPUS_AUTH || ENABLE_AUTO_WIFI_CONNECT))
 
 // ---------------------------------------------------------------------------
 // 4. Human-readable build profile string (printed at boot)
