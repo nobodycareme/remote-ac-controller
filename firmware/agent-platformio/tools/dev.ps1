@@ -205,8 +205,13 @@ switch ($Profile) {
     $env:BUILD_FLAGS_PUBLIC  = '-DENABLE_CONTROLLED_LIVE_AUTH=0 -DENABLE_IR_MUTATING_COMMANDS=0 -DENABLE_CLOUD=0 -DENABLE_CLOUD_CREDENTIALS=0 -DENABLE_CAMPUS_AUTH=0 -DENABLE_WIFI_CREDENTIALS=1 -DENABLE_AUTO_WIFI_CONNECT=1'
   }
   'local-wifi-cloud' {
-    # local-wifi + cloud transport. Cloud consumes the same WPA link.
-    $env:BUILD_FLAGS_PUBLIC  = '-DENABLE_CONTROLLED_LIVE_AUTH=0 -DENABLE_IR_MUTATING_COMMANDS=0 -DENABLE_CLOUD=1 -DENABLE_CLOUD_CREDENTIALS=0 -DENABLE_CAMPUS_AUTH=0 -DENABLE_WIFI_CREDENTIALS=1 -DENABLE_AUTO_WIFI_CONNECT=1'
+    # local-wifi + real cloud transport. The name promises a working Cloud
+    # link, so it REQUIRES the local cloud credentials file (cloud_secrets.h)
+    # as well as wifi_secrets.h. ENABLE_CLOUD_CREDENTIALS=1 turns on the
+    # private credential path; the pre-flight check below refuses to build
+    # when either untracked file is missing (no silent fallback to a
+    # credentials-free cloud example).
+    $env:BUILD_FLAGS_PUBLIC  = '-DENABLE_CONTROLLED_LIVE_AUTH=0 -DENABLE_IR_MUTATING_COMMANDS=0 -DENABLE_CLOUD=1 -DENABLE_CLOUD_CREDENTIALS=1 -DENABLE_CAMPUS_AUTH=0 -DENABLE_WIFI_CREDENTIALS=1 -DENABLE_AUTO_WIFI_CONNECT=1'
   }
   default {
     # public: cloud module compiled, credentials/live campus auth/IR-mutating off.
@@ -231,6 +236,22 @@ if ($Profile -in @('local-wifi', 'local-wifi-cloud')) {
 }
 
 # ------------------------------------------------------------
+# local-wifi-cloud also requires the untracked cloud_secrets.h
+# ------------------------------------------------------------
+if ($Profile -eq 'local-wifi-cloud') {
+    $CloudSecrets = Join-Path $FirmwareRoot 'include/cloud_secrets.h'
+    if (-not (Test-Path -LiteralPath $CloudSecrets)) {
+        Write-Output 'CLOUD_SECRETS_MISSING=True'
+        Write-Output 'Copy firmware/agent-platformio/include/cloud_secrets.example.h to'
+        Write-Output 'firmware/agent-platformio/include/cloud_secrets.h and fill in your'
+        Write-Output 'own MQTT broker settings. The real file is git-ignored.'
+        Write-Output 'local-wifi-cloud does NOT fall back to a credentials-free build.'
+        exit 5
+    }
+    Write-Output 'CLOUD_SECRETS_PRESENT=True'
+}
+
+# ------------------------------------------------------------
 # Safety gates
 # ------------------------------------------------------------
 $SecretHeaders = @('secrets.h', 'cloud_secrets.h')
@@ -240,8 +261,19 @@ function Assert-NoTrackedSecrets {
     foreach ($h in $SecretHeaders) {
         $p = Join-Path (Join-Path $FirmwareRoot 'include') $h
         if (-not (Test-Path $p)) { continue }
-        $tracked = & git -C $RepoRoot ls-files --error-unmatch "firmware/include/$h" 2>$null
-        if ($LASTEXITCODE -eq 0 -and $tracked) { $bad += "firmware/include/$h" }
+        # Path relative to $RepoRoot (firmware/): agent-platformio/include/<h>.
+        $rel = Join-Path (Split-Path -Leaf $FirmwareRoot) ("include/" + $h)
+        # PS 5.1: a failing native command writes to the error stream and, with
+        # $ErrorActionPreference='Stop', a plain 2>&1 / 2>$null capture STILL
+        # throws NativeCommandError. Lower EAP around the call only.
+        $prevEap = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $null = & git -C $RepoRoot ls-files --error-unmatch -- $rel 2>&1
+            $rc = $LASTEXITCODE
+        }
+        finally { $ErrorActionPreference = $prevEap }
+        if ($rc -eq 0) { $bad += $rel }
     }
     if ($bad.Count -gt 0) {
         Write-Output 'TRACKED_SECRET_HEADER=True'
