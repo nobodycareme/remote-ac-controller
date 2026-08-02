@@ -340,6 +340,32 @@ jobs:
       - name: v1.2.5 reject executable setInsecure calls
         run: python tools/check-no-insecure-tls.py --self-test
 
+  # ---------------------------------------------------------------------------
+  # firmware-arduino-public
+  # ---------------------------------------------------------------------------
+  # Compile the Arduino IDE sketch through the documented first-time-user
+  # workflow under each public feature profile. No credentials or hardware.
+  firmware-arduino-public:
+    name: firmware-arduino-public (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: offline
+            switches: "ENABLE_WIFI=0"
+          - name: wifi-only
+            switches: "ENABLE_WIFI=1"
+          - name: xidian-campus-example
+            switches: "ENABLE_WIFI=1 ENABLE_CAMPUS_AUTH=1 ENABLE_AUTO_CAMPUS_AUTH=0"
+            profile: "profiles/xidian.example.h"
+          - name: generic-srun-example
+            switches: "ENABLE_WIFI=1 ENABLE_CAMPUS_AUTH=1 ENABLE_AUTO_CAMPUS_AUTH=0"
+            profile: "profiles/generic_srun.example.h"
+          - name: wifi-cloud-example
+            switches: "ENABLE_WIFI=1 ENABLE_CLOUD=1"
+    steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
