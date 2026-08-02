@@ -39,6 +39,20 @@ bool MqttClientWrapper::begin(const MqttConfig& cfg) {
         return false;
     }
 
+    // v1.2.5: derive the TLS identity plan from the incoming config ONLY.
+    // begin() never reads CloudCredentials globals — the caller (RemoteACApp)
+    // fills cfg.ca_cert / cfg.tls_fingerprint explicitly, so tests can build
+    // CA-only and fingerprint-only configs directly.
+    const MqttTlsPlan tlsPlan = makeMqttTlsPlan(cfg.ca_cert, cfg.tls_fingerprint);
+    if (!tlsPlan.valid) {
+        // Non-sensitive error code only; never the fingerprint or CA content.
+        Serial.print(F("MQTT_TLS_CONFIG_REJECTED reason="));
+        Serial.println(tlsPlan.reason ? tlsPlan.reason : "TLS_MATERIAL_MISSING");
+        return false;
+    }
+    Serial.print(F("MQTT_TLS_MODE="));
+    Serial.println(mqttTlsModeLabel(tlsPlan.mode));
+
     // Create TLS client (unique_ptr — lifetime tied to MqttClientWrapper)
     _tlsClient.reset(new BearSSL::WiFiClientSecure());
     // --- BearSSL memory footprint (ESP8266 heap-constrained) ---------------
@@ -50,20 +64,20 @@ bool MqttClientWrapper::begin(const MqttConfig& cfg) {
     // heap crushed from ~25KB to ~4.5KB). Shrinking the rx buffer to 4096
     // (enough to hold our small private-CA cert-chain record) frees ~12KB of
     // handshake headroom. This is a MEMORY optimization only — it does NOT
-    // weaken security: setTrustAnchors() cert validation below is unchanged
-    // and setInsecure() is NEVER used.
+    // weaken security: the TLS identity below (CA or fingerprint) is
+    // unchanged and setInsecure() is NEVER used.
     _tlsClient->setBufferSizes(4096, 1024);   // rx=4096, tx=1024
-    // Strict TLS: validate the broker certificate against the embedded project CA.
-    // setInsecure() is NEVER used (spec). Without a CA (Public build) the TLS
-    // handshake fails at runtime -> connect() returns false -> safe disable.
-    // ESP8266 BearSSL uses setTrustAnchors(X509List*); the ESP32 setCACert() API
-    // does not exist on this target. X509List is held by unique_ptr to guarantee
-    // it outlives WiFiClientSecure (declared after _tlsClient in class layout).
-    // CA cert is gated by ENABLE_CLOUD_CREDENTIALS — empty string in Public builds.
-    const char* caCert = CloudCredentials::caCert();
-    if (strlen(caCert) > 0) {
-        _trustAnchors.reset(new BearSSL::X509List(caCert));
-        _tlsClient->setTrustAnchors(_trustAnchors.get());
+
+    // v1.2.5: apply the plan through the SAME seam the host tests exercise.
+    // CA_CERT  -> setTrustAnchors(X509List)
+    // FINGERPRINT_SHA1 -> setFingerprint(uint8_t[20]) (real BearSSL API)
+    // setInsecure() is NEVER used (spec). Without a usable identity (Public
+    // build) begin() returns false here -> connect() never runs -> safe.
+    Esp8266MqttTlsAdapter tlsAdapter(*_tlsClient, _trustAnchors);
+    if (!applyMqttTlsPlan(tlsAdapter, tlsPlan)) {
+        Serial.print(F("MQTT_TLS_APPLY_FAILED mode="));
+        Serial.println(mqttTlsModeLabel(tlsPlan.mode));
+        return false;
     }
 
     // Raw pointer alias for PubSubClient constructor (takes WiFiClient& reference)

@@ -3,7 +3,7 @@
  * mqtt_client.h — lightweight MQTT-over-TLS client for ESP8266 (v0.4.0)
  *
  * Uses PubSubClient over WiFiClientSecure (BearSSL).
- * Broker connection parameters come from include/cloud_secrets.h (git-ignored).
+ * Broker connection parameters come from config/cloud_secrets.h (git-ignored).
  *
  * Security:
  *   - TLS enforced (no plaintext MQTT)
@@ -18,6 +18,8 @@
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include "cloud/cloud_credentials.h"  // credential isolation gate (ENABLE_CLOUD_CREDENTIALS)
+#include "cloud/mqtt_tls_policy.h"    // TLS identity plan (v1.2.5)
+#include "cloud/mqtt_tls_adapter.h"   // injectable TLS application seam (v1.2.5)
 
 // ---- Topic structure ----
 // remote-ac/v1/devices/{device_id}/telemetry     — ESP publish (JSON telemetry)
@@ -47,6 +49,12 @@ struct MqttConfig {
 
     // TLS fingerprint pinning (optional, set to "" to disable)
     const char* tls_fingerprint   = "";
+
+    // TLS CA certificate (PEM). Empty in Public builds. v1.2.5: begin()
+    // derives the TLS identity plan from THIS field + tls_fingerprint only —
+    // it never reads CloudCredentials globals directly. CA wins when both
+    // are valid; fingerprint is used only when no valid CA is present.
+    const char* ca_cert           = "";
 };
 
 // Forward declare PubSubClient callback type (raw function pointer for ESP8266 compatibility)
