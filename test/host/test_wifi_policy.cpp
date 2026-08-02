@@ -27,7 +27,8 @@ static int runCase(const char* name, int expected) {
   std::printf("WIFI_AUTOCONNECT_POLICY_CASE=%s expected=%d actual=%d\n",
               name, expected, actual);
   // plan agreement: for a valid configuration the plan must mirror the gate
-  const WifiConnectPlan p = makeWifiConnectPlan("any-ssid", nullptr, false);
+  const WifiConnectPlan p =
+      makeWifiConnectPlan(WIFI_SOURCE_COMPILED_LOCAL_WPA, "any-ssid", true);
   assert(p.autoConnectAllowed == (actual ? true : false));
   if (actual != expected) {
     std::printf("WIFI_AUTOCONNECT_POLICY_CASE_FAIL=%s\n", name);
