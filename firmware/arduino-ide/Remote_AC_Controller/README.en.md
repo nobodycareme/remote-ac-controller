@@ -168,7 +168,7 @@ Runtime values are **not** configured in this sketch folder:
 | Open SSID           | serial command `wifi connect <ssid>` (explicit open SSID)  | `ENABLE_WIFI=1`                   |
 | Campus parameters   | the profile header (SSID / portal host / ac_id / cert pin) | `ENABLE_CAMPUS_AUTH=1`            |
 | Campus credentials  | `RemoteACCore/src/config/campus_secrets.h`                 | `ENABLE_CONTROLLED_LIVE_AUTH=1`   |
-| MQTT broker         | `RemoteACCore/src/cloud_secrets.h`                         | `ENABLE_CLOUD_CREDENTIALS=1`      |
+| MQTT broker         | `RemoteACCore/src/config/cloud_secrets.h`                         | `ENABLE_CLOUD_CREDENTIALS=1`      |
 
 ```bash
 # Home Wi-Fi credentials (home/lab WPA/WPA2, mutually exclusive with campus)
@@ -182,13 +182,14 @@ cp ~/Arduino/libraries/RemoteACCore/src/config/campus_secrets.example.h \
    ~/Arduino/libraries/RemoteACCore/src/config/campus_secrets.h
 
 # MQTT credentials (create only when cloud is enabled)
-cp ../../agent-platformio/include/cloud_secrets.example.h \
-   ~/Arduino/libraries/RemoteACCore/src/cloud_secrets.h
+cp ~/Arduino/libraries/RemoteACCore/src/config/cloud_secrets.example.h \
+   ~/Arduino/libraries/RemoteACCore/src/config/cloud_secrets.h
 ```
 
-> `cloud_secrets.h` must sit in the library's `src/` folder (which Arduino adds
-> to the include path); `campus_secrets.h` must sit in `src/config/` (next to
-> `campus_credentials.h`, which includes it). If missing, the build fails with
+> `cloud_secrets.h` and `campus_secrets.h` both sit in the library's
+> `src/config/` folder. PlatformIO and Arduino IDE share this one canonical
+> Cloud file; the deprecated `src/cloud_secrets.h` and PlatformIO `include/`
+> paths must not exist. If the canonical file is missing, the build fails with
 > an explicit `#error` rather than silently using empty credentials.
 
 **Never commit** `globals.h`, `campus_secrets.h`, `cloud_secrets.h`, or any
@@ -300,7 +301,7 @@ identically.
 
 ### Cloud features do not work
 - You need both `ENABLE_CLOUD=1` and `ENABLE_CLOUD_CREDENTIALS=1`, plus an
-  existing `cloud_secrets.h`.
+  existing canonical `RemoteACCore/src/config/cloud_secrets.h`.
 - The serial log should show `CLOUD_MQTT_INIT_OK`.
 
 ### Campus auth latches into `WIFI_BLOCKED` and stops retrying

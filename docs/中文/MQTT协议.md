@@ -200,7 +200,7 @@ ACL 配置块。
 
 ## 6. 传输安全
 
-- MQTT 运行在 TLS 之上。设备固定（pin）CA 并校验 Broker 证书 —— 参见
+- MQTT 运行在 TLS 之上。设备通过 BearSSL 校验 Broker 证书：**CA 证书优先**（`setTrustAnchors`）；没有有效 CA 时才使用 SHA-1 服务器证书指纹（`setFingerprint`，40 位十六进制、冒号可选），指纹固定的是当前服务器证书，证书更新后必须同步更新。二者都缺失时 MQTT 初始化被拒绝（`TLS_MATERIAL_MISSING`）。参见
   [`security-model.md`](./安全模型.md)。
 - BearSSL 缓冲区大小设置为 `setBufferSizes(4096, 1024)`；参见
   [`hardware.md`](./硬件说明.md) §5。

@@ -2,6 +2,21 @@
 
 # Changelog
 
+## [1.2.5] - 2026-08-02
+
+### Fixed
+
+- **MQTT TLS fingerprints are now applied at runtime**: `MqttClientWrapper::begin()` derives a single TLS identity plan (`MqttTlsPlan`) and applies it through an injectable adapter to the BearSSL client — when only a valid fingerprint is configured, `setFingerprint()` is actually called instead of leaving `tls_fingerprint` unused.
+- **CA priority, fingerprint fallback**: when both a valid CA and a valid fingerprint are present, only the CA is used (`setTrustAnchors`); the SHA-1 fingerprint (`setFingerprint`) is used only when no valid CA exists; if neither is present `begin()` returns false and the cloud state machine is not entered, with a non-sensitive code (`TLS_MATERIAL_MISSING` / `TLS_FINGERPRINT_INVALID`).
+- **SSIDs containing spaces are no longer rejected**: the build-time Python validator no longer uses `" " not in ssid`; `Home WiFi`, `Lab Network 2` and similar names are valid.
+- **Unified 32-byte SSID contract**: a single C++ rule (`wifi_ssid_validation.h`, 1-32 UTF-8 bytes, control characters/all-space/template values rejected) is mirrored by the Python build-time validator and enforced for `wifi connect <ssid>` at runtime.
+- **Python/C++ SSID rule parity test**: both languages consume the same shared test vectors and return identical valid/errorCode results.
+
+### Notes
+
+- Cloud API, database, MQTT message format, and the PCB are unchanged; PCB stays Rev 1.0.1.
+- Prefer a CA certificate for long-term deployments; a fingerprint pins the current server certificate and must be updated when the certificate rotates.
+
 ## [1.2.4] - 2026-08-02
 
 ### Fixed

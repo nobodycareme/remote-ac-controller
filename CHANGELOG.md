@@ -2,6 +2,21 @@
 
 # 更新日志 / Changelog
 
+## [1.2.5] - 2026-08-02
+
+### 修复
+
+- **MQTT TLS 指纹真正应用到运行时**：`MqttClientWrapper::begin()` 现在通过统一的 TLS 身份策略（`MqttTlsPlan`）和可注入适配器把 CA 或 SHA-1 指纹应用到 BearSSL 客户端——仅配置有效指纹时实际调用 `setFingerprint()`，不再让 `tls_fingerprint` 字段闲置。
+- **明确 CA 优先、指纹回退**：同时配置有效 CA 与有效指纹时只使用 CA（`setTrustAnchors`）；没有有效 CA 时才使用指纹（`setFingerprint`）；两者都缺失时 `begin()` 返回 false，不进入 Cloud 状态机，输出非敏感错误码（`TLS_MATERIAL_MISSING` / `TLS_FINGERPRINT_INVALID`）。
+- **修复含空格 SSID 被错误拒绝**：构建期 Python 校验不再使用 `" " not in ssid`，`Home WiFi`、`Lab Network 2` 等含普通空格的 SSID 现在合法。
+- **统一 32 字节 SSID 上限**：新增 `wifi_ssid_validation.h` 单一 C++ 规则（1-32 UTF-8 字节、拒控制字符、拒全空格、拒模板值），Python 构建期校验镜像同一规则；`wifi connect <ssid>` 运行时同样执行。
+- **Python 与 C++ SSID 规则一致性测试**：同一组测试向量（`test/fixtures/wifi_ssid_validation_cases.json`）由 Python 与 C++ 共同消费，二者返回相同的 valid/errorCode。
+
+### 说明
+
+- Cloud API、数据库、MQTT 消息格式和 PCB 无破坏性变化；PCB 保持 Rev 1.0.1。
+- 推荐长期部署优先使用 CA 证书；指纹会在服务器证书更新后失效，需要同步更新。
+
 ## [1.2.4] - 2026-08-02
 
 ### 修复

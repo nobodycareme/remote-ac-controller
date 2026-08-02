@@ -23,7 +23,7 @@ RFC 5737.
 CI enforces part of this automatically: the `repo-hygiene` job in
 `.github/workflows/ci.yml` fails the build if `.pem`, `.key`, `.db`, or
 `.sqlite` files are tracked, and the `firmware-ci` job asserts that
-`include/secrets.h` and `include/cloud_secrets.h` are absent.
+the canonical `firmware/shared/RemoteACCore/src/config/cloud_secrets.h` is not committed and both deprecated paths (`firmware/agent-platformio/include/cloud_secrets.h` and `firmware/shared/RemoteACCore/src/cloud_secrets.h`) are absent.
 
 ## 2. Assets and Threat Actors
 
@@ -134,7 +134,12 @@ Two implementation rules that must not be relaxed:
   itself binds to `127.0.0.1` and is never exposed directly.
 - **Backend ↔ broker:** MQTT over TLS. The broker should listen on loopback
   only, with external access mediated by a TLS-terminating stream proxy.
-- **Device ↔ broker:** MQTT over TLS with CA validation on the device.
+- **Device ↔ broker:** MQTT over TLS with CA validation on the device
+  (`setTrustAnchors`). When no valid CA is present, a SHA-1 server-certificate
+  fingerprint is used instead (`setFingerprint`, 40 hex characters, colons
+  optional); the fingerprint pins the current server certificate and must be
+  updated when the certificate rotates. If neither is present, initialization
+  is refused (`TLS_MATERIAL_MISSING`).
 
 BearSSL error interpretation on the ESP8266:
 

@@ -27,6 +27,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 
 DEFAULT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REPO = "nobodycareme/remote-ac-controller"
@@ -36,6 +37,8 @@ FILES = [
     "README.en.md",
     ".github/release-notes/v1.2.2.md",
     ".github/release-notes/v1.2.3.md",
+    ".github/release-notes/v1.2.4.md",
+    ".github/release-notes/v1.2.5.md",
 ]
 SCREENSHOTS = ["dashboard-desktop.png", "dashboard-mobile.png"]
 
@@ -56,14 +59,15 @@ def read(p):
 def render_via_api(text, root):
     """Render Markdown through the GitHub /markdown endpoint."""
     payload = {"text": text, "mode": "gfm", "context": REPO}
-    tmp = os.path.join(root, "_render_payload.json")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(payload, f)
+    fd, tmp = tempfile.mkstemp(prefix="remote-ac-render-", suffix=".json")
     try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(payload, f)
         r = subprocess.run(
             ["gh", "api", "--method", "POST", "/markdown",
              "--input", tmp, "-H", "Accept: text/html"],
-            capture_output=True, text=True, timeout=120,
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=120,
         )
         return r.stdout, r.returncode
     finally:

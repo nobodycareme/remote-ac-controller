@@ -505,6 +505,8 @@ def main():
         "README.en.md": en,
         ".github/release-notes/v1.2.2.md": read(".github/release-notes/v1.2.2.md"),
         ".github/release-notes/v1.2.3.md": read(".github/release-notes/v1.2.3.md"),
+        ".github/release-notes/v1.2.4.md": read(".github/release-notes/v1.2.4.md"),
+        ".github/release-notes/v1.2.5.md": read(".github/release-notes/v1.2.5.md"),
     }
     for f, txt in targets.items():
         for w in INTERNAL_RELEASE_LANGUAGE:
@@ -516,7 +518,9 @@ def main():
 
     # 14b) release notes must not embed repo-relative image paths or <img>
     rn = targets[".github/release-notes/v1.2.2.md"] + \
-         targets[".github/release-notes/v1.2.3.md"]
+         targets[".github/release-notes/v1.2.3.md"] + \
+         targets[".github/release-notes/v1.2.4.md"] + \
+         targets[".github/release-notes/v1.2.5.md"]
     rn_img = 0
     for m in re.finditer(r"<img|!\[", rn):
         # an image markdown/HTML reference in release notes is an error
@@ -794,6 +798,137 @@ def main():
                 ok = False
     print(f"V124_DOC_MISSING_COUNT={v124_missing}")
     print(f"V124_DOC_FORBIDDEN_CLAIM_COUNT={v124_forbidden}")
+
+    # 20) v1.2.5 TLS-runtime + SSID-rule documentation accuracy.
+    #     Presence checks across the setup pair + the PIO READMEs.
+    v125_missing = 0
+    v125_setup = {"docs/中文/首次配置.md": setup_cn,
+                  "docs/English/first-time-setup.md": setup_en,
+                  "firmware/agent-platformio/README.md": read("firmware/agent-platformio/README.md"),
+                  "firmware/agent-platformio/README.en.md": read("firmware/agent-platformio/README.en.md")}
+    joined = " ".join(v125_setup.values())
+
+    # 20a) TLS fingerprint runtime + CA priority + rotation warning present.
+    fp_runtime = ("setFingerprint" in joined) and ("指纹" in joined or "fingerprint" in joined)
+    ca_priority = ("优先" in joined and "CA" in joined) or \
+                  ("takes priority" in joined and "CA" in joined)
+    rotation = ("证书更新" in joined and "同步更新" in joined) or \
+               ("updated when the certificate rotates" in joined) or \
+               ("证书更新后必须同步更新" in joined)
+    tls_disable_guidance_count = 0
+    for f, txt in v125_setup.items():
+        for pat in ["禁用 TLS 校验", "关闭 TLS 校验", "disable TLS validation",
+                    "关闭证书校验", "disable certificate validation"]:
+            for m in re.finditer(re.escape(pat), txt):
+                if sentence_negated(txt, m.start()):
+                    continue
+                tls_disable_guidance_count += 1
+                print(f"V125_DISABLE_TLS_GUIDANCE {f}: {pat!r}")
+                ok = False
+    if fp_runtime:
+        print("MQTT_FINGERPRINT_RUNTIME_DOC_PRESENT=True")
+    else:
+        print("MQTT_FINGERPRINT_RUNTIME_DOC_PRESENT=False")
+        v125_missing += 1
+        ok = False
+    if ca_priority:
+        print("MQTT_CA_PRIORITY_DOC_PRESENT=True")
+    else:
+        print("MQTT_CA_PRIORITY_DOC_PRESENT=False")
+        v125_missing += 1
+        ok = False
+    if rotation:
+        print("MQTT_FINGERPRINT_ROTATION_WARNING_PRESENT=True")
+    else:
+        print("MQTT_FINGERPRINT_ROTATION_WARNING_PRESENT=False")
+        v125_missing += 1
+        ok = False
+    print(f"TLS_DISABLE_GUIDANCE_COUNT={tls_disable_guidance_count}")
+
+    # 20b) SSID rules: internal space allowed + 32-byte limit + no false claims.
+    ssid_space_ok = ("允许包含普通空格" in joined) or \
+                    ("may contain ordinary internal spaces" in joined) or \
+                    ("允许包含空格" in joined)
+    ssid_32_ok = ("32 字节" in joined) or ("32-byte" in joined) or ("32 bytes" in joined)
+    ssid_char_false = 0
+    ssid_no_space_false = 0
+    ssid_no_limit_false = 0
+    fp_not_applied_false = 0
+    ca_fp_double_false = 0
+    fp_never_rotate_false = 0
+    for f, txt in v125_setup.items():
+        # "SSID 不能含空格" style false claims (negated statements are fine)
+        for pat in ["SSID 不能含空格", "SSID 不允许含空格", "SSID cannot contain spaces",
+                    "SSID 不能包含空格", "SSID may not contain spaces"]:
+            for m in re.finditer(re.escape(pat), txt):
+                if sentence_negated(txt, m.start()):
+                    continue
+                ssid_no_space_false += 1
+                print(f"V125_SSID_NO_SPACE_FALSE_CLAIM {f}: {pat!r}")
+                ok = False
+        # "no practical length limit" false claims (removing the 32-byte cap)
+        for pat in ["no practical limit on SSID length", "SSID 长度没有限制",
+                    "SSID 长度无上限", "SSID 无长度限制"]:
+            if pat in txt:
+                ssid_no_limit_false += 1
+                print(f"V125_SSID_NO_LIMIT_FALSE_CLAIM {f}: {pat!r}")
+                ok = False
+        # "fingerprint stored but never applied at runtime" false claims
+        for pat in ["is stored for reference; it is not applied",
+                    "仅作参考，不会应用到 TLS", "填写后不生效",
+                    "not applied to the TLS client"]:
+            if pat in txt:
+                fp_not_applied_false += 1
+                print(f"V125_FINGERPRINT_NOT_APPLIED_FALSE_CLAIM {f}: {pat!r}")
+                ok = False
+        # "CA and fingerprint are BOTH validated (double)" false claims
+        for pat in ["两者会一起进行双重校验", "同时使用 CA 和指纹双重校验",
+                    "双重校验", "both are used for double validation"]:
+            if pat in txt:
+                ca_fp_double_false += 1
+                print(f"V125_CA_FP_DOUBLE_VALIDATION_FALSE_CLAIM {f}: {pat!r}")
+                ok = False
+        # "fingerprint is permanent / never needs updating" false claims
+        for pat in ["指纹是永久的", "指纹永不过期", "never needs to change",
+                    "无需关注证书更新", "指纹不需要随证书更新"]:
+            if pat in txt:
+                fp_never_rotate_false += 1
+                print(f"V125_FINGERPRINT_NEVER_ROTATE_FALSE_CLAIM {f}: {pat!r}")
+                ok = False
+        # "32 个字符/汉字" instead of bytes false claims
+        for pat in ["32 个字符", "32 个中文字符", "32 characters", "32 个汉字"]:
+            if pat in txt:
+                ssid_char_false += 1
+                print(f"V125_SSID_CHARACTER_LENGTH_FALSE_CLAIM {f}: {pat!r}")
+                ok = False
+    if ssid_space_ok:
+        print("WIFI_SSID_INTERNAL_SPACE_ALLOWED_DOC_PRESENT=True")
+    else:
+        print("WIFI_SSID_INTERNAL_SPACE_ALLOWED_DOC_PRESENT=False")
+        v125_missing += 1
+        ok = False
+    if ssid_32_ok:
+        print("WIFI_SSID_MAX_32_BYTES_DOC_PRESENT=True")
+    else:
+        print("WIFI_SSID_MAX_32_BYTES_DOC_PRESENT=False")
+        v125_missing += 1
+        ok = False
+    print(f"WIFI_SSID_CHARACTER_LENGTH_FALSE_CLAIM_COUNT={ssid_char_false}")
+    print(f"WIFI_SSID_NO_SPACE_FALSE_CLAIM_COUNT={ssid_no_space_false}")
+    print(f"WIFI_SSID_NO_LIMIT_FALSE_CLAIM_COUNT={ssid_no_limit_false}")
+    print(f"V125_FINGERPRINT_NOT_APPLIED_FALSE_CLAIM_COUNT={fp_not_applied_false}")
+    print(f"V125_CA_FP_DOUBLE_VALIDATION_FALSE_CLAIM_COUNT={ca_fp_double_false}")
+    print(f"V125_FINGERPRINT_NEVER_ROTATE_FALSE_CLAIM_COUNT={fp_never_rotate_false}")
+    print(f"V125_DOC_MISSING_COUNT={v125_missing}")
+
+    # 20c) CN/EN TLS priority agreement: both languages state CA priority.
+    cn_has_priority = "优先" in setup_cn and "CA" in setup_cn
+    en_has_priority = "priority" in setup_en and "CA" in setup_en
+    if cn_has_priority != en_has_priority:
+        print("V125_CN_EN_TLS_PRIORITY_MISMATCH=True")
+        ok = False
+    else:
+        print("V125_CN_EN_TLS_PRIORITY_MISMATCH=False")
 
     print(f"PUBLIC_DOCS_PASS={'True' if ok else 'False'}")
     return 0 if ok else 1

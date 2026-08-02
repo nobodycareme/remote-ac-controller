@@ -207,7 +207,7 @@ On your build machine:
 
 ```bash
 cd firmware/agent-platformio
-cp include/cloud_secrets.example.h include/cloud_secrets.h   # MQTT host, account, CA cert
+cp ../shared/RemoteACCore/src/config/cloud_secrets.example.h ../shared/RemoteACCore/src/config/cloud_secrets.h   # MQTT host, account, CA or fingerprint
 cp include/secrets.example.h       include/secrets.h         # campus account (controlled live auth only)
 ```
 

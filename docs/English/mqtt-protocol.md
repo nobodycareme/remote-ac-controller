@@ -206,8 +206,13 @@ rather than published into the void.
 
 ## 6. Transport Security
 
-- MQTT runs over TLS. The device pins the CA and validates the broker
-  certificate — see [`security-model.md`](./security-model.md).
+- MQTT runs over TLS. The device validates the broker certificate via BearSSL:
+  the **CA certificate takes priority** (`setTrustAnchors`); a SHA-1
+  server-certificate fingerprint (`setFingerprint`, 40 hex characters, colons
+  optional) is used only when no valid CA is present. The fingerprint pins the
+  current server certificate, so it must be updated when the certificate
+  rotates. If neither is present, MQTT initialization is refused
+  (`TLS_MATERIAL_MISSING`). See [`security-model.md`](./security-model.md).
 - BearSSL buffers are sized `setBufferSizes(4096, 1024)`; see
   [`hardware.md`](./hardware.md) §5.
 - Plaintext MQTT is acceptable only for local development

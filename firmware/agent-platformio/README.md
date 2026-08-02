@@ -14,8 +14,7 @@ agent-platformio/
 ├── src/
 │   ├── main.cpp            # 薄入口层（→ appSetup/appLoop）
 │   └── private_ir_codes/   # 私有红外码数据（仅 PlatformIO 模式）
-├── include/
-│   └── cloud_secrets.example.h  # MQTT 凭据模板
+├── include/                 # PlatformIO 专用公开头文件
 ├── lib/                    # PlatformIO 管理的库
 ├── test/                   # 单元测试
 ├── tools/
@@ -76,9 +75,9 @@ agent-platformio/
 
 3. **云凭据**（MQTT 连接，可选）：
    ```bash
-   cd agent-platformio
-   cp include/cloud_secrets.example.h include/cloud_secrets.h
-   # 编辑 include/cloud_secrets.h 填入你的 MQTT Broker 信息
+   cd ../shared/RemoteACCore/src/config
+   cp cloud_secrets.example.h cloud_secrets.h
+   # 编辑 canonical cloud_secrets.h；PlatformIO 与 Arduino IDE 共用此文件
    ```
 
 ### 构建配置（Profile 矩阵）
@@ -91,9 +90,11 @@ agent-platformio/
 | `local-campus-example` | 0 | 0 | 1 | 西电校园网示例（需 profiles/xidian.h + campus_secrets.h） |
 | `public-cloud-example` | 1 | 0 | 0 | 公开云传输矩阵条目（同 public 的显式名称） |
 
-所有公开 Profile 均保持 `ENABLE_CONTROLLED_LIVE_AUTH=0` 与 `ENABLE_IR_MUTATING_COMMANDS=0`。真实凭据只存在于 git-ignored 文件中，绝不写入本仓库。
+所有公开 Profile 均保持 `ENABLE_CONTROLLED_LIVE_AUTH=0` 与 `ENABLE_IR_MUTATING_COMMANDS=0`。真实凭据只存在于 git-ignored 文件中，绝不写入本仓库。Cloud 配置的唯一权威路径是 `shared/RemoteACCore/src/config/cloud_secrets.h`；两个旧路径仍存在时 `dev.ps1` 会硬失败。
 
 > **v1.2.4：只复制模板不能通过构建。** `local-wifi` / `local-wifi-cloud` 构建前运行 `tools/validate-cloud-secrets.py` 做内容校验（WiFi SSID/密码规则、Cloud 主机/端口/设备 ID/账号密码/TLS 材料），模板占位值（`your_wifi_name`、`your-broker.example.com`、`change-me`、空 CA/指纹等）会被拒绝并输出非敏感错误码。`wifi connect`（无参数）使用本地 WPA 配置；`wifi connect <ssid>` 临时切换到指定开放 SSID，不使用本地密码，也不支持在命令行输入 WiFi 密码。
+>
+> **v1.2.5：SSID 与 TLS 规则。** SSID 允许包含普通空格（`Home WiFi`、`Lab Network 2`），按 UTF-8 字节计数、上限 32 字节，不能全为空格或含控制字符，不会被 trim 或截断。TLS 上 CA 证书优先：同时配置有效 CA 与有效指纹时只使用 CA；没有有效 CA 时才用 SHA-1 服务器证书指纹（40 位十六进制，冒号可选），证书更新后需同步更新指纹；两者都缺失时构建/初始化停止（`TLS_MATERIAL_MISSING`）；不要关闭 TLS 校验。
 
 ### 上传
 
