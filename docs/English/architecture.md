@@ -52,7 +52,8 @@ Pin assignments live in exactly one place: `include/config/hardware_config.h`.
 
 **IR dispatch has a single entry point** — `dispatchIrAction()` in
 `src/cloud/command_service.cpp`. Legacy `set_power` / `set_temperature`
-commands never transmit IR; they are acknowledged as `accepted_mock`. This
+commands never transmit IR while the policy is disabled; they are acknowledged
+as `blocked_by_ir_policy` with reason `real_ir_control_disabled`. This
 guarantees that every real IR emission passes through one policy checkpoint.
 
 ## 3. Cloud Backend (`cloud/backend/`)

@@ -14,7 +14,6 @@ beforeEach(async () => {
   await initDb();
   (config as any).REAL_IR_PRODUCTION_CONTROL_ENABLED = false;
   (config as any).WEB_REAL_IR_ENABLED = false;
-  (config as any).IR_OWNER_PASSWORD = '';
 });
 
 describe('production real IR control', () => {
@@ -48,23 +47,24 @@ describe('owner / guest session model', () => {
   });
 
   it("createSession('owner') carries owner role and trusted flag", async () => {
-    (config as any).IR_OWNER_PASSWORD = 'enabled';
     const { sessionId } = await createSession('owner');
     const s = getSession(sessionId);
     expect(s!.role).toBe('owner');
     expect(s!.trusted).toBe(true);
   });
 
-  it('loginOwner returns null when no owner password configured', async () => {
+  it('loginOwner returns null when WEB_PASSWORD is not configured', async () => {
+    const original = (config as any).WEB_PASSWORD;
+    (config as any).WEB_PASSWORD = '';
     const r = await loginOwner('anything');
+    (config as any).WEB_PASSWORD = original;
     expect(r).toBeNull();
   });
 
   it('loginOwner returns trusted owner session with correct password', async () => {
-    (config as any).IR_OWNER_PASSWORD = 'enabled';
     const ok = await loginOwner('test-admin-pass');
     expect(ok).not.toBeNull();
-    expect(ok!.user).toBe(config.IR_OWNER_USER);
+    expect(ok!.user).toBe(config.WEB_USER);
     expect(ok!.trusted).toBe(true);
     const s = getSession(ok!.sessionId);
     expect(s!.role).toBe('owner');
@@ -72,7 +72,6 @@ describe('owner / guest session model', () => {
   });
 
   it('loginOwner rejects wrong password', async () => {
-    (config as any).IR_OWNER_PASSWORD = 'enabled';
     const r = await loginOwner('wrong-pass');
     expect(r).toBeNull();
   });
@@ -111,7 +110,6 @@ describe('requireOwnerCsrf guard denies non-owner / bad origin / bad csrf', () =
 
   it('owner session + valid origin + valid csrf → 200', async () => {
     const app = await buildApp();
-    (config as any).IR_OWNER_PASSWORD = 'enabled';
     const { sessionId, csrf } = await createSession('owner');
     const res = await app.inject({
       method: 'GET',
@@ -126,7 +124,6 @@ describe('requireOwnerCsrf guard denies non-owner / bad origin / bad csrf', () =
 
   it('owner session + invalid origin → 403 origin_denied', async () => {
     const app = await buildApp();
-    (config as any).IR_OWNER_PASSWORD = 'enabled';
     const { sessionId, csrf } = await createSession('owner');
     const res = await app.inject({
       method: 'GET',
@@ -141,7 +138,6 @@ describe('requireOwnerCsrf guard denies non-owner / bad origin / bad csrf', () =
 
   it('owner session + wrong csrf → 403 csrf_invalid', async () => {
     const app = await buildApp();
-    (config as any).IR_OWNER_PASSWORD = 'enabled';
     const { sessionId } = await createSession('owner');
     const res = await app.inject({
       method: 'GET',

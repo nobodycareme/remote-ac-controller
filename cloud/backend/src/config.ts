@@ -74,11 +74,9 @@ const schema = z.object({
   REAL_IR_DEBUG_COOLDOWN_SECONDS: z.coerce.number().default(10),
   REAL_IR_DEBUG_COMMAND_TTL_SECONDS: z.coerce.number().default(30),
   REAL_IR_DEBUG_SESSION_TTL_SECONDS: z.coerce.number().default(3600),
-  // Owner credentials for the privileged IR-action path. In public_guest mode a
-  // guest session is auto-created (role='guest', no IR). An owner session
-  // (role='owner') is minted only by /api/auth/login with the correct password.
-  IR_OWNER_USER: z.string().default('admin'),
-  IR_OWNER_PASSWORD: z.string().default(''),
+  // WEB_USER and WEB_PASSWORD are the only Owner login credentials. Legacy
+  // IR_OWNER_* environment variables are intentionally not part of the schema
+  // and therefore cannot enable or alter Owner authorization.
   // Long-lived trusted owner-device sessions. Default is one year.
   TRUSTED_OWNER_SESSION_TTL_DAYS: z.coerce.number().default(365),
   // Idempotency / replay window for IR commands (ms). A command older than this

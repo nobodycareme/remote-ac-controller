@@ -506,7 +506,7 @@ def main():
         ".github/release-notes/v1.2.2.md": read(".github/release-notes/v1.2.2.md"),
         ".github/release-notes/v1.2.3.md": read(".github/release-notes/v1.2.3.md"),
         ".github/release-notes/v1.2.4.md": read(".github/release-notes/v1.2.4.md"),
-        ".github/release-notes/v1.2.5.md": read(".github/release-notes/v1.2.5.md"),
+        ".github/release-notes/v1.2.6.md": read(".github/release-notes/v1.2.6.md"),
     }
     for f, txt in targets.items():
         for w in INTERNAL_RELEASE_LANGUAGE:
@@ -520,7 +520,7 @@ def main():
     rn = targets[".github/release-notes/v1.2.2.md"] + \
          targets[".github/release-notes/v1.2.3.md"] + \
          targets[".github/release-notes/v1.2.4.md"] + \
-         targets[".github/release-notes/v1.2.5.md"]
+         targets[".github/release-notes/v1.2.6.md"]
     rn_img = 0
     for m in re.finditer(r"<img|!\[", rn):
         # an image markdown/HTML reference in release notes is an error

@@ -109,7 +109,7 @@ frame you have not reproduced.
 
 | Status | Meaning | Action |
 |--------|---------|--------|
-| `accepted_mock` | Command accepted, no IR sent | Expected while kill switches are off |
+| `blocked_by_ir_policy` / `real_ir_control_disabled` | Command round-trip completed, no IR sent | Expected while real IR is disabled |
 | `blocked_by_ir_policy` | Firmware policy gate refused | Check firmware IR configuration |
 | `ir_state_disabled` | State's `enabled` flag is false | Enable it in the catalogue |
 | `ir_unknown_code` | Code not in the firmware registry | Regenerate the registry and reflash |

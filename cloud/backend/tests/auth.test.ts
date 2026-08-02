@@ -9,8 +9,8 @@ import { config } from '../src/config';
 describe('auth', () => {
   beforeEach(async () => {
     await initDb();
-    (config as any).IR_OWNER_PASSWORD = '';
     (config as any).WEB_PASSWORD = bcrypt.hashSync('test-admin-pass', 8);
+    (config as any).WEB_USER = 'admin';
   });
 
   it('verifyPassword accepts correct bcrypt password', async () => {
@@ -31,8 +31,7 @@ describe('auth', () => {
     expect(s!.trusted).toBe(false);
   });
 
-  it('createSession("owner") mints a trusted owner session bound to IR_OWNER_USER', async () => {
-    (config as any).IR_OWNER_PASSWORD = 'enabled';
+  it('createSession("owner") mints a trusted owner session bound to WEB_USER', async () => {
     const created = await createSession('owner');
     const s = getSession(created.sessionId);
     expect(s).not.toBeNull();
@@ -75,7 +74,6 @@ describe('auth', () => {
   });
 
   it('owner trusted sessions expire automatically when the owner password rotates', async () => {
-    (config as any).IR_OWNER_PASSWORD = 'enabled';
     const currentHash = bcrypt.hashSync('test-admin-pass', 8);
     (config as any).WEB_PASSWORD = currentHash;
 
@@ -90,12 +88,27 @@ describe('auth', () => {
     expect(rotated).not.toBeNull();
     expect(getSession(rotated!.sessionId)!.trusted).toBe(true);
   });
+
+  it('Owner login validates WEB_USER and WEB_PASSWORD only', async () => {
+    (config as any).IR_OWNER_PASSWORD = '';
+    expect(await loginOwner('test-admin-pass', { username: 'admin' })).not.toBeNull();
+    expect(await loginOwner('wrong-password', { username: 'admin' })).toBeNull();
+    expect(await loginOwner('test-admin-pass', { username: 'not-admin' })).toBeNull();
+    (config as any).IR_OWNER_PASSWORD = 'legacy-value-must-have-no-effect';
+    expect(await loginOwner('test-admin-pass', { username: 'admin' })).not.toBeNull();
+  });
+
+  it('empty WEB_PASSWORD cannot become an Owner login switch', async () => {
+    (config as any).WEB_PASSWORD = '';
+    (config as any).IR_OWNER_PASSWORD = 'legacy-value-must-have-no-effect';
+    expect(await loginOwner('', { username: 'admin' })).toBeNull();
+    expect(await loginOwner('legacy-value-must-have-no-effect', { username: 'admin' })).toBeNull();
+  });
 });
 
 describe('persistent trust（长期有效可撤销信任模型）', () => {
   beforeEach(async () => {
     await initDb();
-    (config as any).IR_OWNER_PASSWORD = 'enabled';
     (config as any).WEB_PASSWORD = bcrypt.hashSync('test-admin-pass', 8);
   });
 

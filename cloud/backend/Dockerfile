@@ -1,15 +1,15 @@
 # Multi-stage build: frontend (Vite) + backend (tsc) -> slim runtime.
 FROM node:24-slim AS frontend-builder
 WORKDIR /app/frontend
-COPY frontend/package.json ./
-RUN npm install --no-audit --no-fund
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
 RUN npm run build
 
 FROM node:24-slim AS backend-builder
 WORKDIR /app/backend
-COPY backend/package.json ./
-RUN npm install --no-audit --no-fund
+COPY backend/package.json backend/package-lock.json ./
+RUN npm ci --no-audit --no-fund
 COPY backend/ ./
 RUN npm run build
 

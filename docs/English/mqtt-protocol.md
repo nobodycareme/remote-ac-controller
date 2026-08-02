@@ -165,9 +165,9 @@ Status enumeration (`firmware/src/cloud/command_service.cpp`):
 
 | Status | Meaning |
 |--------|---------|
-| `accepted_mock` | Accepted but not physically actuated (legacy/simulated path) |
+| `accepted_mock` | Legacy/special mock implementation only; not the default IR-disabled result |
 | `ir_executed` | IR frame transmitted |
-| `blocked_by_ir_policy` | Rejected by the firmware IR policy gate |
+| `blocked_by_ir_policy` | Safely blocked by firmware policy; normally reason `real_ir_control_disabled` |
 | `ir_state_disabled` | The requested state is disabled in this build |
 | `ir_unknown_code` | No frame is provisioned for the requested code |
 | `ir_module_busy` | IR module was mid-operation |

@@ -58,13 +58,14 @@ async function createGuestSession(reply: FastifyReply) {
 
 export async function registerAuthRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post('/api/auth/login', { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (req, reply) => {
-    if (!config.IR_OWNER_PASSWORD) {
+    if (!config.WEB_PASSWORD) {
       reply.code(410).send({ error: 'login_disabled', detail: 'Owner login not configured' });
       return;
     }
     const body = (req.body ?? {}) as { username?: string; password?: string };
     const password = typeof body.password === 'string' ? body.password : '';
-    const result = await loginOwner(password, { trustedLabel: trustedLabelFromRequest(req) });
+    const username = typeof body.username === 'string' && body.username.length > 0 ? body.username : undefined;
+    const result = await loginOwner(password, { username, trustedLabel: trustedLabelFromRequest(req) });
     if (!result) {
       reply.code(401).send({ error: 'invalid_credentials' });
       return;

@@ -2,6 +2,22 @@
 
 # 更新日志 / Changelog
 
+## [1.2.6] - 2026-08-03
+
+### 修复 / Fixed
+
+- 使用已验证并固定摘要的 Mosquitto 2.1.2 Alpine 镜像，恢复全新克隆的 Compose 可复现性。
+- Broker 健康检查改用后端 MQTT 账号认证，ACL 仅新增 `$SYS/broker/version` 读取权限。
+- Docker 前后端构建均改为复制锁文件并执行 `npm ci`。
+- 安全命令闭环合同修正为 `blocked_by_ir_policy` / `real_ir_control_disabled`。
+- Owner 登录统一使用 `WEB_USER` 与 `WEB_PASSWORD`；旧 `IR_OWNER_*` 变量不再影响授权。
+- 新增跨平台 scrypt Owner 密码哈希生成工具、自检与非交互 CI 模式。
+
+### 说明 / Notes
+
+- Cloud API、数据库结构、MQTT 主题、PCB 数据和真实 IR 数据均未改变；PCB 仍为 Rev 1.0.1。
+- 真实 IR 默认关闭，仍需 Owner、Origin、CSRF、服务端策略、状态白名单和设备侧策略全部通过。
+
 ## [1.2.5] - 2026-08-02
 
 ### 修复
