@@ -165,8 +165,8 @@ def sabotage_12(root):
     # remove the empty-SSID hard guard from wifi_manager.cpp
     p = os.path.join(root, "firmware/shared/RemoteACCore/src/network/wifi_manager.cpp")
     txt = open(p, encoding="utf-8").read()
-    txt = txt.replace('Serial.print(F("WIFI_CONNECT_SKIPPED reason="));', "")
-    txt = txt.replace('Serial.println(wifiPlanReasonLabel(plan.reason));', "")
+    txt = txt.replace('Serial.print(F("WIFI_CONNECT_SKIPPED source="));', "")
+    txt = txt.replace('Serial.println(wifiPlanReasonLabel(out.reason));', "")
     open(p, "w", encoding="utf-8").write(txt)
 
 
@@ -257,6 +257,67 @@ def sabotage_21(root):
     open(p, "w", encoding="utf-8").write(txt)
 
 
+def sabotage_22(root):
+    # re-claim that cloud_secrets.h existing means the config is usable
+    p = os.path.join(root, "docs/中文/首次配置.md")
+    txt = open(p, encoding="utf-8").read()
+    txt = txt.replace(
+        "该 Profile 现在会启用 `ENABLE_CLOUD_CREDENTIALS=1`",
+        "cloud_secrets.h 存在即代表可用，无需修改内容")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_23(root):
+    # re-claim that `wifi connect <ssid>` still uses the local WPA password
+    p = os.path.join(root, "docs/中文/首次配置.md")
+    txt = open(p, encoding="utf-8").read()
+    txt = txt.replace(
+        "临时切换到指定的开放 SSID；**不会**读取或使用 `wifi_secrets.h` 中的密码",
+        "仍会使用 `wifi_secrets.h` 中的本地 WPA 密码连接")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_24(root):
+    # delete the TLS material requirement (CA/fingerprint)
+    p = os.path.join(root, "docs/中文/首次配置.md")
+    txt = open(p, encoding="utf-8").read()
+    txt = txt.replace(
+        "并且至少配置一个有效的 CA 证书或 TLS 指纹",
+        "TLS 证书配置可留空")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_25(root):
+    # re-allow the template broker host
+    p = os.path.join(root, "docs/English/first-time-setup.md")
+    txt = open(p, encoding="utf-8").read()
+    txt = txt.replace(
+        "the broker host must not be a template value such as `your-broker.example.com`",
+        "the broker host may remain `your-broker.example.com`")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_26(root):
+    # README claims the boot-time SSID can be empty and that is normal
+    p = os.path.join(root, "README.md")
+    txt = open(p, encoding="utf-8").read()
+    txt = txt.replace(
+        "默认也不会在开机时自动连接网络。",
+        "开机时状态页可能不显示实际 SSID，这属于正常现象。")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_27(root):
+    # CN/EN command semantics drift: EN no longer says the open SSID ignores
+    # the local password (while CN does)
+    p = os.path.join(root, "docs/English/first-time-setup.md")
+    txt = open(p, encoding="utf-8").read()
+    txt = txt.replace(
+        "temporarily switch to the given open SSID; **does not** read or use the `wifi_secrets.h` password",
+        "temporarily switch to the given open SSID using the local WPA password")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
 def main():
     results = [
         case(1, "markdown_in_html_block", sabotage_1),
@@ -280,6 +341,12 @@ def main():
         case(19, "campus_example_auto_auth", sabotage_19),
         case(20, "campus_audit_field", sabotage_20),
         case(21, "public_fully_offline", sabotage_21),
+        case(22, "cloud_exists_equals_valid", sabotage_22),
+        case(23, "open_ssid_uses_local_password", sabotage_23),
+        case(24, "tls_requirement_removed", sabotage_24),
+        case(25, "template_broker_allowed", sabotage_25),
+        case(26, "empty_status_is_normal", sabotage_26),
+        case(27, "cmd_semantics_drift", sabotage_27),
     ]
     total = len(results)
     passed = sum(results)

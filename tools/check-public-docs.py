@@ -571,11 +571,10 @@ def main():
 
     def sentence_negated(txt, pos):
         # Only an IMMEDIATE negation right before the claim counts ("不是完全
-        # 离线构建" is the correct disclaimer). A negation anywhere earlier in
-        # the sentence ("不包含真实凭据，Cloud 启用就会自动联网") must NOT
-        # exempt the claim.
+        # 离线构建" / "不要关闭 TLS 校验" are the correct disclaimers). A
+        # negation anywhere earlier in the sentence must NOT exempt the claim.
         pre = txt[max(0, pos - 8):pos]
-        return bool(re.search(r"(不是|并非|not |never )", pre))
+        return bool(re.search(r"(不是|并非|不要|别|勿|请勿|not |never |do not|don'?t )", pre))
 
     for f, txt in [("README.md", cn), ("README.en.md", en)]:
         for pat in FIRMWARE_ONLY_PHONE_CONTROL_CLAIMS:
@@ -694,6 +693,107 @@ def main():
         print("FIRMWARE_AUTOCONNECT_CLOUD_DEPENDENT feature_gates.h")
         ok = False
     print(f"FIRMWARE_PUBLIC_DOC_GUARD_ERROR_COUNT={cnt_fw_guard}")
+
+    # 19) v1.2.4 WiFi-runtime / cloud-validation documentation accuracy
+    #     (setup docs carry the canonical command semantics).
+    setup_pair = {"docs/中文/首次配置.md": setup_cn,
+                  "docs/English/first-time-setup.md": setup_en}
+    docs_all = {"README.md": cn, "README.en.md": en, **setup_pair,
+                "firmware/agent-platformio/README.md": read("firmware/agent-platformio/README.md"),
+                "firmware/agent-platformio/README.en.md": read("firmware/agent-platformio/README.en.md")}
+    v124_missing = 0
+    v124_forbidden = 0
+
+    # presence: runtime open SSID semantics + password warning + boot status
+    # + placeholder rejection + TLS requirement
+    runtime_sem = ("wifi connect <ssid>" in setup_cn and "wifi connect <ssid>" in setup_en)
+    pwd_warn = ("不支持在命令行输入 WiFi 密码" in setup_cn) or \
+               ("never accepted on the command line" in setup_en) or \
+               ("read or use the" in setup_en and "command line" in setup_en)
+    boot_status = ("NET_SOURCE" in setup_cn and "NET_SSID" in setup_cn)
+    placeholder_rej = ("your-broker.example.com" in setup_cn and "your_wifi_name" in setup_cn)
+    tls_req = ("CA 证书或 TLS 指纹" in setup_cn or "CA certificate or TLS fingerprint" in setup_en)
+
+    if not runtime_sem:
+        v124_missing += 1
+        print("WIFI_RUNTIME_OPEN_SSID_DOC_PRESENT=False")
+        ok = False
+    else:
+        print("WIFI_RUNTIME_OPEN_SSID_DOC_PRESENT=True")
+    if not pwd_warn:
+        v124_missing += 1
+        print("WIFI_RUNTIME_OPEN_SSID_PASSWORD_WARNING_PRESENT=False")
+        ok = False
+    else:
+        print("WIFI_RUNTIME_OPEN_SSID_PASSWORD_WARNING_PRESENT=True")
+    if not boot_status:
+        v124_missing += 1
+        print("LOCAL_WIFI_BOOT_STATUS_DOC_PRESENT=False")
+        ok = False
+    else:
+        print("LOCAL_WIFI_BOOT_STATUS_DOC_PRESENT=True")
+    if not placeholder_rej:
+        v124_missing += 1
+        print("CLOUD_PLACEHOLDER_REJECTION_DOC_PRESENT=False")
+        ok = False
+    else:
+        print("CLOUD_PLACEHOLDER_REJECTION_DOC_PRESENT=True")
+    if not tls_req:
+        v124_missing += 1
+        print("CLOUD_TLS_REQUIREMENT_DOC_PRESENT=False")
+        ok = False
+    else:
+        print("CLOUD_TLS_REQUIREMENT_DOC_PRESENT=True")
+
+    # forbidden: file-exists == valid; runtime open uses local password;
+    # empty-status-is-normal; disable-TLS guidance (positive statements)
+    for f, txt in docs_all.items():
+        for pat in ["cloud_secrets.h 存在即代表可用", "cloud_secrets.h exists means usable",
+                    "存在即有效", "exists means the config is valid"]:
+            for m in re.finditer(re.escape(pat), txt):
+                if sentence_negated(txt, m.start()):
+                    continue
+                v124_forbidden += 1
+                print(f"CLOUD_FILE_EXISTS_EQUALS_VALID_CLAIM {f}: {pat!r}")
+                ok = False
+        for pat in ["仍会使用本地密码", "仍会使用本地 WPA 密码", "still uses the local password",
+                    "uses the local WPA password", "会使用 wifi_secrets.h 中的密码",
+                    "会使用 `wifi_secrets.h` 中的密码", "仍会使用 `wifi_secrets.h`",
+                    "using the local WPA password", "using the local password"]:
+            for m in re.finditer(re.escape(pat), txt):
+                if sentence_negated(txt, m.start()):
+                    continue
+                v124_forbidden += 1
+                print(f"RUNTIME_OPEN_SSID_USES_LOCAL_PASSWORD_CLAIM {f}: {pat!r}")
+                ok = False
+        for pat in ["不显示实际 SSID 属于正常", "不显示实际SSID属于正常",
+                    "不显示实际 SSID", "不显示实际SSID",
+                    "empty SSID in status is normal", "may remain `your-broker.example.com`",
+                    "broker host may remain"]:
+            if pat in txt:
+                v124_forbidden += 1
+                print(f"LOCAL_WIFI_STATUS_EMPTY_OR_TEMPLATE_ALLOWED {f}: {pat!r}")
+                ok = False
+        for pat in ["TLS 证书配置可留空", "TLS 可留空", "证书可留空",
+                    "TLS can be left empty", "may leave TLS empty", "TLS material can be empty",
+                    "CA 证书或指纹可留空"]:
+            for m in re.finditer(re.escape(pat), txt):
+                if sentence_negated(txt, m.start()):
+                    continue
+                v124_forbidden += 1
+                print(f"DISABLE_TLS_VALIDATION_GUIDANCE {f}: {pat!r}")
+                ok = False
+        for pat in ["禁用 TLS 校验", "关闭 TLS 校验", "禁用证书校验", "跳过证书验证",
+                    "disable TLS validation", "disable certificate validation",
+                    "bypass certificate validation"]:
+            for m in re.finditer(re.escape(pat), txt):
+                if sentence_negated(txt, m.start()):
+                    continue
+                v124_forbidden += 1
+                print(f"DISABLE_TLS_VALIDATION_GUIDANCE {f}: {pat!r}")
+                ok = False
+    print(f"V124_DOC_MISSING_COUNT={v124_missing}")
+    print(f"V124_DOC_FORBIDDEN_CLAIM_COUNT={v124_forbidden}")
 
     print(f"PUBLIC_DOCS_PASS={'True' if ok else 'False'}")
     return 0 if ok else 1

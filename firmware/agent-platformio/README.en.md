@@ -103,6 +103,16 @@ All public profiles keep `ENABLE_CONTROLLED_LIVE_AUTH=0` and
 `ENABLE_IR_MUTATING_COMMANDS=0`. Real credentials live only in git-ignored
 files and never in this repository.
 
+> **v1.2.4: copying the template verbatim no longer builds.** Before a build,
+> `local-wifi` / `local-wifi-cloud` run content validation via
+> `tools/validate-cloud-secrets.py` (Wi-Fi SSID/password rules; cloud host,
+> port, device ID, credentials and TLS material). Template placeholders such
+> as `your_wifi_name`, `your-broker.example.com`, `change-me` or an empty
+> CA/fingerprint are rejected with a non-sensitive error code. `wifi connect`
+> (no arguments) uses the local WPA configuration; `wifi connect <ssid>`
+> temporarily switches to the given open SSID, never uses the local password,
+> and never accepts a Wi-Fi password on the command line.
+
 ### Upload
 
 ```powershell

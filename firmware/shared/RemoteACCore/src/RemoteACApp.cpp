@@ -28,6 +28,7 @@
 #include "cloud/mqtt_client.h"
 #include "cloud/telemetry_service.h"
 #include "cloud/command_service.h"
+#include "cloud/cloud_credentials.h"
 #endif
 
 // ---- Global instances ----
@@ -176,7 +177,13 @@ void appSetup(void) {
 
       Serial.println(F("CLOUD_STATE_MACHINE_READY"));
   } else {
-      Serial.println(F("CLOUD_MQTT_INIT_SKIPPED (no cloud_secrets.h)"));
+      // v1.2.4: non-sensitive validation error code (never a secret value).
+      Serial.print(F("CLOUD_MQTT_INIT_SKIPPED reason="));
+#if ENABLE_CLOUD_CREDENTIALS
+      Serial.println(CloudCredentials::validationErrorCode());
+#else
+      Serial.println(F("NO_CREDENTIALS"));
+#endif
   }
 #endif
 

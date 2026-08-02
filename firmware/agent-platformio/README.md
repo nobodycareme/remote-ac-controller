@@ -93,6 +93,8 @@ agent-platformio/
 
 所有公开 Profile 均保持 `ENABLE_CONTROLLED_LIVE_AUTH=0` 与 `ENABLE_IR_MUTATING_COMMANDS=0`。真实凭据只存在于 git-ignored 文件中，绝不写入本仓库。
 
+> **v1.2.4：只复制模板不能通过构建。** `local-wifi` / `local-wifi-cloud` 构建前运行 `tools/validate-cloud-secrets.py` 做内容校验（WiFi SSID/密码规则、Cloud 主机/端口/设备 ID/账号密码/TLS 材料），模板占位值（`your_wifi_name`、`your-broker.example.com`、`change-me`、空 CA/指纹等）会被拒绝并输出非敏感错误码。`wifi connect`（无参数）使用本地 WPA 配置；`wifi connect <ssid>` 临时切换到指定开放 SSID，不使用本地密码，也不支持在命令行输入 WiFi 密码。
+
 ### 上传
 
 ```powershell

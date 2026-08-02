@@ -162,7 +162,7 @@ When it is off, the authentication path prints `CAMPUS_CREDS_READY=DISABLED REAL
 During authentication the serial monitor (115200 baud) emits the following markers:
 
 ```
-WIFI_CONNECT ssid=stu-xdwlan
+WIFI_CONNECT source=CAMPUS_PROFILE_OPEN ssid=stu-xdwlan security=OPEN
 WIFI_ASSOC_PASS
 LOCAL_IP=10.x.x.x
 GATEWAY=10.x.x.1

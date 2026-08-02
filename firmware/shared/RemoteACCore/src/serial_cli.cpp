@@ -1170,6 +1170,8 @@ void Cli::doWifi(const char* arg) {
   if (strcmp(sub, "status") == 0) {
     Serial.print(F("NET_STATE="));
     Serial.println(WifiManager::stateStr(_net->state()));
+    Serial.print(F("NET_SOURCE="));
+    Serial.println(_net->sourceStr());
     Serial.print(F("NET_SSID="));
     Serial.println(_net->ssid());
     Serial.print(F("LOCAL_IP="));

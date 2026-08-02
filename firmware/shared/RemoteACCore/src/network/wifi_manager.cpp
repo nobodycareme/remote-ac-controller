@@ -31,8 +31,29 @@ static const uint8_t  MAX_AUTH_RETRIES = 2;                      // manual mode:
 #endif
 
 void WifiManager::begin(const char* ssid, const char* password) {
-  if (ssid && *ssid) _cfgSsid = ssid;
-  if (password) _cfgPass = password;   // may be "" to clear a previous password
+  if (ssid && *ssid) {
+    // Explicit runtime open SSID (`wifi connect <ssid>`): the user's choice
+    // wins, the local WPA macro can never override it, and the local password
+    // is NOT used.
+    _source = WIFI_SOURCE_RUNTIME_OPEN_SSID;
+    _cfgSsid = ssid;
+    _cfgPass = "";                 // never a command-line password
+  } else {
+    // Default source for this build (boot path).
+#if ENABLE_WIFI_CREDENTIALS
+    _source = WIFI_SOURCE_COMPILED_LOCAL_WPA;
+    _cfgSsid = LOCAL_WIFI_SSID;
+    _cfgPass = LOCAL_WIFI_PASSWORD;
+#elif ENABLE_CAMPUS_AUTH
+    _source = WIFI_SOURCE_CAMPUS_PROFILE_OPEN;
+    _cfgSsid = CAMPUS_SSID;
+    _cfgPass = "";
+#else
+    _source = WIFI_SOURCE_NONE;
+    _cfgSsid = "";
+    _cfgPass = "";
+#endif
+  }
   WiFi.persistent(false);
   WiFi.setAutoReconnect(true);
 #if ENABLE_CAMPUS_AUTH
@@ -45,9 +66,11 @@ void WifiManager::begin(const char* ssid, const char* password) {
 
 #if ENABLE_WIFI_CREDENTIALS
 void WifiManager::beginLocalWifi() {
-  // Compiled-in home/lab WPA/WPA2 credentials from wifi_secrets.h. The
-  // password is stored in _cfgPass for WiFi.begin() only; it is never
-  // printed, hashed into logs, or exposed via any status command.
+  // No-argument `wifi connect`: select the compiled local WPA source and load
+  // LOCAL_WIFI_SSID / LOCAL_WIFI_PASSWORD into the manager. The password is
+  // stored in _cfgPass for the adapter only; it is never printed, hashed into
+  // logs, or exposed via any status command.
+  _source = WIFI_SOURCE_COMPILED_LOCAL_WPA;
   _cfgSsid = LOCAL_WIFI_SSID;
   _cfgPass = LOCAL_WIFI_PASSWORD;
   WiFi.persistent(false);
@@ -66,41 +89,59 @@ void WifiManager::connect() {
     Serial.println(F("WIFI_BLOCKED clear block first (power-cycle or fix creds/TLS)"));
     return;
   }
-  // Single source of truth for the connection decision (pure, host-tested):
-  //   - local WPA credentials enabled -> WiFi.begin(ssid, password)
-  //   - otherwise -> WiFi.begin(ssid) (OPEN campus SSID)
-  // The password VALUE is never logged; only its presence selects the path.
+
+  // Build the request from the authoritative source. The controller is the
+  // single production executor; this method only supplies the source-specific
+  // values and handles the state transition + logging.
+  WifiConnectRequest req;
+  req.source = _source;
+  switch (_source) {
 #if ENABLE_WIFI_CREDENTIALS
-  const char* localSsid = LOCAL_WIFI_SSID;
-  const bool hasLocalPass = (LOCAL_WIFI_PASSWORD[0] != '\0');
-#else
-  const char* localSsid = nullptr;
-  const bool hasLocalPass = false;
+    case WIFI_SOURCE_COMPILED_LOCAL_WPA:
+      req.ssid = LOCAL_WIFI_SSID;
+      req.password = LOCAL_WIFI_PASSWORD;
+      break;
 #endif
-  const WifiConnectPlan plan = makeWifiConnectPlan(_cfgSsid.c_str(), localSsid, hasLocalPass);
-  if (!plan.configurationValid) {
+    case WIFI_SOURCE_CAMPUS_PROFILE_OPEN:
+      req.ssid = CAMPUS_SSID;
+      req.password = nullptr;
+      break;
+    case WIFI_SOURCE_RUNTIME_OPEN_SSID:
+      req.ssid = _cfgSsid.c_str();
+      req.password = nullptr;
+      break;
+    case WIFI_SOURCE_NONE:
+    default:
+      req.ssid = nullptr;
+      req.password = nullptr;
+      break;
+  }
+
+  const WifiConnectOutcome out = _assoc.execute(req);
+
+  // Sync the status SSID with the effective SSID the controller used, so
+  // logs and `wifi status` always agree with the actual WiFi.begin() args
+  // (fixes the v1.2.3 gap where boot showed an empty SSID for local WPA).
+  if (out.effectiveSsid && *out.effectiveSsid) {
+    _cfgSsid = out.effectiveSsid;
+  }
+
+  if (!out.proceeded) {
     // Hard guard: never call WiFi.begin("") or begin with an empty password.
     // State stays WIFI_DISCONNECTED; no WIFI_ASSOCIATING is entered.
-    Serial.print(F("WIFI_CONNECT_SKIPPED reason="));
-    Serial.println(wifiPlanReasonLabel(plan.reason));
+    Serial.print(F("WIFI_CONNECT_SKIPPED source="));
+    Serial.print(wifiSourceLabel(_source));
+    Serial.print(F(" reason="));
+    Serial.println(wifiPlanReasonLabel(out.reason));
     return;
   }
-  Serial.print(F("WIFI_CONNECT ssid="));
+
+  Serial.print(F("WIFI_CONNECT source="));
+  Serial.print(wifiSourceLabel(_source));
+  Serial.print(F(" ssid="));
   Serial.print(_cfgSsid);
   Serial.print(F(" security="));
-  Serial.println(wifiSecurityLabel(plan.securityType));
-#if ENABLE_WIFI_CREDENTIALS
-  if (plan.securityType == WIFI_SECURITY_WPA_OR_WPA2) {
-    // Local WPA path: the authoritative SSID/password are the compiled-in
-    // LOCAL_WIFI_* values (wifi_secrets.h). Using them directly here (rather
-    // than the runtime _cfgSsid copy) guarantees the boot-time autoconnect
-    // never associates with an empty SSID before beginLocalWifi() runs.
-    WiFi.begin(LOCAL_WIFI_SSID, LOCAL_WIFI_PASSWORD);  // WPA/WPA2 home/lab router
-    enterState(WIFI_ASSOCIATING);
-    return;
-  }
-#endif
-  WiFi.begin(_cfgSsid.c_str());                     // OPEN campus SSID
+  Serial.println(wifiSecurityLabel(out.securityType));
   enterState(WIFI_ASSOCIATING);
 }
 

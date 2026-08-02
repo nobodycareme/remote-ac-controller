@@ -2,6 +2,20 @@
 
 # 更新日志 / Changelog
 
+## [1.2.4] - 2026-08-02
+
+### 修复
+
+- **本地 WPA 开机后的 SSID 状态**：WifiManager 引入明确的连接来源模型（`WIFI_SOURCE_COMPILED_LOCAL_WPA` / `CAMPUS_PROFILE_OPEN` / `RUNTIME_OPEN_SSID` / `NONE`），开机路径把 `LOCAL_WIFI_SSID` 同步进内部状态，`wifi status` 与开机日志显示的实际 SSID 与真实连接一致。
+- **`wifi connect <ssid>` 被本地 WPA 覆盖**：显式开放 SSID 现在拥有独立来源，不再被编译期 `LOCAL_WIFI_SSID` 隐式覆盖；`wifi connect`（无参数）恢复本地 WPA 配置，命令行为与文档一致。
+- **真实关联路径的 Host 集成测试**：新增 `WifiStationAdapter` 可注入接缝与 `WifiAssociationController` 生产组件，Host 测试直接执行生产连接函数（不再只测复制的模拟逻辑）。
+- **拒绝未修改的 Cloud 秘密模板**：新增 `tools/validate-cloud-secrets.py` 内容验证器与运行时 `CloudCredentials::available()` 内容校验，模板主机、端口、设备 ID、账号密码与缺失 TLS 材料都会被拒绝。
+- **强化 TLS 配置验证**：本地 Cloud 配置至少需要一个有效 CA 证书或 TLS 指纹，构建与运行时规则一致。
+
+### 说明
+
+- 固件、云端 API 与数据库格式无破坏性变化；PCB 保持 Rev 1.0.1。
+
 ## [1.2.3] - 2026-08-02
 
 ### 修复
