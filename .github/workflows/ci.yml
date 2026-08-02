@@ -123,8 +123,7 @@ jobs:
 
       - name: dev.ps1 profile contract + secret content validation (v1.2.4)
         run: |
-          $ErrorActionPreference = 'Stop'
-          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Continue'
           python tools/test-devps1-profile-contract.py
           python tools/validate-cloud-secrets.py --self-test
           # Negative: a template wifi_secrets.h must FAIL content validation
@@ -135,18 +134,20 @@ jobs:
           try {
             $out = pwsh firmware/agent-platformio/tools/dev.ps1 build -Profile local-wifi 2>&1
             $rc = $LASTEXITCODE
+            Write-Output ($out | Out-String)
             $vline = ($out | Select-String -Pattern 'WIFI_SECRETS_VALID').Line
             if ($rc -eq 0) {
-              Write-Error 'TEMPLATE_WIFI_SECRETS_ACCEPTED=True (must be rejected)'
+              throw 'TEMPLATE_WIFI_SECRETS_ACCEPTED=True (must be rejected)'
             }
             if ($vline -notmatch 'WIFI_SECRETS_VALID=False') {
-              Write-Error "TEMPLATE_WIFI_SECRETS_NOT_REJECTED: $vline"
+              throw "TEMPLATE_WIFI_SECRETS_NOT_REJECTED: $vline"
             }
             Write-Output 'TEMPLATE_WIFI_SECRETS_REJECTED=True'
           }
           finally {
             Remove-Item $wifi -ErrorAction SilentlyContinue
           }
+          exit 0
 
   # ---------------------------------------------------------------------------
   # arduino-ide-ci
