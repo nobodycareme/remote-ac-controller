@@ -5,10 +5,10 @@
  * cloud_credentials.h — isolated MQTT credential interface
  *
  * Gates all cloud secrets behind ENABLE_CLOUD_CREDENTIALS:
- *   0 (Public)  — never includes cloud_secrets.h; returns empty credentials;
+ *   0 (Public)  — never includes config/cloud_secrets.h; returns empty credentials;
  *                 cloud code compiles but MQTT connect() safely fails at runtime.
- *   1 (Private) — #includes "cloud_secrets.h" and returns real credentials;
- *                 #error if cloud_secrets.h is missing.
+ *   1 (Private) — includes "config/cloud_secrets.h" and returns real credentials;
+ *                 #error if the canonical local file is missing.
  *
  * v1.2.4: available() no longer trusts a non-empty MQTT_BROKER_HOST. It runs
  * the same minimum safety rules as the build-time validator
@@ -16,8 +16,8 @@
  * template device IDs/auth and missing TLS material are all rejected, so a
  * user who copies the example template verbatim gets a safe "skipped".
  *
- * This header is the ONLY file permitted to include cloud_secrets.h.
- * No other source file in this project may include cloud_secrets.h directly.
+ * cloud_credentials.cpp is the ONLY file permitted to include the canonical
+ * config/cloud_secrets.h. No unqualified cloud_secrets.h include is allowed.
  */
 #include <Arduino.h>
 

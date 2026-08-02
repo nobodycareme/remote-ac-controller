@@ -3,7 +3,7 @@
 """
 validate-cloud-secrets.py — build-time content validation for local secrets.
 
-v1.2.4: dev.ps1 (and CI) MUST call this validator instead of only checking
+v1.2.5: dev.ps1 (and CI) MUST call this validator instead of only checking
 that the secret files exist. The rules mirror the runtime enforcement in
 firmware/shared/RemoteACCore/src/cloud/cloud_secret_validation.h and the
 host contract tests; this script is the build-time copy of that single spec.
@@ -40,13 +40,45 @@ import tempfile
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_WIFI = os.path.join(REPO, "firmware", "shared", "RemoteACCore", "src",
                             "config", "wifi_secrets.h")
-DEFAULT_CLOUD = os.path.join(REPO, "firmware", "agent-platformio", "include",
-                             "cloud_secrets.h")
+DEFAULT_CLOUD = os.path.join(REPO, "firmware", "shared", "RemoteACCore", "src",
+                             "config", "cloud_secrets.h")
 
 # ---------------------------------------------------------------- rules ----
 # These MUST mirror cloud_secret_validation.h (see the contract tests).
+#
+# v1.2.5: wifi_ssid_valid mirrors wifi_ssid_validation.h exactly:
+#   - non-empty, not all-ASCII-space;
+#   - no ASCII control characters (0x01-0x1F, 0x7F);
+#   - internal spaces allowed ("Home WiFi");
+#   - length measured in UTF-8 BYTES, 1..32;
+#   - template value "your_wifi_name" rejected;
+#   - the SSID is never trimmed or truncated.
+# The same 18+ vectors are checked in C++ via the shared JSON fixture.
 
 PLACEHOLDER_PREFIXES = ("your-", "change-", "placeholder", "example.", "invalid")
+
+
+def wifi_ssid_validate(ssid):
+    """Return (valid, code) mirroring wifi_ssid_validation.h enum codes.
+
+    The code strings are byte-for-byte the C++ enum names, so the parity
+    test can compare them directly against the shared JSON vectors.
+    """
+    if not ssid:
+        return False, "WIFI_SSID_ERR_EMPTY"
+    if ssid == "your_wifi_name":
+        return False, "WIFI_SSID_ERR_TEMPLATE"
+    if any(ord(c) < 0x20 or ord(c) == 0x7F for c in ssid):
+        return False, "WIFI_SSID_ERR_CONTROL_CHARACTER"
+    if len(ssid.encode("utf-8")) > 32:
+        return False, "WIFI_SSID_ERR_TOO_LONG"
+    if all(c in (" ", "\t") for c in ssid):
+        return False, "WIFI_SSID_ERR_ALL_SPACE"
+    return True, "WIFI_SSID_OK"
+
+
+def wifi_ssid_valid(ssid):
+    return wifi_ssid_validate(ssid)[0]
 
 
 def host_valid(host):
@@ -116,10 +148,6 @@ def fingerprint_valid(fp):
 
 def tls_valid(ca, fp):
     return ca_cert_valid(ca) or fingerprint_valid(fp)
-
-
-def wifi_ssid_valid(ssid):
-    return bool(ssid) and ssid != "your_wifi_name" and " " not in ssid
 
 
 def wifi_password_valid(pwd):

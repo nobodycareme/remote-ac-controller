@@ -28,17 +28,19 @@ firmware/*.map
 firmware/*.hex
 firmware/firmware.*.bin
 firmware/build/
-# Defensive guards: the real PlatformIO secret headers live under
-# firmware/agent-platformio/include/ and are covered by that project's own
-# .gitignore; these wildcards catch stray copies anywhere under firmware/.
+# Canonical local Cloud configuration shared by PlatformIO and Arduino IDE.
+firmware/shared/RemoteACCore/src/config/cloud_secrets.h
+# Defensive wildcard and deprecated-path guards. Legacy locations are no
+# longer read by the build and dev.ps1 rejects them if they exist.
 firmware/**/secrets.h
 firmware/**/cloud_secrets.h
 # Real campus profile / secret files (commit *.example.h, ignore the real ones)
 firmware/shared/RemoteACCore/src/config/campus_secrets.h
 # Real home/lab WPA/WPA2 Wi-Fi credentials (commit wifi_secrets.example.h only)
 firmware/shared/RemoteACCore/src/config/wifi_secrets.h
-# Arduino IDE puts cloud credentials on the shared library's include path
+# Deprecated pre-v1.2.5 Cloud secret paths; never read by production code.
 firmware/shared/RemoteACCore/src/cloud_secrets.h
+firmware/agent-platformio/include/cloud_secrets.h
 firmware/shared/RemoteACCore/src/secrets.h
 firmware/shared/RemoteACCore/src/config/profiles/*
 !firmware/shared/RemoteACCore/src/config/profiles/*.example.h
