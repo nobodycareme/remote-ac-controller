@@ -121,6 +121,33 @@ jobs:
       - name: dev.ps1 build (public profile, artifact secret-scanned)
         run: pwsh firmware/agent-platformio/tools/dev.ps1 build -Profile public
 
+      - name: dev.ps1 profile contract + secret content validation (v1.2.4)
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-StrictMode -Version Latest
+          python tools/test-devps1-profile-contract.py
+          python tools/validate-cloud-secrets.py --self-test
+          # Negative: a template wifi_secrets.h must FAIL content validation
+          # (existence is not enough), and dev.ps1 must refuse to build.
+          $wifi = 'firmware/shared/RemoteACCore/src/config/wifi_secrets.h'
+          $example = 'firmware/shared/RemoteACCore/src/config/wifi_secrets.example.h'
+          Copy-Item $example $wifi
+          try {
+            $out = pwsh firmware/agent-platformio/tools/dev.ps1 build -Profile local-wifi 2>&1
+            $rc = $LASTEXITCODE
+            $vline = ($out | Select-String -Pattern 'WIFI_SECRETS_VALID').Line
+            if ($rc -eq 0) {
+              Write-Error 'TEMPLATE_WIFI_SECRETS_ACCEPTED=True (must be rejected)'
+            }
+            if ($vline -notmatch 'WIFI_SECRETS_VALID=False') {
+              Write-Error "TEMPLATE_WIFI_SECRETS_NOT_REJECTED: $vline"
+            }
+            Write-Output 'TEMPLATE_WIFI_SECRETS_REJECTED=True'
+          }
+          finally {
+            Remove-Item $wifi -ErrorAction SilentlyContinue
+          }
+
   # ---------------------------------------------------------------------------
   # arduino-ide-ci
   # ---------------------------------------------------------------------------
@@ -338,6 +365,21 @@ jobs:
               test/host/test_wifi_connect.cpp -o /tmp/test_wifi
             /tmp/test_wifi
           done
+
+      - name: WifiManager real association integration test (v1.2.4)
+        run: |
+          set -euo pipefail
+          g++ -std=c++11 -Wall -I firmware/shared/RemoteACCore/src \
+            test/host/test_wifi_manager_integration.cpp -o /tmp/test_assoc
+          /tmp/test_assoc
+          g++ -std=c++11 -Wall -I firmware/shared/RemoteACCore/src \
+            test/host/test_cloud_secret_validation.cpp -o /tmp/test_cloudval
+          /tmp/test_cloudval
+
+      - name: Secret content validator self-test (v1.2.4)
+        run: |
+          set -euo pipefail
+          python3 tools/validate-cloud-secrets.py --self-test
 
       - name: WIFI_AUTOCONNECT policy matrix (7 profile semantics)
         run: |
