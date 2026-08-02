@@ -29,7 +29,6 @@ struct CloudCredentialValidation {
 };
 
 // Placeholder/example strings that must never be treated as usable values.
-// (kept as a simple helper used by the host contract tests)
 static bool cloudHasTemplatePrefix(const char* v, const char* prefix) {
   if (!v || !prefix) return false;
   int i = 0;
@@ -39,6 +38,17 @@ static bool cloudHasTemplatePrefix(const char* v, const char* prefix) {
     ++i;
   }
   return true;
+}
+
+// Exact match against a template value (prefix + end-of-string).
+static bool cloudIsTemplateValue(const char* v, const char* s) {
+  if (!v || !s) return false;
+  int i = 0;
+  while (s[i]) {
+    if (v[i] != s[i]) return false;
+    ++i;
+  }
+  return v[i] == '\0';
 }
 
 inline bool cloudHostValid(const char* host) {
@@ -76,8 +86,8 @@ inline bool cloudPortValid(int port) {
 inline bool cloudDeviceIdValid(const char* id) {
   if (!id || !*id) return false;
   // exact template values (a real user device may legitimately be bedroom-*)
-  if (cloudHasTemplatePrefix(id, "bedroom-ac-01") &&
-      id[11] == '\0') return false;
+  if (cloudIsTemplateValue(id, "bedroom-ac-01")) return false;
+  if (cloudIsTemplateValue(id, "your-device-id")) return false;
   if (cloudHasTemplatePrefix(id, "your-")) return false;
   // charset contract: [A-Za-z0-9_-]{3,64}
   int len = 0;
@@ -94,7 +104,8 @@ inline bool cloudAuthValid(const char* user, const char* pass) {
   if (!user || !*user) return false;
   if (!pass || !*pass) return false;
   // exact template values; a real user may legitimately use bedroom-*
-  if (cloudHasTemplatePrefix(user, "bedroom-ac-01") && user[11] == '\0') return false;
+  if (cloudIsTemplateValue(user, "bedroom-ac-01")) return false;
+  if (cloudIsTemplateValue(user, "your-device-id")) return false;
   if (cloudHasTemplatePrefix(user, "your-")) return false;
   if (cloudHasTemplatePrefix(pass, "change-")) return false;
   if (cloudHasTemplatePrefix(pass, "your-")) return false;
