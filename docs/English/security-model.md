@@ -60,9 +60,10 @@ Password storage uses **scrypt** (`scryptVerify`). A legacy `bcryptjs` path
 exists solely to migrate historical hashes and should be considered
 deprecated. Passwords are stored as `salt:hash`; plaintext is never persisted.
 
-Real IR authorisation requires a **separate** credential
-(`IR_OWNER_USER` / `IR_OWNER_PASSWORD`), distinct from the web login. Web
-session compromise alone therefore does not grant physical actuation.
+`WEB_USER` and `WEB_PASSWORD` are the single Owner credential. Real IR still
+requires an Owner session, valid Origin and CSRF checks, explicit
+`REAL_IR_PRODUCTION_CONTROL_ENABLED`, an allowed state, and device-side policy.
+Legacy `IR_OWNER_*` variables are ignored and cannot grant authorization.
 
 ### Trusted devices
 
@@ -126,7 +127,8 @@ Two implementation rules that must not be relaxed:
 2. **Single dispatch point.** Every real IR emission passes through
    `dispatchIrAction()` in `firmware/src/cloud/command_service.cpp`. Legacy
    `set_power` / `set_temperature` commands are always acknowledged as
-   `accepted_mock` and never transmit. Do not add a second dispatch path.
+   `blocked_by_ir_policy` with reason `real_ir_control_disabled` and never
+   transmit while real IR is disabled. Do not add a second dispatch path.
 
 ## 6. Transport Security
 
@@ -161,7 +163,7 @@ device cannot actuate itself or any peer.
 Self-hosters must provide:
 
 1. A unique `SESSION_SECRET` with high entropy.
-2. Owner and IR-owner passwords, stored as scrypt `salt:hash`.
+2. The Owner password, stored as scrypt `salt:hash`.
 3. MQTT credentials, distinct per account, plus matching ACL entries.
 4. A TLS certificate chain and a private CA (or a public CA) for MQTT.
 5. Their own IR frame data, captured from their own remote control.

@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/coverage
+**/.vite
+**/*.tsbuildinfo
+**/.env
+deploy/secrets.env
+broker/certs
+broker/run
+broker/data
+backend/data
+*.db
+*.db-wal
+*.db-shm

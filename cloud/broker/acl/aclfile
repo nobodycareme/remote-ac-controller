@@ -22,6 +22,7 @@ topic read  remote-ac/v1/devices/bedroom-ac-01/commands/set
 # May PUBLISH only to commands/set.
 # Must NOT publish telemetry/state/availability (those are device-owned).
 user remote-ac-backend
+topic read  $SYS/broker/version
 topic read  remote-ac/v1/devices/bedroom-ac-01/telemetry
 topic read  remote-ac/v1/devices/bedroom-ac-01/state
 topic read  remote-ac/v1/devices/bedroom-ac-01/availability

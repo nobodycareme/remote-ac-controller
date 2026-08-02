@@ -119,7 +119,15 @@ Fill in:
 | `MQTT_PASSWORD` | Same, different value |
 | `SESSION_SECRET` | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
 | `WEB_PASSWORD` | scrypt hash, `salt:hash` form |
-| `IR_OWNER_PASSWORD` | scrypt hash, different from `WEB_PASSWORD` |
+
+Generate the Owner password hash without placing plaintext in shell history:
+
+```bash
+node cloud/tools/generate-scrypt-hash.mjs
+```
+
+`WEB_USER` and `WEB_PASSWORD` are the only Owner login credentials. Legacy
+`IR_OWNER_*` environment variables are ignored and cannot enable real IR.
 
 `secrets.env` is git-ignored. Verify with `git check-ignore -v` before your
 first commit.
@@ -239,9 +247,9 @@ Verify in this order. Do not skip ahead — each step depends on the previous.
 2. **Backend healthy.** `GET /api/health` returns 200 on loopback.
 3. **Proxy correct.** The web app loads over HTTPS and the WebSocket connects.
 4. **Device online.** Telemetry appears; the dashboard shows `online`.
-5. **Mock command round-trip.** Issue a command with IR still disabled; expect
-   an `accepted_mock` acknowledgement. This proves the whole path works
-   without touching hardware.
+5. **Safe command round-trip.** Issue a command with IR still disabled; expect
+   `status=blocked_by_ir_policy` and `reason=real_ir_control_disabled`. This
+   proves the whole path works while physical IR remains safely blocked.
 6. **Enable debug IR.** Set `WEB_REAL_IR_ENABLED=true`, configure the
    allow-list triple, keep `REAL_IR_DEBUG_MAX_TOTAL_COMMANDS` low. Confirm one
    physical actuation.

@@ -66,10 +66,11 @@ export async function registerDashboardRoutes(fastify: FastifyInstance): Promise
           }
         : null,
       weather_error,
-      ir_control: 'armed',
-      // 红外发射已永久开放：前端 UI 不再显示服务器安全开关限制。
-      // 后端 /api/ac/ir-action 路由仍保留 REAL_IR_PRODUCTION_CONTROL_ENABLED 检查作为运维应急能力。
-      ir_armed: (req as any).session?.role === 'owner' && (req as any).session?.trusted,
+      ir_control: (req as any).session?.role === 'owner' && (req as any).session?.trusted && productionIrControlEnabled()
+        ? 'armed'
+        : 'disabled',
+      // 仪表盘仅在受信 Owner 会话且生产 IR 总开关明确启用时显示已武装。
+      ir_armed: (req as any).session?.role === 'owner' && (req as any).session?.trusted && productionIrControlEnabled(),
       // 2026-07-28 集成轮：可用编码来自 ac_states 目录（仅 enabled=1 的状态）。
       ir_available_codes: (req as any).session?.role === 'owner' && (req as any).session?.trusted
         ? getAcStateRows().filter((r: any) => r.enabled).map((r: any) => r.state_id)

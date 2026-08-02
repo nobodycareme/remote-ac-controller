@@ -229,15 +229,15 @@ Secrets live in a single operator-owned file that is **never** committed:
 Start from [`cloud/deploy/secrets.env.example`](../../cloud/deploy/secrets.env.example).
 Required entries include the two MQTT accounts (`MQTT_USERNAME` /
 `MQTT_PASSWORD` for the backend, `MQTT_DEVICE_USERNAME` /
-`MQTT_DEVICE_PASSWORD` for the device), `SESSION_SECRET`, `WEB_PASSWORD`, and
-optionally `IR_OWNER_PASSWORD`.
+`MQTT_DEVICE_PASSWORD` for the device), `SESSION_SECRET`, `WEB_USER`, and
+`WEB_PASSWORD`.
 
 Hygiene rules:
 
 - `chmod 600` and root-owned (or service-user-owned). It is read at start only.
 - The owner password is stored as a scrypt digest in `salt:hash` form, never in
   plaintext. See [`security-model.md`](./security-model.md).
-- **Rotating `SESSION_SECRET`, `WEB_PASSWORD`, or `IR_OWNER_PASSWORD`
+- **Rotating `SESSION_SECRET` or `WEB_PASSWORD`
   invalidates all existing sessions**, including trusted devices. This is
   intentional and is the fastest way to evict every client.
 - Back up `secrets.env` separately from the database, with stricter access
@@ -313,7 +313,6 @@ switch, so a stray `WEB_REAL_IR_ENABLED=false` cannot be coerced to true.
 | `REAL_IR_DEBUG_ALLOWED_CODE_ID` | *(empty)* | Debug allow-list: code id |
 | `REAL_IR_DEBUG_ALLOWED_CODE_SHA256` | *(empty)* | Debug allow-list: frame digest |
 | `REAL_IR_DEBUG_ALLOWED_CODE_LENGTH` | `0` | Debug allow-list: frame length |
-| `IR_OWNER_PASSWORD` | *(empty)* | Empty means no owner IR authorization is possible |
 
 The debug transmit path additionally requires **all three** allow-list values to
 be non-empty; otherwise it returns `DEBUG_CODE_CONFIG_INVALID`. Debug windows
@@ -374,7 +373,7 @@ journalctl -u remote-ac-backend --since "2 min ago" --output=cat | grep -i error
 
 Then confirm end-to-end behaviour: log in, observe fresh telemetry, and send one
 harmless command with real IR still disabled — the ACK path should report
-`ACCEPTED_MOCK`.
+`blocked_by_ir_policy` with reason `real_ir_control_disabled`.
 
 Rollback is the same sequence with the previous artifact plus, if the schema
 changed, a database restore. Because migrations only add columns, an
@@ -400,7 +399,7 @@ backup rather than gambling on it.
 ### 10.2 Commands accepted but the AC does not react
 
 Check, in order: real-IR kill switches (§7) — if disabled, ACKs are
-`ACCEPTED_MOCK` by design and no IR is emitted; then the IR code registration;
+`blocked_by_ir_policy` with reason `real_ir_control_disabled` and no IR is emitted; then the IR code registration;
 then emitter aim and power. See [`ir-learning.md`](./ir-learning.md).
 
 ### 10.3 Backend restart loop

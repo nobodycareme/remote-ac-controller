@@ -2,6 +2,20 @@
 
 # Changelog
 
+## [1.2.6] - 2026-08-03
+
+### Fixed
+
+- Restored clean-clone Compose reproducibility with a verified, digest-pinned Mosquitto 2.1.2 Alpine image.
+- Authenticated the broker healthcheck and added only the required `$SYS/broker/version` backend ACL permission.
+- Switched both Docker build stages to lockfile-based `npm ci` installs.
+- Corrected the safe ACK contract to `blocked_by_ir_policy` / `real_ir_control_disabled`.
+- Unified Owner login on `WEB_USER` and `WEB_PASSWORD`, and added the scrypt hash generator.
+
+### Notes
+
+- Cloud API, database schema, MQTT topics, PCB data, and real IR data are unchanged; PCB stays Rev 1.0.1.
+
 ## [1.2.5] - 2026-08-02
 
 ### Fixed

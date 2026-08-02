@@ -39,6 +39,7 @@ FILES = [
     ".github/release-notes/v1.2.3.md",
     ".github/release-notes/v1.2.4.md",
     ".github/release-notes/v1.2.5.md",
+    ".github/release-notes/v1.2.6.md",
 ]
 SCREENSHOTS = ["dashboard-desktop.png", "dashboard-mobile.png"]
 

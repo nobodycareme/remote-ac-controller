@@ -57,10 +57,7 @@ function normalizeLabel(label?: string): string {
 
 function ownerCredentialFingerprint(): string {
   return crypto.createHash('sha256')
-    .update([
-      `web_password=${config.WEB_PASSWORD || ''}`,
-      `ir_owner_password=${config.IR_OWNER_PASSWORD || ''}`,
-    ].join('|'))
+    .update(`web_user=${config.WEB_USER || ''}|web_password=${config.WEB_PASSWORD || ''}`)
     .digest('hex');
 }
 
@@ -118,8 +115,16 @@ function scryptHash(password: string, salt: string): Promise<string> {
 }
 
 function scryptVerify(password: string, stored: string): Promise<boolean> {
-  const [salt] = stored.split(':');
-  return scryptHash(password, salt).then((h) => h === stored);
+  const parts = stored.split(':');
+  if (parts.length !== 2 || !/^[0-9a-f]{32,}$/i.test(parts[0]) || !/^[0-9a-f]{128}$/i.test(parts[1])) {
+    return Promise.resolve(false);
+  }
+  const expected = Buffer.from(parts[1], 'hex');
+  return new Promise((resolve) => {
+    crypto.scrypt(password, parts[0], expected.length, (err, derivedKey) => {
+      resolve(!err && crypto.timingSafeEqual(expected, derivedKey));
+    });
+  });
 }
 
 let _passwordSourceKey: string | null = null;
@@ -144,6 +149,7 @@ async function initPassword(): Promise<void> {
 }
 
 export async function verifyPassword(password: string): Promise<boolean> {
+  if (!config.WEB_PASSWORD || !password) return false;
   await initPassword();
   if (_storedHash) {
     return scryptVerify(password, _storedHash);
@@ -219,7 +225,7 @@ export async function createSession(
   const csrf = uuid();
   const hash = sessionHash(sessionId);
   const now = Date.now();
-  const user = role === 'owner' ? config.IR_OWNER_USER : 'guest';
+  const user = role === 'owner' ? config.WEB_USER : 'guest';
   // Owner 受信任会话 = 长期有效（expiresAt=0 哨兵）：不因固定日期自动失效。
   // 撤销途径：移除本机/全部信任（删行）、密码指纹变化（getSession/cleanup 删行）。
   // Guest 仍为短期会话（SESSION_TTL_MIN）。
@@ -253,16 +259,13 @@ export async function createSession(
 
 export async function loginOwner(
   password: string,
-  opts: { trustedLabel?: string } = {},
+  opts: { trustedLabel?: string; username?: string } = {},
 ): Promise<{ sessionId: string; csrf: string; user: string; trusted: boolean; trustedLabel: string; expiresAt: number; persistent: boolean } | null> {
-  await initPassword();
-  if (!config.IR_OWNER_PASSWORD) {
-    return null;
-  }
+  if (!config.WEB_PASSWORD || (opts.username !== undefined && opts.username !== config.WEB_USER)) return null;
   const ok = await verifyPassword(password);
   if (!ok) return null;
   const { sessionId, csrf, trustedLabel, expiresAt, trusted, persistent } = await createSession('owner', opts);
-  return { sessionId, csrf, user: config.IR_OWNER_USER, trusted, trustedLabel, expiresAt, persistent };
+  return { sessionId, csrf, user: config.WEB_USER, trusted, trustedLabel, expiresAt, persistent };
 }
 
 export function getSession(sessionId?: string): Session | null {

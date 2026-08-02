@@ -39,7 +39,6 @@ beforeEach(async () => {
   await initDb();
   (config as any).REAL_IR_PRODUCTION_CONTROL_ENABLED = false;
   (config as any).WEB_REAL_IR_ENABLED = false;
-  (config as any).IR_OWNER_PASSWORD = '';
 });
 
 describe('guest 403 has zero side effects', () => {
@@ -70,7 +69,6 @@ describe('guest 403 has zero side effects', () => {
   it('even with production control on, a GUEST is still denied and no row is created', async () => {
     const app = await buildApp();
     (config as any).REAL_IR_PRODUCTION_CONTROL_ENABLED = true;
-    (config as any).IR_OWNER_PASSWORD = 'test-owner-pass';
     const before = irActionRowCount();
     const { sid, csrf } = await guestSession(app);
     const res = await app.inject({
@@ -91,7 +89,6 @@ describe('guest 403 has zero side effects', () => {
 describe('structured deny envelope for all production IR deny paths', () => {
   it('owner + production control OFF → 403 REAL_IR_DISABLED; no row', async () => {
     const app = await buildApp();
-    (config as any).IR_OWNER_PASSWORD = 'enabled';
     const { sessionId, csrf } = await createSession('owner');
     const before = irActionRowCount();
     const res = await app.inject({
@@ -112,7 +109,6 @@ describe('structured deny envelope for all production IR deny paths', () => {
 
   it('owner + wrong CSRF → 403 CSRF_INVALID; no row', async () => {
     const app = await buildApp();
-    (config as any).IR_OWNER_PASSWORD = 'enabled';
     const { sessionId } = await createSession('owner');
     const before = irActionRowCount();
     const res = await app.inject({
@@ -130,7 +126,6 @@ describe('structured deny envelope for all production IR deny paths', () => {
 
   it('owner + bad origin → 403 ORIGIN_DENIED; no row', async () => {
     const app = await buildApp();
-    (config as any).IR_OWNER_PASSWORD = 'enabled';
     (config as any).REAL_IR_PRODUCTION_CONTROL_ENABLED = true;
     const { sessionId, csrf } = await createSession('owner');
     const before = irActionRowCount();

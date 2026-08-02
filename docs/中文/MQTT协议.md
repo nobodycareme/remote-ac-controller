@@ -161,9 +161,9 @@ ACL 配置块。
 
 | Status | Meaning |
 |--------|---------|
-| `accepted_mock` | 已接受但未实际执行物理动作（遗留 / 模拟路径） |
+| `accepted_mock` | 仅用于遗留 / 特殊模拟实现；不是真实 IR 关闭时的默认结果 |
 | `ir_executed` | 红外帧已发送 |
-| `blocked_by_ir_policy` | 被固件的红外策略闸门拒绝 |
+| `blocked_by_ir_policy` | 被固件策略安全阻止；通常原因为 `real_ir_control_disabled` |
 | `ir_state_disabled` | 请求的状态在当前构建中被禁用 |
 | `ir_unknown_code` | 请求的码值没有对应的已配置帧 |
 | `ir_module_busy` | 红外模块正处于操作中 |

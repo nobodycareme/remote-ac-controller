@@ -165,9 +165,9 @@ async function runAll() {
           // Send ACK
           devClient.publish('remote-ac/v1/devices/bedroom-ac-01/commands/ack', JSON.stringify({
             command_id: cmd.command_id,
-            status: 'accepted_mock',
+            status: 'blocked_by_ir_policy',
             acknowledged_at: Date.now(),
-            reason: 'ok'
+            reason: 'real_ir_control_disabled'
           }), {qos:1});
           setTimeout(() => { clearTimeout(t); done(null); }, 500);
         }
