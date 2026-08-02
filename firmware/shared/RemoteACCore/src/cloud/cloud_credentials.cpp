@@ -14,12 +14,28 @@
 
 namespace CloudCredentials {
 
-bool available() {
+CloudCredentialValidation validate() {
 #if ENABLE_CLOUD_CREDENTIALS
-    return (strlen(MQTT_BROKER_HOST) > 0);
+    // v1.2.4: same minimum rules as tools/validate-cloud-secrets.py. A config
+    // copied from the example template verbatim is rejected here.
+    return ::validateCloudCredentials(
+        MQTT_BROKER_HOST, (int)MQTT_BROKER_PORT,
+        MQTT_DEVICE_ID, MQTT_USERNAME, MQTT_PASSWORD,
+        MQTT_CA_CERT, MQTT_TLS_FINGERPRINT);
 #else
-    return false;
+    CloudCredentialValidation v;
+    v.ok = false;
+    v.code = CLOUD_ERR_HOST_EMPTY;
+    return v;
 #endif
+}
+
+bool available() {
+    return validate().ok;
+}
+
+const char* validationErrorCode() {
+    return cloudValidationCodeStr(validate().code);
 }
 
 const char* host() {
