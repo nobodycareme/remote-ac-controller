@@ -346,6 +346,7 @@ jobs:
           persist-credentials: false
 
       - name: Assert the sketch carries no build-flag escape hatch
+        shell: bash
         run: |
           set -euo pipefail
           SKETCH_DIR=firmware/arduino-ide/Remote_AC_Controller
