@@ -152,7 +152,7 @@ cp generic_srun.example.h generic_srun.h   # 其他 srun 校园，需自行填�
 | 开放 SSID     | 串口命令 `wifi connect <ssid>`（显式开放 SSID）         | `ENABLE_WIFI=1`                   |
 | 校园网参数    | Profile 头文件（SSID / Portal Host / ac_id / 证书指纹） | `ENABLE_CAMPUS_AUTH=1`            |
 | 校园网账号密码| `RemoteACCore/src/config/campus_secrets.h`             | `ENABLE_CONTROLLED_LIVE_AUTH=1`   |
-| MQTT Broker   | `RemoteACCore/src/cloud_secrets.h`                     | `ENABLE_CLOUD_CREDENTIALS=1`      |
+| MQTT Broker   | `RemoteACCore/src/config/cloud_secrets.h`                     | `ENABLE_CLOUD_CREDENTIALS=1`      |
 
 ```bash
 # 普通 WiFi 凭据（家庭/实验室 WPA/WPA2，与校园网账号互斥）
@@ -165,13 +165,13 @@ cp ~/Arduino/libraries/RemoteACCore/src/config/campus_secrets.example.h \
    ~/Arduino/libraries/RemoteACCore/src/config/campus_secrets.h
 
 # MQTT 凭据（仅在启用云连接时创建）
-cp ../../agent-platformio/include/cloud_secrets.example.h \
-   ~/Arduino/libraries/RemoteACCore/src/cloud_secrets.h
+cp ~/Arduino/libraries/RemoteACCore/src/config/cloud_secrets.example.h \
+   ~/Arduino/libraries/RemoteACCore/src/config/cloud_secrets.h
 ```
 
-> `cloud_secrets.h` 需放在库的 `src/` 目录下（该目录在 Arduino 的头文件搜索路径中）；
-> `campus_secrets.h` 需放在 `src/config/` 下（与引用它的 `campus_credentials.h` 同目录）。
-> 缺失时构建会 `#error` 明确报错，而不是静默使用空凭据。
+> `cloud_secrets.h` 与 `campus_secrets.h` 均放在库的 `src/config/` 目录下。PlatformIO 与 Arduino IDE
+> 共用这一份 canonical Cloud 配置；已弃用的 `src/cloud_secrets.h` 和 PlatformIO `include/` 路径不得保留。
+> canonical 文件缺失时，构建会 `#error` 明确报错，而不是静默使用空凭据。
 
 **切勿提交** `globals.h`、`campus_secrets.h`、`cloud_secrets.h` 或任何非 `.example.h` 的 Profile。
 
@@ -276,7 +276,7 @@ campus unblock        - 解除硬失败锁存（latch），重新探测 Portal
 4. 执行一次完全重新编译（Arduino IDE 的构建缓存偶尔需要清理）。
 
 ### 云功能不工作
-- 需同时 `ENABLE_CLOUD=1` 与 `ENABLE_CLOUD_CREDENTIALS=1`，且 `cloud_secrets.h` 存在。
+- 需同时 `ENABLE_CLOUD=1` 与 `ENABLE_CLOUD_CREDENTIALS=1`，且 canonical `RemoteACCore/src/config/cloud_secrets.h` 存在；两个旧路径不得保留。
 - 串口应出现 `CLOUD_MQTT_INIT_OK`。
 
 ### 校园网认证进入 `WIFI_BLOCKED` 且不再重试

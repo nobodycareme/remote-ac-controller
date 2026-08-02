@@ -55,7 +55,7 @@ jobs:
           $required = @(
             'firmware/agent-platformio/platformio.ini',
             'firmware/agent-platformio/src/main.cpp',
-            'firmware/agent-platformio/include/cloud_secrets.example.h',
+            'firmware/shared/RemoteACCore/src/config/cloud_secrets.example.h',
             'firmware/agent-platformio/tools/dev.ps1',
             'firmware/shared/RemoteACCore/library.properties',
             'firmware/shared/RemoteACCore/src/RemoteACApp.h',
@@ -74,6 +74,8 @@ jobs:
           Set-StrictMode -Version Latest
           $forbidden = @(
             'firmware/agent-platformio/include/secrets.h',
+            'firmware/shared/RemoteACCore/src/config/cloud_secrets.h',
+            'firmware/shared/RemoteACCore/src/cloud_secrets.h',
             'firmware/agent-platformio/include/cloud_secrets.h'
           )
           $bad = @()
@@ -121,6 +123,97 @@ jobs:
       - name: dev.ps1 build (public profile, artifact secret-scanned)
         run: pwsh firmware/agent-platformio/tools/dev.ps1 build -Profile public
 
+      - name: v1.2.5 local-wifi-cloud real compile (CA-only / fingerprint-only)
+        run: |
+          $ErrorActionPreference = 'Continue'
+          # Temporary, obvious CI test values. Never GitHub secrets.
+          $wifi = 'firmware/shared/RemoteACCore/src/config/wifi_secrets.h'
+          $cloud = 'firmware/shared/RemoteACCore/src/config/cloud_secrets.h'
+          # Escaped \n inside the C string literal (like cloud_secrets.example.h)
+          # so the PEM stays on ONE preprocessor line.
+          $ca = '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----'
+          $fp = 'F4:BD:59:32:8E:77:8C:CB:AD:6E:AE:85:86:59:36:FD:0D:28:47:F9'
+
+          Set-Content -LiteralPath $wifi -Value @(
+            '#pragma once',
+            '#define LOCAL_WIFI_SSID     "Home WiFi CI"',
+            '#define LOCAL_WIFI_PASSWORD "CI-TEST-PASSWORD-123"'
+          ) -Encoding UTF8
+
+          try {
+            # --- 12.1 CA-only real compile ---------------------------------
+            Set-Content -LiteralPath $cloud -Value @(
+              '#pragma once',
+              '#define MQTT_BROKER_HOST "mqtt.ci-test.example.net"',
+              '#define MQTT_BROKER_PORT 8883',
+              '#define MQTT_DEVICE_ID "ci-test-device-01"',
+              '#define MQTT_USERNAME "ci-test-user-01"',
+              '#define MQTT_PASSWORD "ci-test-password-2026"',
+              "#define MQTT_CA_CERT `"$ca`"",
+              '#define MQTT_TLS_FINGERPRINT ""'
+            ) -Encoding UTF8
+            $out = pwsh firmware/agent-platformio/tools/dev.ps1 build -Profile local-wifi-cloud 2>&1
+            $out | Out-String | Write-Output
+            if ($LASTEXITCODE -ne 0) { throw "LWC_CA_ONLY_BUILD_FAILED rc=$LASTEXITCODE" }
+            Write-Output 'MQTT_TLS_CA_ONLY_COMPILE_PASS=True'
+
+            # --- 12.2 fingerprint-only real compile -------------------------
+            Set-Content -LiteralPath $cloud -Value @(
+              '#pragma once',
+              '#define MQTT_BROKER_HOST "mqtt.ci-test.example.net"',
+              '#define MQTT_BROKER_PORT 8883',
+              '#define MQTT_DEVICE_ID "ci-test-device-01"',
+              '#define MQTT_USERNAME "ci-test-user-01"',
+              '#define MQTT_PASSWORD "ci-test-password-2026"',
+              '#define MQTT_CA_CERT ""',
+              "#define MQTT_TLS_FINGERPRINT `"$fp`""
+            ) -Encoding UTF8
+            $out = pwsh firmware/agent-platformio/tools/dev.ps1 build -Profile local-wifi-cloud 2>&1
+            $out | Out-String | Write-Output
+            if ($LASTEXITCODE -ne 0) { throw "LWC_FP_ONLY_BUILD_FAILED rc=$LASTEXITCODE" }
+            Write-Output 'MQTT_TLS_FINGERPRINT_ONLY_COMPILE_PASS=True'
+
+            # --- 12.4 both valid: still compiles (CA path is chosen) --------
+            Set-Content -LiteralPath $cloud -Value @(
+              '#pragma once',
+              '#define MQTT_BROKER_HOST "mqtt.ci-test.example.net"',
+              '#define MQTT_BROKER_PORT 8883',
+              '#define MQTT_DEVICE_ID "ci-test-device-01"',
+              '#define MQTT_USERNAME "ci-test-user-01"',
+              '#define MQTT_PASSWORD "ci-test-password-2026"',
+              "#define MQTT_CA_CERT `"$ca`"",
+              "#define MQTT_TLS_FINGERPRINT `"$fp`""
+            ) -Encoding UTF8
+            $out = pwsh firmware/agent-platformio/tools/dev.ps1 build -Profile local-wifi-cloud 2>&1
+            $out | Out-String | Write-Output
+            if ($LASTEXITCODE -ne 0) { throw "LWC_BOTH_VALID_BUILD_FAILED rc=$LASTEXITCODE" }
+            Write-Output 'MQTT_TLS_BOTH_VALID_COMPILE_PASS=True'
+
+            # --- 12.3 no TLS material: pre-flight validation must reject ----
+            Set-Content -LiteralPath $cloud -Value @(
+              '#pragma once',
+              '#define MQTT_BROKER_HOST "mqtt.ci-test.example.net"',
+              '#define MQTT_BROKER_PORT 8883',
+              '#define MQTT_DEVICE_ID "ci-test-device-01"',
+              '#define MQTT_USERNAME "ci-test-user-01"',
+              '#define MQTT_PASSWORD "ci-test-password-2026"',
+              '#define MQTT_CA_CERT ""',
+              '#define MQTT_TLS_FINGERPRINT ""'
+            ) -Encoding UTF8
+            $out = pwsh firmware/agent-platformio/tools/dev.ps1 build -Profile local-wifi-cloud 2>&1
+            $out | Out-String | Write-Output
+            if ($LASTEXITCODE -eq 0) { throw 'LWC_NO_TLS_BUILD_SUCCEEDED (must be rejected)' }
+            if (($out | Out-String) -notmatch 'TLS_MATERIAL_MISSING') {
+              throw "LWC_NO_TLS_WRONG_ERROR: $out"
+            }
+            Write-Output 'MQTT_TLS_NO_MATERIAL_REJECTED=True'
+          }
+          finally {
+            Remove-Item $wifi -ErrorAction SilentlyContinue
+            Remove-Item $cloud -ErrorAction SilentlyContinue
+          }
+          exit 0
+
       - name: dev.ps1 profile contract + secret content validation (v1.2.4)
         run: |
           $ErrorActionPreference = 'Continue'
@@ -149,28 +242,109 @@ jobs:
           }
           exit 0
 
+      - name: v1.2.5 SSID/TLS build-time validation matrix (test values only)
+        run: |
+          $ErrorActionPreference = 'Continue'
+          python tools/validate-cloud-secrets.py --self-test
+
+          # --- helper: write a temporary (git-ignored) wifi_secrets.h -------
+          $wifi = 'firmware/shared/RemoteACCore/src/config/wifi_secrets.h'
+          function Write-WifiSecrets([string]$ssid, [string]$pwd) {
+            $lines = @(
+              '#pragma once',
+              "#define LOCAL_WIFI_SSID     `"$ssid`"",
+              "#define LOCAL_WIFI_PASSWORD `"$pwd`""
+            )
+            Set-Content -LiteralPath $wifi -Value $lines -Encoding UTF8
+          }
+
+          # 1) SSID with an internal space is ACCEPTED (no longer rejected)
+          Write-WifiSecrets 'Home WiFi' 'CI-TEST-PASSWORD-123'
+          & python tools/validate-cloud-secrets.py --require-wifi --wifi $wifi | Out-String | Write-Output
+          if ($LASTEXITCODE -ne 0) { throw 'SSID_INTERNAL_SPACE_REJECTED (must be accepted)' }
+          Write-Output 'WIFI_SSID_INTERNAL_SPACE_PASS=True'
+
+          # 2) exactly-32-byte SSID is ACCEPTED
+          Write-WifiSecrets 'abcdefghijklmnopqrstuvwxyz012345' 'CI-TEST-PASSWORD-123'
+          & python tools/validate-cloud-secrets.py --require-wifi --wifi $wifi | Out-String | Write-Output
+          if ($LASTEXITCODE -ne 0) { throw 'SSID_32_BYTE_REJECTED (must be accepted)' }
+          Write-Output 'WIFI_SSID_32_BYTE_PASS=True'
+
+          # 3) 33-byte SSID is REJECTED
+          Write-WifiSecrets 'abcdefghijklmnopqrstuvwxyz0123456' 'CI-TEST-PASSWORD-123'
+          & python tools/validate-cloud-secrets.py --require-wifi --wifi $wifi | Out-String | Write-Output
+          if ($LASTEXITCODE -eq 0) { throw 'SSID_33_BYTE_ACCEPTED (must be rejected)' }
+          Write-Output 'WIFI_SSID_33_BYTE_REJECT_PASS=True'
+
+          # 4) all-space SSID is REJECTED
+          Write-WifiSecrets '      ' 'CI-TEST-PASSWORD-123'
+          & python tools/validate-cloud-secrets.py --require-wifi --wifi $wifi | Out-String | Write-Output
+          if ($LASTEXITCODE -eq 0) { throw 'SSID_ALL_SPACE_ACCEPTED (must be rejected)' }
+          Write-Output 'WIFI_SSID_ALL_SPACE_REJECT_PASS=True'
+
+          # 5) control-character SSID is REJECTED
+          Write-WifiSecrets "My`tWiFi" 'CI-TEST-PASSWORD-123'
+          & python tools/validate-cloud-secrets.py --require-wifi --wifi $wifi | Out-String | Write-Output
+          if ($LASTEXITCODE -eq 0) { throw 'SSID_CONTROL_CHAR_ACCEPTED (must be rejected)' }
+          Write-Output 'WIFI_SSID_CONTROL_CHARACTER_REJECT_PASS=True'
+          Remove-Item $wifi -ErrorAction SilentlyContinue
+
+          # --- helper: temporary cloud_secrets.h (obvious CI test values) ----
+          $cloud = 'firmware/shared/RemoteACCore/src/config/cloud_secrets.h'
+          # Escaped \n inside the C string literal (like cloud_secrets.example.h)
+          # so the PEM stays on ONE preprocessor line.
+          $ca = '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----'
+          function Write-CloudSecrets([string]$caCert, [string]$fp) {
+            $lines = @(
+              '#pragma once',
+              '#define MQTT_BROKER_HOST "mqtt.ci-test.example.net"',
+              '#define MQTT_BROKER_PORT 8883',
+              '#define MQTT_DEVICE_ID "ci-test-device-01"',
+              '#define MQTT_USERNAME "ci-test-user-01"',
+              '#define MQTT_PASSWORD "ci-test-password-2026"',
+              "#define MQTT_CA_CERT `"$caCert`"",
+              "#define MQTT_TLS_FINGERPRINT `"$fp`""
+            )
+            Set-Content -LiteralPath $cloud -Value $lines -Encoding UTF8
+          }
+
+          # 6) CA-only is ACCEPTED
+          Write-CloudSecrets $ca ''
+          & python tools/validate-cloud-secrets.py --require-cloud --cloud $cloud | Out-String | Write-Output
+          if ($LASTEXITCODE -ne 0) { throw 'CLOUD_CA_ONLY_REJECTED (must be accepted)' }
+          Write-Output 'MQTT_TLS_CA_ONLY_PASS=True'
+
+          # 7) fingerprint-only is ACCEPTED
+          Write-CloudSecrets '' 'F4:BD:59:32:8E:77:8C:CB:AD:6E:AE:85:86:59:36:FD:0D:28:47:F9'
+          & python tools/validate-cloud-secrets.py --require-cloud --cloud $cloud | Out-String | Write-Output
+          if ($LASTEXITCODE -ne 0) { throw 'CLOUD_FP_ONLY_REJECTED (must be accepted)' }
+          Write-Output 'MQTT_TLS_FINGERPRINT_ONLY_PASS=True'
+
+          # 8) no TLS material is REJECTED with TLS_MATERIAL_MISSING
+          Write-CloudSecrets '' ''
+          $out = & python tools/validate-cloud-secrets.py --require-cloud --cloud $cloud 2>&1 | Out-String
+          Write-Output $out
+          if ($LASTEXITCODE -eq 0) { throw 'CLOUD_NO_TLS_ACCEPTED (must be rejected)' }
+          if ($out -notmatch 'TLS_MATERIAL_MISSING') { throw "CLOUD_NO_TLS_WRONG_CODE: $out" }
+          Write-Output 'MQTT_TLS_NO_MATERIAL_REJECTED=True'
+
+          # 9) invalid fingerprint is REJECTED with TLS_FINGERPRINT_INVALID
+          Write-CloudSecrets '' 'F4:BD:59'
+          $out = & python tools/validate-cloud-secrets.py --require-cloud --cloud $cloud 2>&1 | Out-String
+          Write-Output $out
+          if ($LASTEXITCODE -eq 0) { throw 'CLOUD_BAD_FP_ACCEPTED (must be rejected)' }
+          Write-Output 'MQTT_TLS_FINGERPRINT_INVALID_REJECTED=True'
+          Remove-Item $cloud -ErrorAction SilentlyContinue
+          exit 0
+
+      - name: v1.2.5 reject executable setInsecure calls
+        run: python tools/check-no-insecure-tls.py --self-test
+
   # ---------------------------------------------------------------------------
-  # arduino-ide-ci
+  # firmware-arduino-public
   # ---------------------------------------------------------------------------
-  # Compiles the Arduino IDE sketch EXACTLY the way an ordinary user does, so a
-  # green run is real evidence that the documented workflow works:
-  #
-  #   1. install the two repository libraries with the documented script
-  #      (firmware/arduino-ide/tools/install-arduino-libraries.sh)
-  #   2. cp Remote_AC_Controller.ino.globals.example.h
-  #         Remote_AC_Controller.ino.globals.h
-  #   3. edit the switches inside that globals header
-  #   4. arduino-cli compile --fqbn esp8266:esp8266:nodemcuv2 <sketch dir>
-  #
-  # Explicitly FORBIDDEN in this job (asserted below, not merely avoided):
-  #   - no `-include` on the command line
-  #   - no `--build-property build.extra_flags=...`
-  #   - no `/tmp/ci_stubs.h` or any other CI-only stub header
-  #   - no `compile: extra_flags:` in sketch.yaml
-  # The ESP8266 core force-includes <sketch>.ino.globals.h into every
-  # compilation unit by itself (prebuild hook mkbuildoptglobals.py).
-  #
-  # No credentials, no real IR, no live campus authentication, no private data.
+  # Compile the Arduino IDE sketch through the documented first-time-user
+  # workflow under each public feature profile. No credentials or hardware.
   firmware-arduino-public:
     name: firmware-arduino-public (${{ matrix.name }})
     runs-on: ubuntu-latest
@@ -184,9 +358,6 @@ jobs:
           - name: wifi-only
             switches: "ENABLE_WIFI=1"
           - name: xidian-campus-example
-            # Public example: campus auth compiles (srun-c + policy + epoch) but
-            # unattended auth stays OFF (ENABLE_AUTO_CAMPUS_AUTH=0); feature_gates
-            # hard-errors on AUTO=1 without ENABLE_CONTROLLED_LIVE_AUTH=1.
             switches: "ENABLE_WIFI=1 ENABLE_CAMPUS_AUTH=1 ENABLE_AUTO_CAMPUS_AUTH=0"
             profile: "profiles/xidian.example.h"
           - name: generic-srun-example
@@ -201,6 +372,7 @@ jobs:
           persist-credentials: false
 
       - name: Assert the sketch carries no build-flag escape hatch
+        shell: bash
         run: |
           set -euo pipefail
           SKETCH_DIR=firmware/arduino-ide/Remote_AC_Controller
@@ -217,16 +389,22 @@ jobs:
           echo 'GLOBALS_MANUALLY_INCLUDED=False'
 
       - name: Setup Arduino CLI
+        shell: bash
         run: |
           set -euo pipefail
-          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
+          mkdir -p "$HOME/bin" "$HOME/Arduino"
+          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR="$HOME/bin" sh
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/bin:$PATH"
           arduino-cli version
           arduino-cli config init
+          arduino-cli config set directories.user "$HOME/Arduino"
           arduino-cli config add board_manager.additional_urls https://arduino.esp8266.com/stable/package_esp8266com_index.json
           arduino-cli core update-index
           arduino-cli core install esp8266:esp8266@3.1.2
 
       - name: Install Library Manager dependencies (documented versions)
+        shell: bash
         run: |
           set -euo pipefail
           arduino-cli lib install "DHT sensor library@1.4.7"
@@ -235,6 +413,7 @@ jobs:
           arduino-cli lib install "ArduinoJson@6.21.5"
 
       - name: Install repository libraries with the documented script
+        shell: bash
         run: |
           set -euo pipefail
           bash firmware/arduino-ide/tools/install-arduino-libraries.sh
@@ -249,6 +428,7 @@ jobs:
           echo "SRUN_ARDUINO_LIB_GENERATED=True"
 
       - name: Configure globals.h like a first-time user (${{ matrix.name }})
+        shell: bash
         run: |
           set -euo pipefail
           SKETCH_DIR=firmware/arduino-ide/Remote_AC_Controller
@@ -278,6 +458,7 @@ jobs:
           grep -E '^#define' "$G"
 
       - name: Compile as an ordinary user (${{ matrix.name }})
+        shell: bash
         run: |
           set -euo pipefail
           SKETCH_DIR="$(pwd)/firmware/arduino-ide/Remote_AC_Controller"
@@ -299,6 +480,7 @@ jobs:
 
       - name: NEGATIVE — campus auth without a profile must fail to compile
         if: matrix.name == 'offline'
+        shell: bash
         run: |
           set -euo pipefail
           SKETCH_DIR="$(pwd)/firmware/arduino-ide/Remote_AC_Controller"
@@ -377,10 +559,31 @@ jobs:
             test/host/test_cloud_secret_validation.cpp -o /tmp/test_cloudval
           /tmp/test_cloudval
 
-      - name: Secret content validator self-test (v1.2.4)
+      - name: MQTT TLS policy + adapter tests (v1.2.5)
+        run: |
+          set -euo pipefail
+          g++ -std=c++11 -Wall -I firmware/shared/RemoteACCore/src \
+            test/host/test_mqtt_tls_policy.cpp -o /tmp/test_tls_policy
+          /tmp/test_tls_policy | tee /tmp/tls_policy_out.txt
+          grep -q 'MQTT_TLS_POLICY_CASE_FAILURE=0' /tmp/tls_policy_out.txt
+
+      - name: SSID validation + Python/C++ parity tests (v1.2.5)
+        run: |
+          set -euo pipefail
+          python3 tools/gen-wifi-ssid-cases.py --check
+          g++ -std=c++11 -Wall -I firmware/shared/RemoteACCore/src \
+            test/host/test_wifi_ssid_validation.cpp -o /tmp/test_ssid
+          /tmp/test_ssid | tee /tmp/ssid_out.txt
+          grep -q 'WIFI_SSID_VALIDATION_CASE_FAILURE=0' /tmp/ssid_out.txt
+          python3 tools/test-wifi-ssid-parity.py | tee /tmp/ssid_parity.txt
+          grep -q 'WIFI_SSID_PY_CPP_PARITY_FAILURE=0' /tmp/ssid_parity.txt
+
+      - name: Secret content validator self-test (v1.2.5)
         run: |
           set -euo pipefail
           python3 tools/validate-cloud-secrets.py --self-test
+          python3 tools/check-cloud-secret-authority.py
+          python3 tools/check-cloud-secret-authority.py --self-test
 
       - name: WIFI_AUTOCONNECT policy matrix (7 profile semantics)
         run: |
@@ -752,6 +955,77 @@ jobs:
 
       - name: Unified version across root, firmware, and cloud
         run: python3 tools/check-version.py
+
+  # ---------------------------------------------------------------------------
+  # v1.2.5 independent release gates (five checks; total workflow checks = 16)
+  # ---------------------------------------------------------------------------
+  v125-mqtt-tls-policy:
+    name: v125-mqtt-tls-policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile and run MQTT TLS policy
+        run: |
+          g++ -std=c++11 -Wall -I firmware/shared/RemoteACCore/src \
+            test/host/test_mqtt_tls_policy.cpp -o /tmp/test_mqtt_tls_policy
+          /tmp/test_mqtt_tls_policy | tee /tmp/tls.txt
+          grep -q 'MQTT_TLS_POLICY_CASE_FAILURE=0' /tmp/tls.txt
+
+  v125-wifi-ssid-parity:
+    name: v125-wifi-ssid-parity
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify Python and C++ SSID parity
+        run: python3 tools/test-wifi-ssid-parity.py
+
+  v125-cloud-secret-authority:
+    name: v125-cloud-secret-authority
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify canonical Cloud secret path
+        run: |
+          python3 tools/check-cloud-secret-authority.py
+          python3 tools/check-cloud-secret-authority.py --self-test
+
+  v125-no-insecure-tls:
+    name: v125-no-insecure-tls
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Reject executable setInsecure calls
+        run: python3 tools/check-no-insecure-tls.py --self-test
+
+  v125-public-doc-contract:
+    name: v125-public-doc-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify v1.2.5 public documentation contract
+        run: |
+          python3 tools/check-public-docs.py
+          python3 tools/test-public-docs-negative.py
 
   # ---------------------------------------------------------------------------
   # secret-scan — pattern scan across the whole tracked tree

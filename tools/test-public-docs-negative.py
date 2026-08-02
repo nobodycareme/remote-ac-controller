@@ -215,7 +215,7 @@ def sabotage_17(root):
     p = os.path.join(root, "docs/中文/首次配置.md")
     txt = open(p, encoding="utf-8").read()
     txt = txt.replace(
-        "该 Profile 现在会启用 `ENABLE_CLOUD_CREDENTIALS=1`",
+        "该 Profile 会启用 `ENABLE_CLOUD_CREDENTIALS=1`",
         "local-wifi-cloud 无需 Cloud 凭据，只编译 Cloud 代码")
     open(p, "w", encoding="utf-8").write(txt)
 
@@ -262,7 +262,7 @@ def sabotage_22(root):
     p = os.path.join(root, "docs/中文/首次配置.md")
     txt = open(p, encoding="utf-8").read()
     txt = txt.replace(
-        "该 Profile 现在会启用 `ENABLE_CLOUD_CREDENTIALS=1`",
+        "该 Profile 会启用 `ENABLE_CLOUD_CREDENTIALS=1`",
         "cloud_secrets.h 存在即代表可用，无需修改内容")
     open(p, "w", encoding="utf-8").write(txt)
 
@@ -318,6 +318,81 @@ def sabotage_27(root):
     open(p, "w", encoding="utf-8").write(txt)
 
 
+def sabotage_28(root):
+    # re-claim SSIDs cannot contain spaces
+    p = os.path.join(root, "docs/中文/首次配置.md")
+    txt = open(p, encoding="utf-8").read()
+    txt = txt.replace(
+        "WiFi SSID 允许包含普通空格（例如 `Home WiFi`、`Lab Network 2`）",
+        "WiFi SSID 不能包含空格，必须是一个连续字符串")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_29(root):
+    # remove the 32-byte limit claim
+    p = os.path.join(root, "docs/English/first-time-setup.md")
+    txt = open(p, encoding="utf-8").read()
+    txt = txt.replace(
+        "its length is measured in UTF-8 bytes with a hard limit of 32 bytes",
+        "there is no practical limit on SSID length")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_30(root):
+    # claim the limit is 32 CHARACTERS (not bytes)
+    p = os.path.join(root, "docs/中文/首次配置.md")
+    txt = open(p, encoding="utf-8").read()
+    txt = txt.replace("长度按 UTF-8 编码后的字节数计算，必须为 1 至 32 字节",
+                      "长度按字符数计算，最多 32 个中文字符")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_31(root):
+    # claim the fingerprint is filled but never applied at runtime
+    p = os.path.join(root, "docs/English/first-time-setup.md")
+    txt = open(p, encoding="utf-8").read()
+    txt = txt.replace(
+        "a SHA-1 server-certificate fingerprint (`setFingerprint`, 40 hex characters, colons optional) is used only when no valid CA is present",
+        "a SHA-1 server-certificate fingerprint is stored for reference; it is not applied to the TLS client")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_32(root):
+    # claim CA and fingerprint are BOTH used (double validation)
+    p = os.path.join(root, "docs/中文/首次配置.md")
+    txt = open(p, encoding="utf-8").read()
+    txt = txt.replace(
+        "同时配置有效 CA 与有效指纹时只使用 CA（`setTrustAnchors`）",
+        "同时配置有效 CA 与有效指纹时，两者会一起进行双重校验")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_33(root):
+    # recommend setInsecure
+    p = os.path.join(root, "docs/中文/首次配置.md")
+    txt = open(p, encoding="utf-8").read()
+    txt += "\n如果证书校验失败，可以在代码中调用 `setInsecure()` 关闭 TLS 校验继续连接。\n"
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_34(root):
+    # claim the fingerprint never needs updating with the certificate
+    p = os.path.join(root, "docs/English/first-time-setup.md")
+    txt = open(p, encoding="utf-8").read()
+    txt = txt.replace(
+        "The fingerprint pins the current server certificate, so it must be updated when the certificate rotates.",
+        "The fingerprint is permanent and never needs to change, regardless of certificate updates.")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_35(root):
+    # CN/EN TLS priority mismatch: EN drops the CA-priority statement
+    p = os.path.join(root, "docs/English/first-time-setup.md")
+    txt = open(p, encoding="utf-8").read()
+    txt = txt.replace("the **CA certificate takes priority**", "the fingerprint is always preferred")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
 def main():
     results = [
         case(1, "markdown_in_html_block", sabotage_1),
@@ -347,6 +422,14 @@ def main():
         case(25, "template_broker_allowed", sabotage_25),
         case(26, "empty_status_is_normal", sabotage_26),
         case(27, "cmd_semantics_drift", sabotage_27),
+        case(28, "ssid_no_space_claim", sabotage_28),
+        case(29, "ssid_32byte_removed", sabotage_29),
+        case(30, "ssid_32_characters_claim", sabotage_30),
+        case(31, "fingerprint_not_applied", sabotage_31),
+        case(32, "ca_fp_double_validation", sabotage_32),
+        case(33, "set_insecure_recommended", sabotage_33),
+        case(34, "fingerprint_no_rotation", sabotage_34),
+        case(35, "cn_en_tls_priority_mismatch", sabotage_35),
     ]
     total = len(results)
     passed = sum(results)

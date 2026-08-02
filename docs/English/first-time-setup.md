@@ -47,16 +47,18 @@ cd firmware/agent-platformio
 **local-wifi-cloud (requires two local files)**:
 
 1. Copy `wifi_secrets.example.h` to `wifi_secrets.h` and fill in your own router SSID and password;
-2. Copy `cloud_secrets.example.h` to `cloud_secrets.h` and fill in your own MQTT broker settings (host, port, username, password, device ID, CA certificate or TLS fingerprint — fields follow the example template in the repository);
+2. In `firmware/shared/RemoteACCore/src/config/`, copy `cloud_secrets.example.h` to `cloud_secrets.h` and fill in your own MQTT broker settings (host, port, username, password, device ID, CA certificate or TLS fingerprint). PlatformIO and Arduino IDE share this one canonical local file;
 3. Run:
 
 ```powershell
 ./tools/dev.ps1 build -Profile local-wifi-cloud
 ```
 
-This profile now enables `ENABLE_CLOUD_CREDENTIALS=1`: if either `wifi_secrets.h` or `cloud_secrets.h` is missing, the build stops and prints the missing file and the template path — there is no fallback to a credentials-free example. Both real files are Git-ignored and never committed.
+This profile enables `ENABLE_CLOUD_CREDENTIALS=1`: if either `wifi_secrets.h` or canonical `firmware/shared/RemoteACCore/src/config/cloud_secrets.h` is missing, the build stops and prints the missing file and template path—there is no fallback to a credentials-free example. Both real files are Git-ignored and never committed. The old `firmware/agent-platformio/include/cloud_secrets.h` and `firmware/shared/RemoteACCore/src/cloud_secrets.h` paths are deprecated; either one causes a hard failure, so do not keep multiple Cloud secret files.
 
 > **Since v1.2.4 copying the template verbatim no longer passes.** Before a build, `local-wifi` / `local-wifi-cloud` run content validation: the Wi-Fi SSID must not be `your_wifi_name` and the password must follow the WPA/WPA2 rules (8-63 printable characters, or a 64-digit hex PSK). `local-wifi-cloud` additionally validates the cloud config — the broker host must not be a template value such as `your-broker.example.com`, the port must be within 1-65535, the device ID and credentials must be changed, and at least one valid CA certificate or TLS fingerprint must be present. On failure the build stops and prints a non-sensitive error code (for example `HOST_PLACEHOLDER`, `TLS_MATERIAL_MISSING`); no secret value is ever printed.
+
+> **Since v1.2.5 the SSID and TLS rules are:** a Wi-Fi SSID may contain ordinary internal spaces (for example `Home WiFi`, `Lab Network 2`); its length is measured in UTF-8 bytes with a hard limit of 32 bytes; it must not be all whitespace, must not contain ASCII control characters (0x01-0x1F, 0x7F), and it is never trimmed or silently truncated. For TLS, the **CA certificate takes priority** — when both a valid CA and a valid fingerprint are configured, only the CA is used (`setTrustAnchors`); a SHA-1 server-certificate fingerprint (`setFingerprint`, 40 hex characters, colons optional) is used only when no valid CA is present. The fingerprint pins the current server certificate, so it must be updated when the certificate rotates. If neither is present, the build/init stops (`TLS_MATERIAL_MISSING`). Disabling TLS validation is not supported (`setInsecure()` is forbidden).
 
 ### A.3 Arduino IDE workflow
 
@@ -87,7 +89,7 @@ The firmware joins the home network at boot using the compiled-in credentials (`
 | Command | Behaviour |
 |---|---|
 | `wifi connect` | re-select the local WPA/WPA2 configuration from `wifi_secrets.h` (password never enters the serial stream) |
-| `wifi connect <ssid>` | temporarily switch to the given open SSID; **does not** read or use the `wifi_secrets.h` password, and a Wi-Fi password is never accepted on the command line |
+| `wifi connect <ssid>` | temporarily switch to the given open SSID; **does not** read or use the `wifi_secrets.h` password, and a Wi-Fi password is never accepted on the command line. The SSID may contain spaces: `wifi connect Home WiFi` connects to the full `Home WiFi` as an open SSID (it is not split into `Home`) and never uses the local WPA password |
 | `wifi status` | print state, connection source (`NET_SOURCE`), the actual SSID (`NET_SSID`) and IP |
 | `wifi scan` | list nearby APs (read-only) |
 | `wifi disconnect` | drop the current association |
@@ -100,8 +102,16 @@ The serial stream never contains the password value, only:
 WIFI_CONNECT source=COMPILED_LOCAL_WPA ssid=<ssid> security=WPA_OR_WPA2
 WIFI_CONNECT source=CAMPUS_PROFILE_OPEN ssid=<ssid> security=OPEN
 WIFI_CONNECT source=RUNTIME_OPEN_SSID ssid=<ssid> security=OPEN
-WIFI_CONNECT_SKIPPED source=<source> reason=<SSID_NOT_CONFIGURED|WIFI_PASSWORD_NOT_CONFIGURED>
+WIFI_CONNECT_SKIPPED source=<source> reason=<SSID_NOT_CONFIGURED|WIFI_PASSWORD_NOT_CONFIGURED|SSID_INVALID|SSID_TOO_LONG>
 ```
+
+SSID validation rules (since v1.2.5, identical to the build-time checks):
+
+- An SSID may contain ordinary internal spaces — `Home WiFi`, `Lab Network 2` and `My Router` are all valid;
+- Length is measured in UTF-8 encoded BYTES and must be 1..32 bytes; longer SSIDs are rejected (`SSID_TOO_LONG`), never silently truncated;
+- An SSID must not be empty, must not be all whitespace, and must not contain ASCII control characters (0x01-0x1F, 0x7F — including Tab and newline);
+- The template value `your_wifi_name` is rejected;
+- The SSID is never trimmed or modified — the exact value you provide is what is used.
 
 ---
 

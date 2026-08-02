@@ -10,6 +10,10 @@
  * compile-time priority. This header contains the ONLY place that decides
  * WHICH WiFi.begin() overload the firmware calls, whether the link may come
  * up automatically at boot, and whether a configuration is valid at all.
+ * v1.2.5 delegates SSID acceptance to the unified wifi_ssid_validation.h
+ * rule (32-byte UTF-8 contract, internal spaces allowed, control chars and
+ * the template value rejected) — the SAME rule mirrored by the Python
+ * build-time validator and the shared JSON test vectors.
  * It has no Arduino/ESP8266 dependency, so host tests compile it directly
  * on any platform.
  *
@@ -28,6 +32,7 @@
  *     command and must NEVER be overridden by compiled local credentials.
  */
 #include "config/feature_gates.h"
+#include "network/wifi_ssid_validation.h"
 
 enum WifiSecurityType {
   WIFI_SECURITY_OPEN = 0,        // WiFi.begin(ssid)
@@ -46,8 +51,10 @@ enum WifiConnectionSource {
 
 enum WifiConnectReason {
   WIFI_PLAN_OK = 0,               // configuration is complete and usable
-  SSID_NOT_CONFIGURED,            // no SSID source carries a non-empty value
-  WIFI_PASSWORD_NOT_CONFIGURED    // local WPA mode but the password is empty
+  SSID_NOT_CONFIGURED,            // no SSID source carries a valid value
+  WIFI_PASSWORD_NOT_CONFIGURED,   // local WPA mode but the password is empty
+  SSID_INVALID,                   // SSID rejected by wifi_ssid_validation.h
+  SSID_TOO_LONG                   // SSID longer than the 32-byte contract
 };
 
 struct WifiConnectPlan {
@@ -80,18 +87,30 @@ inline const char* wifiPlanReasonLabel(WifiConnectReason r) {
     case WIFI_PLAN_OK:             return "OK";
     case SSID_NOT_CONFIGURED:      return "SSID_NOT_CONFIGURED";
     case WIFI_PASSWORD_NOT_CONFIGURED: return "WIFI_PASSWORD_NOT_CONFIGURED";
+    case SSID_INVALID:             return "SSID_INVALID";
+    case SSID_TOO_LONG:            return "SSID_TOO_LONG";
   }
   return "UNKNOWN";
 }
 
-// An SSID is usable only when it contains at least one non-whitespace
-// character (rejects "", nullptr and "   ").
+// Map the unified SSID validation code onto the plan reason.
+//   - empty / all-space  -> SSID_NOT_CONFIGURED (backward-compatible reason)
+//   - >32 bytes          -> SSID_TOO_LONG (the 32-byte contract)
+//   - control / template -> SSID_INVALID
+inline WifiConnectReason ssidReason(const char* ssid) {
+  WifiSsidValidationCode c = validateWifiSsid(ssid);
+  if (c == WIFI_SSID_ERR_TOO_LONG) return SSID_TOO_LONG;
+  if (c == WIFI_SSID_ERR_EMPTY || c == WIFI_SSID_ERR_ALL_SPACE) return SSID_NOT_CONFIGURED;
+  if (c == WIFI_SSID_OK) return WIFI_PLAN_OK;
+  return SSID_INVALID;
+}
+
+// An SSID is usable only when it passes the v1.2.5 unified rule
+// (wifi_ssid_validation.h): non-empty, not all-space, no control chars,
+// 1..32 UTF-8 bytes, not the template value. Ordinary internal spaces and
+// UTF-8 names are allowed.
 inline bool wifiSsidUsable(const char* ssid) {
-  if (!ssid) return false;
-  for (const char* c = ssid; *c; ++c) {
-    if (*c != ' ' && *c != '\t') return true;
-  }
-  return false;
+  return validateWifiSsid(ssid) == WIFI_SSID_OK;
 }
 
 /*
@@ -135,7 +154,7 @@ inline WifiConnectPlan makeWifiConnectPlan(WifiConnectionSource source,
           p.reason = WIFI_PASSWORD_NOT_CONFIGURED;
         }
       } else {
-        p.reason = SSID_NOT_CONFIGURED;
+        p.reason = ssidReason(ssid);
       }
       break;
 
@@ -147,7 +166,7 @@ inline WifiConnectPlan makeWifiConnectPlan(WifiConnectionSource source,
         p.configurationValid = true;
         p.securityType = WIFI_SECURITY_OPEN;
       } else {
-        p.reason = SSID_NOT_CONFIGURED;
+        p.reason = ssidReason(ssid);
       }
       break;
 

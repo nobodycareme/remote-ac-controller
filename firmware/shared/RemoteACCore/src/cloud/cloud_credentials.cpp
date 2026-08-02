@@ -5,10 +5,10 @@
 
 #if ENABLE_CLOUD_CREDENTIALS
   // Private build: real credentials REQUIRED
-  #if __has_include("cloud_secrets.h")
-    #include "cloud_secrets.h"
+  #if __has_include("config/cloud_secrets.h")
+    #include "config/cloud_secrets.h"
   #else
-    #error "ENABLE_CLOUD_CREDENTIALS=1 but cloud_secrets.h is missing. Create it from include/cloud_secrets.example.h"
+    #error "ENABLE_CLOUD_CREDENTIALS=1 but config/cloud_secrets.h is missing. Create it from config/cloud_secrets.example.h"
   #endif
 #endif
 

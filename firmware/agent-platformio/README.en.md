@@ -14,8 +14,7 @@ agent-platformio/
 ├── src/
 │   ├── main.cpp            # Thin entry point (→ appSetup/appLoop)
 │   └── private_ir_codes/   # Private IR code data (PlatformIO only)
-├── include/
-│   └── cloud_secrets.example.h  # MQTT credential template
+├── include/                 # PlatformIO-only public headers
 ├── lib/                    # PlatformIO-managed libraries
 ├── test/                   # Unit tests
 ├── tools/
@@ -84,9 +83,9 @@ sets of credentials and cannot be interchanged.
 
 3. **Cloud credentials** (for MQTT connectivity, optional):
    ```bash
-   cd agent-platformio
-   cp include/cloud_secrets.example.h include/cloud_secrets.h
-   # Edit include/cloud_secrets.h with your MQTT broker details
+   cd ../shared/RemoteACCore/src/config
+   cp cloud_secrets.example.h cloud_secrets.h
+   # Edit canonical cloud_secrets.h; PlatformIO and Arduino IDE share it
    ```
 
 ### Building Profiles
@@ -101,7 +100,9 @@ sets of credentials and cannot be interchanged.
 
 All public profiles keep `ENABLE_CONTROLLED_LIVE_AUTH=0` and
 `ENABLE_IR_MUTATING_COMMANDS=0`. Real credentials live only in git-ignored
-files and never in this repository.
+files and never in this repository. The only authoritative Cloud path is
+`shared/RemoteACCore/src/config/cloud_secrets.h`; `dev.ps1` fails when either
+deprecated Cloud secret path still exists.
 
 > **v1.2.4: copying the template verbatim no longer builds.** Before a build,
 > `local-wifi` / `local-wifi-cloud` run content validation via
@@ -112,6 +113,17 @@ files and never in this repository.
 > (no arguments) uses the local WPA configuration; `wifi connect <ssid>`
 > temporarily switches to the given open SSID, never uses the local password,
 > and never accepts a Wi-Fi password on the command line.
+>
+> **v1.2.5: SSID and TLS rules.** An SSID may contain ordinary internal
+> spaces (`Home WiFi`, `Lab Network 2`); its length is measured in UTF-8 bytes
+> with a 32-byte limit, it must not be all whitespace or contain control
+> characters, and it is never trimmed or truncated. For TLS the CA certificate
+> takes priority: when both a valid CA and a valid fingerprint are present,
+> only the CA is used; a SHA-1 server-certificate fingerprint (40 hex
+> characters, colons optional) is used only when no valid CA is present and
+> must be updated when the certificate rotates; if neither is present the
+> build/init stops (`TLS_MATERIAL_MISSING`); disabling TLS validation is not
+> supported.
 
 ### Upload
 

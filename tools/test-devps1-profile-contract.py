@@ -121,8 +121,15 @@ def main():
     # ---- pre-flight checks --------------------------------------------------
     check("wifi secrets pre-flight exists",
           "WIFI_SECRETS_MISSING=True" in src and "wifi_secrets.h" in src)
-    check("cloud secrets pre-flight exists (v1.2.3)",
-          "CLOUD_SECRETS_MISSING=True" in src and "cloud_secrets.h" in src)
+    check("cloud secrets pre-flight exists (v1.2.5 canonical path)",
+          "CLOUD_SECRETS_MISSING=True" in src
+          and "shared/RemoteACCore/src/config/cloud_secrets.h" in src)
+    check("legacy Cloud paths hard-fail",
+          "LEGACY_CLOUD_SECRETS_PATH_PRESENT=True" in src
+          and "CLOUD_SECRETS_PATH_AMBIGUOUS=True" in src)
+    check("both legacy Cloud paths named",
+          "shared/RemoteACCore/src/cloud_secrets.h" in src
+          and "include/cloud_secrets.h" in src)
     check("cloud pre-flight refuses fallback",
           "does NOT fall back to a credentials-free build" in src)
     check("no credential values in log lines",
@@ -137,6 +144,18 @@ def main():
           "LOCAL_SECRET_VALIDATION_FAILED=True" in src and "exit 5" in src)
     check("template copy is rejected",
           "copied from the example template verbatim is NOT accepted" in src)
+    check("private credential firmware is marked non-distributable",
+          "PRIVATE_FIRMWARE_NOT_FOR_DISTRIBUTION=True" in src
+          and "PRIVATE_SECRET_EMBEDDING_EXPECTED=True" in src)
+    check("public zero-secret scan stays authoritative",
+          "PUBLIC_SECRET_SCAN_PASS=True" in src
+          and "PUBLIC_SECRET_HITS=$hits" in src
+          and "PUBLIC_SECRET_SCAN_PASS=NOT_APPLICABLE" in src)
+    check("secret scan result is not inferred from output objects",
+          "$script:SecretScanPassed = $true" in src
+          and "$script:SecretScanPassed = $false" in src
+          and "if (-not $script:SecretScanPassed)" in src
+          and "if (-not (Invoke-SecretScan))" not in src)
 
     print("DEVPS1_PROFILE_CONTRACT_TOTAL=%d" % _TOTAL[0])
     print("DEVPS1_PROFILE_CONTRACT_PASS=%d" % (_TOTAL[0] - _FAILS[0]))

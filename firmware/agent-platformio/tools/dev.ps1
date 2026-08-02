@@ -44,6 +44,9 @@ $LibDepsDir   = Join-Path $WorkDir 'libdeps'
 $CacheDir     = Join-Path $WorkDir 'cache'
 $LogsDir      = Join-Path $WorkDir 'logs'
 $LockFile     = Join-Path $WorkDir '.workflow.lock'
+$CanonicalCloudSecrets = Join-Path $RepoRoot 'shared/RemoteACCore/src/config/cloud_secrets.h'
+$LegacySharedCloudSecrets = Join-Path $RepoRoot 'shared/RemoteACCore/src/cloud_secrets.h'
+$LegacyPlatformioCloudSecrets = Join-Path $FirmwareRoot 'include/cloud_secrets.h'
 
 foreach ($d in @($WorkDir, $BuildDir, $LibDepsDir, $CacheDir, $LogsDir)) {
     [System.IO.Directory]::CreateDirectory($d) | Out-Null
@@ -68,6 +71,17 @@ if (-not $MutexHeld) {
 }
 Write-Output 'DEV_PS1_MUTEX_PASS=True'
 Set-Content -Path $LockFile -Value "$PID|$(Get-Date -Format o)" -Encoding ASCII
+
+if ((Test-Path -LiteralPath $LegacySharedCloudSecrets) -or
+    (Test-Path -LiteralPath $LegacyPlatformioCloudSecrets)) {
+    Write-Output 'LEGACY_CLOUD_SECRETS_PATH_PRESENT=True'
+    Write-Output 'CLOUD_SECRETS_PATH_AMBIGUOUS=True'
+    Write-Output 'CANONICAL_CLOUD_SECRETS_PATH=firmware/shared/RemoteACCore/src/config/cloud_secrets.h'
+    Write-Error 'Migrate the effective legacy Cloud secret file to the canonical config path, then remove both deprecated paths.'
+    exit 5
+}
+Write-Output 'LEGACY_CLOUD_SECRETS_PATH_PRESENT=False'
+Write-Output 'CLOUD_SECRETS_PATH_AMBIGUOUS=False'
 
 # ------------------------------------------------------------
 # PlatformIO discovery
@@ -236,14 +250,14 @@ if ($Profile -in @('local-wifi', 'local-wifi-cloud')) {
 }
 
 # ------------------------------------------------------------
-# local-wifi-cloud also requires the untracked cloud_secrets.h
+# local-wifi-cloud also requires the untracked canonical cloud_secrets.h
 # ------------------------------------------------------------
 if ($Profile -eq 'local-wifi-cloud') {
-    $CloudSecrets = Join-Path $FirmwareRoot 'include/cloud_secrets.h'
+    $CloudSecrets = $CanonicalCloudSecrets
     if (-not (Test-Path -LiteralPath $CloudSecrets)) {
         Write-Output 'CLOUD_SECRETS_MISSING=True'
-        Write-Output 'Copy firmware/agent-platformio/include/cloud_secrets.example.h to'
-        Write-Output 'firmware/agent-platformio/include/cloud_secrets.h and fill in your'
+        Write-Output 'Copy firmware/shared/RemoteACCore/src/config/cloud_secrets.example.h to'
+        Write-Output 'firmware/shared/RemoteACCore/src/config/cloud_secrets.h and fill in your'
         Write-Output 'own MQTT broker settings. The real file is git-ignored.'
         Write-Output 'local-wifi-cloud does NOT fall back to a credentials-free build.'
         exit 5
@@ -274,7 +288,7 @@ if ($Profile -in @('local-wifi', 'local-wifi-cloud')) {
     if ($vrc -ne 0) {
         Write-Output 'LOCAL_SECRET_VALIDATION_FAILED=True'
         Write-Output 'Fix firmware/shared/RemoteACCore/src/config/wifi_secrets.h and/or'
-        Write-Output 'firmware/agent-platformio/include/cloud_secrets.h (see VALIDATION_ERROR_CODE).'
+        Write-Output 'firmware/shared/RemoteACCore/src/config/cloud_secrets.h (see VALIDATION_ERROR_CODE).'
         Write-Output 'A config copied from the example template verbatim is NOT accepted.'
         exit 5
     }
@@ -284,15 +298,18 @@ if ($Profile -in @('local-wifi', 'local-wifi-cloud')) {
 # ------------------------------------------------------------
 # Safety gates
 # ------------------------------------------------------------
-$SecretHeaders = @('secrets.h', 'cloud_secrets.h')
+$SecretPaths = @(
+    (Join-Path $FirmwareRoot 'include/secrets.h'),
+    $CanonicalCloudSecrets,
+    $LegacySharedCloudSecrets,
+    $LegacyPlatformioCloudSecrets
+)
 
 function Assert-NoTrackedSecrets {
     $bad = @()
-    foreach ($h in $SecretHeaders) {
-        $p = Join-Path (Join-Path $FirmwareRoot 'include') $h
+    foreach ($p in $SecretPaths) {
         if (-not (Test-Path $p)) { continue }
-        # Path relative to $RepoRoot (firmware/): agent-platformio/include/<h>.
-        $rel = Join-Path (Split-Path -Leaf $FirmwareRoot) ("include/" + $h)
+        $rel = $p.Substring($RepoRoot.Length).TrimStart('\', '/')
         # PS 5.1: a failing native command writes to the error stream and, with
         # $ErrorActionPreference='Stop', a plain 2>&1 / 2>$null capture STILL
         # throws NativeCommandError. Lower EAP around the call only.
@@ -333,8 +350,7 @@ function Get-DefinedSecrets {
     # Reads locally provided secret headers (never committed) so the artifact
     # scan can prove the values did not leak into the compiled output.
     $found = @{}
-    foreach ($h in $SecretHeaders) {
-        $p = Join-Path (Join-Path $FirmwareRoot 'include') $h
+    foreach ($p in $SecretPaths) {
         if (-not (Test-Path $p)) { continue }
         $c = (Get-Content $p -Raw) -replace "\\\r?\n\s*", ''
         foreach ($m in [regex]::Matches($c, '#define\s+(\w+)\s+"([^"]*)"')) {
@@ -349,13 +365,20 @@ function Get-DefinedSecrets {
 }
 
 function Invoke-SecretScan {
+    $script:SecretScanPassed = $true
     Write-Output "SECRET_SCAN [$Profile]"
     $secrets = Get-DefinedSecrets
     Write-Output "SECRETS_LOADED_FOR_SCAN=$($secrets.Count)"
+    if ($Profile -in @('local-wifi', 'local-wifi-cloud')) {
+        Write-Output 'PRIVATE_FIRMWARE_NOT_FOR_DISTRIBUTION=True'
+        Write-Output 'PRIVATE_SECRET_EMBEDDING_EXPECTED=True'
+        Write-Output 'PUBLIC_SECRET_SCAN_PASS=NOT_APPLICABLE'
+        return
+    }
     if ($secrets.Count -eq 0) {
         # Nothing local to leak; the public build has no credentials by design.
         Write-Output 'PUBLIC_SECRET_SCAN_PASS=True'
-        return $true
+        return
     }
 
     $envDir = Join-Path $BuildDir 'nodemcuv2'
@@ -381,10 +404,10 @@ function Invoke-SecretScan {
         Write-Output 'PUBLIC_SECRET_SCAN_PASS=False'
         foreach ($f in $files) { Remove-Item $f -Force -ErrorAction SilentlyContinue }
         Write-Output 'CONTAMINATED_ARTIFACTS_DELETED=True'
-        return $false
+        $script:SecretScanPassed = $false
+        return
     }
     Write-Output 'PUBLIC_SECRET_SCAN_PASS=True'
-    return $true
 }
 
 # ------------------------------------------------------------
@@ -488,7 +511,8 @@ function Invoke-Build {
         $script:LastRc = $rc
         return
     }
-    if (-not (Invoke-SecretScan)) {
+    Invoke-SecretScan
+    if (-not $script:SecretScanPassed) {
         Write-Output 'BUILD_RESULT=FAIL_SECRET_SCAN'
         $script:LastRc = 5
         return
@@ -524,10 +548,9 @@ try {
                 Write-Output "PIO_VERSION=$v"
                 Write-Output "PIO_CORE_DIR=$env:PLATFORMIO_CORE_DIR"
             }
-            foreach ($h in $SecretHeaders) {
-                $p = Join-Path (Join-Path $FirmwareRoot 'include') $h
-                Write-Output ("LOCAL_{0}={1}" -f $h.ToUpper().Replace('.', '_'), (Test-Path $p))
-            }
+            Write-Output ("LOCAL_SECRETS_H=" + (Test-Path (Join-Path $FirmwareRoot 'include/secrets.h')))
+            Write-Output ("LOCAL_CANONICAL_CLOUD_SECRETS_H=" + (Test-Path $CanonicalCloudSecrets))
+            Write-Output 'CANONICAL_CLOUD_SECRETS_PATH=firmware/shared/RemoteACCore/src/config/cloud_secrets.h'
             $p = Resolve-SerialPort
             Write-Output ("SERIAL_PORT_DETECTED=" + $(if ($p) { $p } else { 'NONE' }))
             Write-Output 'CLOUD_CREDENTIALS_COMPILED=False'
@@ -621,7 +644,7 @@ try {
             Write-Output '  monitor       Open the serial monitor'
             Write-Output '  help          Show this message'
             Write-Output ''
-            Write-Output 'Profiles (public repository only - none of them compile in credentials):'
+            Write-Output 'Profiles:'
             Write-Output '  public                  Default. Cloud transport on, credentials off, live campus'
             Write-Output '                          auth off, IR emission disabled.'
             Write-Output '  local-campus-example    Campus auth compiled against the public Xidian example'
@@ -630,8 +653,10 @@ try {
             Write-Output '  public-cloud-example    Same as public, kept as an explicit name for the cloud'
             Write-Output '                          transport matrix entry.'
             Write-Output '  local-wifi              Home/lab WPA/WPA2 with compiled-in credentials'
-            Write-Output '                          (wifi_secrets.h) and unattended connect. Cloud off.'
-            Write-Output '  local-wifi-cloud        local-wifi + cloud transport.'
+            Write-Output '                          (wifi_secrets.h) and unattended connect. Cloud off;'
+            Write-Output '                          the resulting private firmware must not be distributed.'
+            Write-Output '  local-wifi-cloud        local-wifi + compiled-in MQTT credentials and TLS material;'
+            Write-Output '                          the resulting private firmware must not be distributed.'
             Write-Output ''
             Write-Output 'All profiles keep ENABLE_CONTROLLED_LIVE_AUTH=0 and ENABLE_IR_MUTATING_COMMANDS=0.'
             Write-Output 'Real credentials belong in an untracked campus_secrets.h / wifi_secrets.h, never in this repository.'

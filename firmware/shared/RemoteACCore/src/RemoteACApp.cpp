@@ -152,6 +152,10 @@ void appSetup(void) {
       mqttCfg.username      = CloudCredentials::username();
       mqttCfg.password      = CloudCredentials::password();
       mqttCfg.device_id     = CloudCredentials::deviceId();
+      // v1.2.5: TLS identity is carried EXPLICITLY by the config. begin()
+      // derives the TLS plan from these two fields only — it never reads
+      // CloudCredentials globals internally (single, testable input).
+      mqttCfg.ca_cert       = CloudCredentials::caCert();
       mqttCfg.tls_fingerprint = CloudCredentials::tlsFingerprint();
   }
 #endif

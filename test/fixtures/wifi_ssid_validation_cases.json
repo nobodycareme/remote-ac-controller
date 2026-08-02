@@ -1,0 +1,23 @@
+{
+  "comment": "v1.2.5 shared WiFi SSID validation test vectors. Read by BOTH tools/test-wifi-ssid-parity.py (Python) and test/host/test_wifi_ssid_validation.cpp (C++, generated from this file by tools/gen-wifi-ssid-cases.py). expectedCode uses the C++ enum labels from wifi_ssid_validation.h.",
+  "cases": [
+    { "name": "plain ascii",            "ssid": "HomeWiFi",                    "expectedValid": true,  "expectedCode": "WIFI_SSID_OK" },
+    { "name": "internal space",         "ssid": "Home WiFi",                   "expectedValid": true,  "expectedCode": "WIFI_SSID_OK" },
+    { "name": "internal spaces multi",  "ssid": "Lab Network 2",               "expectedValid": true,  "expectedCode": "WIFI_SSID_OK" },
+    { "name": "empty",                  "ssid": "",                            "expectedValid": false, "expectedCode": "WIFI_SSID_ERR_EMPTY" },
+    { "name": "nullptr",                "ssid": null,                          "expectedValid": false, "expectedCode": "WIFI_SSID_ERR_EMPTY" },
+    { "name": "single space",           "ssid": " ",                           "expectedValid": false, "expectedCode": "WIFI_SSID_ERR_ALL_SPACE" },
+    { "name": "multiple spaces",        "ssid": "     ",                       "expectedValid": false, "expectedCode": "WIFI_SSID_ERR_ALL_SPACE" },
+    { "name": "tab",                    "ssid": "My\tWiFi",                    "expectedValid": false, "expectedCode": "WIFI_SSID_ERR_CONTROL_CHARACTER" },
+    { "name": "newline",                "ssid": "My\nWiFi",                    "expectedValid": false, "expectedCode": "WIFI_SSID_ERR_CONTROL_CHARACTER" },
+    { "name": "del 0x7f",               "ssid": "My\u007fWiFi",                "expectedValid": false, "expectedCode": "WIFI_SSID_ERR_CONTROL_CHARACTER" },
+    { "name": "template value",         "ssid": "your_wifi_name",              "expectedValid": false, "expectedCode": "WIFI_SSID_ERR_TEMPLATE" },
+    { "name": "exactly 32 ascii bytes", "ssid": "abcdefghijklmnopqrstuvwxyz012345", "expectedValid": true, "expectedCode": "WIFI_SSID_OK" },
+    { "name": "33 ascii bytes",         "ssid": "abcdefghijklmnopqrstuvwxyz0123456", "expectedValid": false, "expectedCode": "WIFI_SSID_ERR_TOO_LONG" },
+    { "name": "utf8 under 32 bytes",    "ssid": "我的WiFi",                    "expectedValid": true,  "expectedCode": "WIFI_SSID_OK" },
+    { "name": "utf8 over 32 bytes",     "ssid": "一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十", "expectedValid": false, "expectedCode": "WIFI_SSID_ERR_TOO_LONG" },
+    { "name": "leading trailing space", "ssid": "  My Router  ",               "expectedValid": true,  "expectedCode": "WIFI_SSID_OK" },
+    { "name": "runtime Home WiFi",      "ssid": "Home WiFi",                   "expectedValid": true,  "expectedCode": "WIFI_SSID_OK" },
+    { "name": "33 byte runtime ssid",   "ssid": "abcdefghijklmnopqrstuvwxyz0123456", "expectedValid": false, "expectedCode": "WIFI_SSID_ERR_TOO_LONG" }
+  ]
+}
