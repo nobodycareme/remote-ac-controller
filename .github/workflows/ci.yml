@@ -363,6 +363,7 @@ jobs:
           echo 'GLOBALS_MANUALLY_INCLUDED=False'
 
       - name: Setup Arduino CLI
+        shell: bash
         run: |
           set -euo pipefail
           curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
@@ -373,6 +374,7 @@ jobs:
           arduino-cli core install esp8266:esp8266@3.1.2
 
       - name: Install Library Manager dependencies (documented versions)
+        shell: bash
         run: |
           set -euo pipefail
           arduino-cli lib install "DHT sensor library@1.4.7"
@@ -381,6 +383,7 @@ jobs:
           arduino-cli lib install "ArduinoJson@6.21.5"
 
       - name: Install repository libraries with the documented script
+        shell: bash
         run: |
           set -euo pipefail
           bash firmware/arduino-ide/tools/install-arduino-libraries.sh
@@ -395,6 +398,7 @@ jobs:
           echo "SRUN_ARDUINO_LIB_GENERATED=True"
 
       - name: Configure globals.h like a first-time user (${{ matrix.name }})
+        shell: bash
         run: |
           set -euo pipefail
           SKETCH_DIR=firmware/arduino-ide/Remote_AC_Controller
@@ -424,6 +428,7 @@ jobs:
           grep -E '^#define' "$G"
 
       - name: Compile as an ordinary user (${{ matrix.name }})
+        shell: bash
         run: |
           set -euo pipefail
           SKETCH_DIR="$(pwd)/firmware/arduino-ide/Remote_AC_Controller"
@@ -445,6 +450,7 @@ jobs:
 
       - name: NEGATIVE — campus auth without a profile must fail to compile
         if: matrix.name == 'offline'
+        shell: bash
         run: |
           set -euo pipefail
           SKETCH_DIR="$(pwd)/firmware/arduino-ide/Remote_AC_Controller"
