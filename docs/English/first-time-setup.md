@@ -56,6 +56,8 @@ cd firmware/agent-platformio
 
 This profile now enables `ENABLE_CLOUD_CREDENTIALS=1`: if either `wifi_secrets.h` or `cloud_secrets.h` is missing, the build stops and prints the missing file and the template path — there is no fallback to a credentials-free example. Both real files are Git-ignored and never committed.
 
+> **Since v1.2.4 copying the template verbatim no longer passes.** Before a build, `local-wifi` / `local-wifi-cloud` run content validation: the Wi-Fi SSID must not be `your_wifi_name` and the password must follow the WPA/WPA2 rules (8-63 printable characters, or a 64-digit hex PSK). `local-wifi-cloud` additionally validates the cloud config — the broker host must not be a template value such as `your-broker.example.com`, the port must be within 1-65535, the device ID and credentials must be changed, and at least one valid CA certificate or TLS fingerprint must be present. On failure the build stops and prints a non-sensitive error code (for example `HOST_PLACEHOLDER`, `TLS_MATERIAL_MISSING`); no secret value is ever printed.
+
 ### A.3 Arduino IDE workflow
 
 Open `firmware/arduino-ide/Remote_AC_Controller/Remote_AC_Controller.ino` in Arduino IDE. First copy the template to the local config file (the Arduino ESP8266 build applies it automatically; you do not edit the main `.ino` file):
@@ -80,21 +82,25 @@ Then edit `Remote_AC_Controller.ino.globals.h`:
 
 ### A.4 Serial commands at runtime
 
-The firmware joins the home network at boot using the compiled-in credentials. To reconnect or switch to an open SSID from the serial monitor:
+The firmware joins the home network at boot using the compiled-in credentials (`local-wifi` / `local-wifi-cloud`). To reconnect or temporarily switch to an open SSID from the serial monitor:
 
 | Command | Behaviour |
 |---|---|
-| `wifi connect` | re-join the home network from `wifi_secrets.h` (WPA path, password never enters the serial stream) |
-| `wifi connect stu-xdwlan` | connect to the Xidian open SSID (does not read `wifi_secrets.h`) |
-| `wifi status` | print the current connection state |
+| `wifi connect` | re-select the local WPA/WPA2 configuration from `wifi_secrets.h` (password never enters the serial stream) |
+| `wifi connect <ssid>` | temporarily switch to the given open SSID; **does not** read or use the `wifi_secrets.h` password, and a Wi-Fi password is never accepted on the command line |
+| `wifi status` | print state, connection source (`NET_SOURCE`), the actual SSID (`NET_SSID`) and IP |
 | `wifi scan` | list nearby APs (read-only) |
 | `wifi disconnect` | drop the current association |
+
+The connection source (`NET_SOURCE`) is one of: `COMPILED_LOCAL_WPA` (local WPA credentials), `CAMPUS_PROFILE_OPEN` (campus open SSID), `RUNTIME_OPEN_SSID` (`wifi connect <ssid>`), or `NONE` (not configured). The SSID shown by `wifi status` always matches the SSID actually used for the connection, and the boot log prints the actual SSID and source.
 
 The serial stream never contains the password value, only:
 
 ```
-WIFI_CONNECT ssid=<ssid> security=WPA_OR_WPA2
-WIFI_CONNECT ssid=<ssid> security=OPEN
+WIFI_CONNECT source=COMPILED_LOCAL_WPA ssid=<ssid> security=WPA_OR_WPA2
+WIFI_CONNECT source=CAMPUS_PROFILE_OPEN ssid=<ssid> security=OPEN
+WIFI_CONNECT source=RUNTIME_OPEN_SSID ssid=<ssid> security=OPEN
+WIFI_CONNECT_SKIPPED source=<source> reason=<SSID_NOT_CONFIGURED|WIFI_PASSWORD_NOT_CONFIGURED>
 ```
 
 ---
