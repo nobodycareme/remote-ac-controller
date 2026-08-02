@@ -129,6 +129,15 @@ def main():
           "Get-Content" not in src
           or not re.search(r"Get-Content[^\n]*(wifi_secrets|cloud_secrets)", src))
 
+    # ---- v1.2.4 content validation (existence is not enough) ---------------
+    check("content validator invoked (v1.2.4)",
+          "validate-cloud-secrets.py" in src and "--require-wifi" in src
+          and "--require-cloud" in src)
+    check("content validation failure aborts the build",
+          "LOCAL_SECRET_VALIDATION_FAILED=True" in src and "exit 5" in src)
+    check("template copy is rejected",
+          "copied from the example template verbatim is NOT accepted" in src)
+
     print("DEVPS1_PROFILE_CONTRACT_TOTAL=%d" % _TOTAL[0])
     print("DEVPS1_PROFILE_CONTRACT_PASS=%d" % (_TOTAL[0] - _FAILS[0]))
     print("DEVPS1_PROFILE_CONTRACT_FAIL=%d" % _FAILS[0])

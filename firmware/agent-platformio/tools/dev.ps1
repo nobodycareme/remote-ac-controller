@@ -252,6 +252,36 @@ if ($Profile -eq 'local-wifi-cloud') {
 }
 
 # ------------------------------------------------------------
+# v1.2.4: CONTENT validation via tools/validate-cloud-secrets.py.
+# Existence is not enough — template placeholder values are rejected.
+# ------------------------------------------------------------
+if ($Profile -in @('local-wifi', 'local-wifi-cloud')) {
+    $Validator = Join-Path (Split-Path -Parent $RepoRoot) 'tools/validate-cloud-secrets.py'
+    if (-not (Test-Path -LiteralPath $Validator)) {
+        Write-Output 'SECRET_VALIDATOR_MISSING=True'
+        exit 5
+    }
+    $VArgs = @('--require-wifi')
+    if ($Profile -eq 'local-wifi-cloud') { $VArgs += '--require-cloud' }
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $vout = & python $Validator @VArgs 2>&1
+        $vrc = $LASTEXITCODE
+    }
+    finally { $ErrorActionPreference = $prevEap }
+    $vout | ForEach-Object { Write-Output $_ }
+    if ($vrc -ne 0) {
+        Write-Output 'LOCAL_SECRET_VALIDATION_FAILED=True'
+        Write-Output 'Fix firmware/shared/RemoteACCore/src/config/wifi_secrets.h and/or'
+        Write-Output 'firmware/agent-platformio/include/cloud_secrets.h (see VALIDATION_ERROR_CODE).'
+        Write-Output 'A config copied from the example template verbatim is NOT accepted.'
+        exit 5
+    }
+    Write-Output 'LOCAL_SECRET_VALIDATION_PASS=True'
+}
+
+# ------------------------------------------------------------
 # Safety gates
 # ------------------------------------------------------------
 $SecretHeaders = @('secrets.h', 'cloud_secrets.h')
