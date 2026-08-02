@@ -2,6 +2,20 @@
 
 # Changelog
 
+## [1.2.4] - 2026-08-02
+
+### Fixed
+
+- **Local-WPA boot SSID state**: a connection-source model was introduced (compiled local WPA / campus open SSID / runtime open SSID / none); after boot, `wifi status` and the boot log show the actual SSID that was used.
+- **`wifi connect <ssid>` no longer overridden by local WPA**: an explicit open SSID keeps its own source and is never silently replaced by the compiled local credentials; `wifi connect` (no arguments) restores the local WPA configuration.
+- **Real association-path host integration tests**: an injectable station adapter and a production association controller let host tests execute the real connection function.
+- **Unmodified cloud secret templates are rejected**: build-time and runtime content validation reject template hosts, invalid ports, template device IDs/credentials, and missing TLS material.
+- **Stricter TLS configuration validation**: local cloud configs must provide at least one valid CA certificate or TLS fingerprint.
+
+### Notes
+
+- Firmware, cloud API, and database format are unchanged; PCB stays Rev 1.0.1.
+
 ## [1.2.3] - 2026-08-02
 
 ### Fixed
