@@ -43,6 +43,9 @@
 #endif
 #include "network/portal_detector.h"
 #include "config/campus_config.h"
+#include "network/wifi_connect_plan.h"
+#include "network/wifi_station_adapter.h"
+#include "network/wifi_association_controller.h"
 
 enum WifiState {
   WIFI_DISCONNECTED = 0,
@@ -66,15 +69,21 @@ enum BackoffReason {
 
 class WifiManager {
 public:
+  WifiManager() : _assoc(_espAdapter) {}
+
+  // No-argument begin() re-applies the DEFAULT source for this build:
+  //   ENABLE_WIFI_CREDENTIALS        -> COMPILED_LOCAL_WPA + LOCAL_WIFI_SSID
+  //   else ENABLE_CAMPUS_AUTH        -> CAMPUS_PROFILE_OPEN + CAMPUS_SSID
+  //   else                           -> NONE + "" (public/example builds)
   void begin(const char* ssid = nullptr, const char* password = nullptr);
-  void connect();                 // start association to the configured SSID
+  void connect();                 // start association via the association controller
   void disconnect();
   void scan();                    // list nearby APs (read-only)
   void update();                  // non-blocking state-machine tick; call every loop
 #if ENABLE_WIFI_CREDENTIALS
-  // Load LOCAL_WIFI_SSID / LOCAL_WIFI_PASSWORD from wifi_secrets.h into the
-  // manager and reset for a connect. Used by the no-argument `wifi connect`
-  // serial command. The password never appears in any log.
+  // Select COMPILED_LOCAL_WPA and load LOCAL_WIFI_SSID / LOCAL_WIFI_PASSWORD
+  // into the manager. Used by the no-argument `wifi connect` serial command.
+  // The password never appears in any log.
   void beginLocalWifi();
 #endif
 
@@ -92,6 +101,10 @@ public:
 
   WifiState       state() const { return _state; }
   static const char* stateStr(WifiState s);
+  // Effective connection source (v1.2.4): NONE / COMPILED_LOCAL_WPA /
+  // CAMPUS_PROFILE_OPEN / RUNTIME_OPEN_SSID.
+  WifiConnectionSource source() const { return _source; }
+  const char* sourceStr() const { return wifiSourceLabel(_source); }
 
   String ssid() const { return _cfgSsid; }
   String localIp() const { return WiFi.localIP().toString(); }
@@ -130,6 +143,9 @@ private:
 
   String  _cfgSsid = CAMPUS_SSID;
   String  _cfgPass = "";           // WPA/WPA2 password (never logged)
+  WifiConnectionSource _source = WIFI_SOURCE_NONE;  // v1.2.4 authoritative source
+  Esp8266WifiStationAdapter _espAdapter;   // production adapter (ESP8266 only)
+  WifiAssociationController _assoc;        // single production association executor
   WifiState _state = WIFI_DISCONNECTED;
   uint32_t _stateEnterMs = 0;
   uint32_t _nextRetryMs = 0;
