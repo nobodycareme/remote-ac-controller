@@ -81,9 +81,7 @@ def sabotage_2(root):
     # IR learning link points to a non-existent fragment
     p = os.path.join(root, "README.md")
     txt = open(p, encoding="utf-8").read()
-    txt = txt.replace(
-        "[红外学习工具](./docs/中文/红外学习.md)",
-        "[红外学习工具](#红外学习工具)")
+    txt += "\n[红外学习工具](#不存在的红外学习工具)\n"
     open(p, "w", encoding="utf-8").write(txt)
 
 
@@ -91,9 +89,7 @@ def sabotage_3(root):
     # call the public profile an "offline build"
     p = os.path.join(root, "README.md")
     txt = open(p, encoding="utf-8").read()
-    txt = txt.replace(
-        "这是无凭据公开构建，不是完全离线构建",
-        "这是一个完全离线的离线构建")
+    txt += "\n这是一个完全离线的离线构建。\n"
     open(p, "w", encoding="utf-8").write(txt)
 
 
@@ -123,7 +119,7 @@ def sabotage_7(root):
     # change the Chinese heading back to an English release heading
     p = os.path.join(root, "README.md")
     txt = open(p, encoding="utf-8").read()
-    txt = txt.replace("## 参与贡献与支持", "## Development and testing")
+    txt = txt.replace("## 贡献、支持和许可", "## Development and testing")
     open(p, "w", encoding="utf-8").write(txt)
 
 
@@ -155,9 +151,7 @@ def sabotage_11(root):
     # claim that cloud-enablement auto-connects at boot (v1.2.3 policy)
     p = os.path.join(root, "README.md")
     txt = open(p, encoding="utf-8").read()
-    txt = txt.replace(
-        "默认也不会在开机时自动连接网络",
-        "Cloud 启用就会自动联网")
+    txt += "\nCloud 启用就会自动联网。\n"
     open(p, "w", encoding="utf-8").write(txt)
 
 
@@ -174,9 +168,7 @@ def sabotage_13(root):
     # re-claim "deploy firmware only for phone control"
     p = os.path.join(root, "README.md")
     txt = open(p, encoding="utf-8").read()
-    txt = txt.replace(
-        "手机网页控制需要前端、后端、MQTT Broker 和 ESP8266 固件共同运行。",
-        "只在家里用手机控制空调，可以只部署固件。")
+    txt += "\n只在家里用手机控制空调，可以只部署固件。\n"
     open(p, "w", encoding="utf-8").write(txt)
 
 
@@ -184,9 +176,7 @@ def sabotage_14(root):
     # re-claim an undocumented simulated device
     p = os.path.join(root, "README.md")
     txt = open(p, encoding="utf-8").read()
-    txt = txt.replace(
-        "云端后端、网页前端和固件可以分别启动和调试",
-        "可以先用模拟设备体验网页控制")
+    txt += "\n可以先用模拟设备体验网页控制。\n"
     open(p, "w", encoding="utf-8").write(txt)
 
 
@@ -194,9 +184,7 @@ def sabotage_15(root):
     # re-claim any ESP8266 board runs the firmware unmodified
     p = os.path.join(root, "README.md")
     txt = open(p, encoding="utf-8").read()
-    txt = txt.replace(
-        "项目已在 NodeMCU ESP8266、DHT11 和 ZJ-IR-V2 上完成开发和验证。",
-        "ESP8266 系列开发板配合支持红外发射的模块即可运行固件。")
+    txt += "\nESP8266 系列开发板配合支持红外发射的模块即可运行固件。\n"
     open(p, "w", encoding="utf-8").write(txt)
 
 
@@ -204,9 +192,7 @@ def sabotage_16(root):
     # re-claim components can be swapped freely
     p = os.path.join(root, "README.md")
     txt = open(p, encoding="utf-8").read()
-    txt = txt.replace(
-        "需要保持现有 API 与 MQTT 协议兼容。",
-        "单独替换某一端不会影响其他部分。")
+    txt += "\n单独替换某一端不会影响其他部分。\n"
     open(p, "w", encoding="utf-8").write(txt)
 
 
@@ -251,9 +237,7 @@ def sabotage_21(root):
     # claim the public profile is fully offline / sensors only
     p = os.path.join(root, "README.md")
     txt = open(p, encoding="utf-8").read()
-    txt = txt.replace(
-        "这是无凭据公开构建，不是完全离线构建",
-        "这是完全离线构建，public 只编译传感器")
+    txt += "\n这是完全离线构建，public 只编译传感器。\n"
     open(p, "w", encoding="utf-8").write(txt)
 
 
@@ -301,9 +285,7 @@ def sabotage_26(root):
     # README claims the boot-time SSID can be empty and that is normal
     p = os.path.join(root, "README.md")
     txt = open(p, encoding="utf-8").read()
-    txt = txt.replace(
-        "默认也不会在开机时自动连接网络。",
-        "开机时状态页可能不显示实际 SSID，这属于正常现象。")
+    txt += "\n开机时状态页可能不显示实际 SSID，这属于正常现象。\n"
     open(p, "w", encoding="utf-8").write(txt)
 
 
@@ -393,6 +375,82 @@ def sabotage_35(root):
     open(p, "w", encoding="utf-8").write(txt)
 
 
+def sabotage_36(root):
+    p = os.path.join(root, "README.en.md")
+    txt = open(p, encoding="utf-8").read()
+    txt = txt.replace("| Build a physical device |", "| Build another device |")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_37(root):
+    p = os.path.join(root, "README.en.md")
+    txt = open(p, encoding="utf-8").read().replace("ZJ-IR-V2", "ZJ-IR-V3")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_38(root):
+    p = os.path.join(root, "docs/English/documentation-index.md")
+    txt = open(p, encoding="utf-8").read()
+    txt += "\n- [Deployment again](./deployment.md)\n"
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_39(root):
+    os.remove(os.path.join(root, "SUPPORT.md"))
+
+
+def sabotage_40(root):
+    p = os.path.join(root, ".github/ISSUE_TEMPLATE/bug-report.yml")
+    txt = open(p, encoding="utf-8").read().replace("    id: version\n", "")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_41(root):
+    p = os.path.join(root, ".github/pull_request_template.md")
+    txt = open(p, encoding="utf-8").read().replace("## Release impact", "## Shipping notes")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_42(root):
+    p = os.path.join(root, "README.md")
+    txt = open(p, encoding="utf-8").read()
+    badge = '<a href="https://example.invalid"><img src="https://img.shields.io/badge/extra-extra-blue" alt="extra" /></a>'
+    txt = txt.replace("</p>\n\n## 项目简介", badge + badge + "\n</p>\n\n## 项目简介")
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_43(root):
+    p = os.path.join(root, "README.en.md")
+    txt = open(p, encoding="utf-8").read() + "\nLocal notes: C:\\Temp\\Evidence\\result.txt\n"
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_44(root):
+    p = os.path.join(root, "README.md")
+    txt = open(p, encoding="utf-8").read() + "\n这是一套强大的一站式控制方案。\n"
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_45(root):
+    p = os.path.join(root, "README.en.md")
+    txt = open(p, encoding="utf-8").read()
+    flow = "Phone web UI → Fastify backend → MQTT → ESP8266 → IR → AC"
+    txt += "\n" + flow + "\n"
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_46(root):
+    p = os.path.join(root, "tools/README.md")
+    txt = open(p, encoding="utf-8").read() + "\n[Missing tool](./missing-tool.py)\n"
+    open(p, "w", encoding="utf-8").write(txt)
+
+
+def sabotage_47(root):
+    p = os.path.join(root, ".github/ISSUE_TEMPLATE/documentation.yml")
+    txt = open(p, encoding="utf-8").read().replace("body:\n", "body:\n\t- invalid: tab-indented\n", 1)
+    open(p, "w", encoding="utf-8").write(txt)
+
+
 def main():
     results = [
         case(1, "markdown_in_html_block", sabotage_1),
@@ -430,6 +488,18 @@ def main():
         case(33, "set_insecure_recommended", sabotage_33),
         case(34, "fingerprint_no_rotation", sabotage_34),
         case(35, "cn_en_tls_priority_mismatch", sabotage_35),
+        case(36, "primary_start_path_removed", sabotage_36),
+        case(37, "readme_fact_parity", sabotage_37),
+        case(38, "doc_index_duplicate_link", sabotage_38),
+        case(39, "community_file_missing", sabotage_39),
+        case(40, "issue_form_required_field", sabotage_40),
+        case(41, "pr_template_section", sabotage_41),
+        case(42, "readme_badge_limit", sabotage_42),
+        case(43, "readme_absolute_private_path", sabotage_43),
+        case(44, "readme_marketing_phrase", sabotage_44),
+        case(45, "system_flow_duplicate", sabotage_45),
+        case(46, "tools_readme_broken_path", sabotage_46),
+        case(47, "issue_form_invalid_yaml", sabotage_47),
     ]
     total = len(results)
     passed = sum(results)
