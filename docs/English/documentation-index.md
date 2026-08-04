@@ -1,73 +1,54 @@
-[简体中文](../中文/文档导航.md) | **English**
+﻿[简体中文](../中文/文档导航.md) | **English**
 
-# Documentation Index
+# Documentation index
 
-This page indexes all English technical documentation for Remote AC Controller. Every document carries a language switch at the top so you can jump to its Chinese counterpart; the Chinese index lives at [中文文档导航](../中文/文档导航.md).
+Start with one of the reading paths below, or browse by topic. Each first-party document appears in one group only.
 
-Back to the repository root: [`README.md`](./README.md)
+## Recommended paths
 
-## Getting Started
+- **Home user**: use [Getting started](#getting-started) in this order: wiring, first-time setup, IR learning, and deployment.
+- **Source validation only**: open [Getting started](#getting-started) for the PlatformIO firmware project, then the Cloud development environment.
+- **Maintainer**: read [Understand the system](#understand-the-system) before the operations and release guides.
 
-- [Project overview and quick start](./README.md) — capabilities, architecture diagram, one-shot validation commands
-- [Arduino IDE guide](./arduino-ide-guide.md) — build, upload, and debug the firmware with Arduino IDE 2.x
-- [Deployment](./deployment.md) — full deployment flow for backend, frontend, and MQTT broker
-- [Operations guide](./operations-guide.md) — routine checks, logs, certificate rotation, upgrades
+## Getting started
 
-## How It Works
+- [First-time setup](./first-time-setup.md) — configure networking, credentials, and firmware safety switches
+- [Wiring](./wiring.md) — verify pins and physical connections
+- [Arduino IDE guide](./arduino-ide-guide.md) — build and upload with Arduino IDE 2.x
+- [PlatformIO firmware project](../../firmware/agent-platformio/README.en.md) — build the firmware with the public profile
+- [Deployment](./deployment.md) — deploy the backend, frontend, and MQTT broker
 
-- [Architecture](./architecture.md) — end-to-end components, data flow, and boundaries
-- [Security model](./security-model.md) — roles, sessions, IR kill switches, threat surface
-- [Xidian campus network authentication](./xidian-campus-network-authentication.md) — automatic Srun authentication on ESP8266 boot
-- [Srun campus network porting guide](./srun-campus-network-porting-guide.md) — adapting to other Srun-based campuses
+## Understand the system
 
-## Hardware and Wiring
+- [Architecture](./architecture.md) — components, data flow, and boundaries
+- [MQTT protocol](./mqtt-protocol.md) — topics, messages, and presence state
+- [Security model](./security-model.md) — identity, sessions, credentials, and IR safety boundaries
+- [Hardware](./hardware.md) — verified components and PCB file scope
 
-- [Hardware](./hardware.md) — board, sensor, IR module, and PCB selection
-- [Wiring](./wiring.md) — pin assignment and physical wiring
+## Feature guides
 
-## IR Learning
+- [IR learning](./ir-learning.md) — capture and validate data from your own remote
+- [Scheduling](./scheduling.md) — configure recurring tasks
+- [Temperature automation](./temperature-automation.md) — configure dual-threshold hysteresis
+- [Xidian campus network authentication](./xidian-campus-network-authentication.md) — configure the currently verified Srun access flow
+- [Srun campus network porting guide](./srun-campus-network-porting-guide.md) — adapt the implementation to another Srun deployment
 
-- [IR learning](./ir-learning.md) — capture remote-control IR frames and load them into firmware
+## Maintain the project
 
-## Cloud and MQTT
+- [Operations guide](./operations-guide.md) — routine checks, logs, certificate rotation, and upgrades
+- [Troubleshooting](./troubleshooting.md) — diagnose common firmware and cloud problems
+- [Backup and recovery](./backup-and-recovery.md) — backup, restore, and drills
+- [Resource-constrained deployment](./resource-constrained-deployment.md) — control build resources on a 1 GB host
+- [Versioning](./versioning.md) — distinguish software versions from PCB revisions
+- [Hardware release process](./hardware-release-process.md) — package and verify manufacturing files
+- [Maintainer release process](./maintainer-release-process.md) — prepare, verify, and publish a version
 
-- [MQTT protocol](./mqtt-protocol.md) — topic naming, payload structure, presence detection
+## Participate
 
-## Automation
-
-- [Scheduling](./scheduling.md) — weekly cron-style scheduled tasks
-- [Temperature automation](./temperature-automation.md) — dual-threshold hysteresis control
-
-## Deployment and Operations
-
-- [Deployment](./deployment.md) — production deployment steps
-- [Operations guide](./operations-guide.md) — runtime maintenance
-- [Resource-constrained deployment](./resource-constrained-deployment.md) — build and runtime constraints on a 1 GB host
-
-## Security
-
-- [Security model](./security-model.md) — design-level security boundaries
-- [Security policy](./security.md) — vulnerability reporting process and supported scope
-
-## Troubleshooting
-
-- [Troubleshooting](./troubleshooting.md) — common symptoms, diagnosis, and fixes
-
-## Backup and Recovery
-
-- [Backup and recovery](./backup-and-recovery.md) — database and configuration backup, restore, and drills
-
-## Project and Community
-
-- [Contributing](./contributing.md) — development workflow, commit conventions, required gates
-- [Code of conduct](./code-of-conduct.md) — community behaviour standards
-- [Support](./support.md) — support scope and help channels
-- [Maintainer release process](./maintainer-release-process.md) — end-to-end release flow
-- [Versioning](./versioning.md) — software version vs PCB revision
-- [Hardware release process](./hardware-release-process.md) — PCB packaging and verification
-- [Changelog](./changelog.md) — release history
-
-## Licensing
-
-- [Third-party notices](./third-party-notices.md) — licences and provenance of dependencies
-- [Apache-2.0 licence](../../LICENSE) — authoritative English text (a Chinese reference translation is available at [Apache-2.0 许可证参考译文](../中文/Apache-2.0许可证参考译文.md))
+- [Contributing](./contributing.md) — development workflow and submission requirements
+- [Support](./support.md) — routes for usage questions, defects, and proposals
+- [Security policy](./security.md) — report vulnerabilities privately
+- [Code of conduct](./code-of-conduct.md) — community collaboration rules
+- [Changelog](./changelog.md) — software release history
+- [Third-party notices](./third-party-notices.md) — dependency licences and provenance
+- [Apache License 2.0](../../LICENSE) — authoritative project licence
