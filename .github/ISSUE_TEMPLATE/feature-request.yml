@@ -1,0 +1,48 @@
+name: Feature request / 功能建议
+description: Propose a change based on a concrete use case / 基于具体场景提出改进
+title: "[Feature] "
+body:
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case / 使用场景
+      description: What are you trying to accomplish? / 你希望完成什么？
+    validations:
+      required: true
+  - type: textarea
+    id: limitation
+    attributes:
+      label: Current limitation / 当前限制
+      description: What prevents that workflow today? / 当前是什么阻碍了这个流程？
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior / 建议行为
+      description: Describe the smallest useful change. / 描述最小且有用的改动。
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected component / 影响组件
+      multiple: true
+      options:
+        - Firmware / 固件
+        - Cloud backend / 云端后端
+        - Web frontend / 网页前端
+        - MQTT configuration / MQTT 配置
+        - IR learner / 红外学习工具
+        - Hardware or PCB / 硬件或 PCB
+        - Documentation / 文档
+        - Not sure / 不确定
+    validations:
+      required: true
+  - type: checkboxes
+    id: sensitive-data
+    attributes:
+      label: Sensitive data check / 敏感信息确认
+      options:
+        - label: This request contains no credentials, private keys, databases, private network details, or real IR data. / 本建议不含凭据、私钥、数据库、私有网络信息或真实红外数据。
+          required: true

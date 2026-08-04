@@ -2,50 +2,34 @@
 
 ## Summary
 
-<!-- What does this change do, and why? One or two sentences. -->
+<!-- What changes, and why? -->
 
-## Affected area
+## Scope
 
-- [ ] `firmware/` (ESP8266)
-- [ ] `cloud/backend/`
-- [ ] `cloud/frontend/`
-- [ ] `cloud/broker/` (Mosquitto config)
-- [ ] `docs/` / `hardware/`
-- [ ] Repository tooling / CI
+<!-- List the components and files intentionally changed. -->
 
-## Type of change
+## Validation
 
-- [ ] Bug fix
-- [ ] New feature
-- [ ] Refactor (no behaviour change)
-- [ ] Documentation
-- [ ] Build / CI
+<!-- List the exact commands or manual checks that were run. -->
 
-## Verification
+- [ ] Tests relevant to this change passed
+- [ ] A skipped or unavailable check is explained above
 
-Describe what you actually ran. Do not tick a box you did not execute.
+## Security
 
-- [ ] `pwsh tools/test-all.ps1` passed
-- [ ] `pwsh tools/build-all.ps1` passed
-- [ ] Verified on real hardware (state the board and how)
-- [ ] Not applicable (documentation-only change)
+- [ ] No production credentials, tokens, passwords, private keys, certificates, or databases are included
+- [ ] No real air-conditioner IR data is included
+- [ ] Logs, screenshots, and examples are sanitized
+- [ ] Security-sensitive behavior is described for reviewers
 
-<!-- Paste the relevant tail of the output if it helps review. -->
+## Documentation
 
-## Security checklist
+- [ ] User-facing behavior is documented, or this change needs no documentation
+- [ ] Chinese and English documents are synchronized where both exist
+- [ ] Added and changed links were checked
 
-These are hard requirements. A PR that fails any of them will not be merged.
+## Release impact
 
-- [ ] No credentials, tokens, passwords, private keys or certificates are added
-- [ ] No `secrets.h`, `cloud_secrets.h`, `.env`, `*.db`, `*.pem`, `*.key` is committed
-- [ ] No production hostname, IP address or account is hard-coded
-- [ ] Real-IR transmission remains disabled by default
-- [ ] No file from `Private/`, `Evidence/` or any internal archive is included
-
-## Breaking changes
-
-<!-- State "None", or describe the migration path. -->
-
-## Related issues
-
-<!-- e.g. Closes #12 -->
+- [ ] Version impact is stated: none, patch, minor, or major
+- [ ] Tag and Release asset impact is stated
+- [ ] Any migration or compatibility impact is described
