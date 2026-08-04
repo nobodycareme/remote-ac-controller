@@ -1,0 +1,72 @@
+name: Bug report / 缺陷报告
+description: Report reproducible incorrect behavior / 报告可复现的异常行为
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Remove passwords, tokens, private keys, databases, private network details, and real IR data from all text and attachments.
+        请从文字和附件中移除密码、Token、证书私钥、数据库、私有网络信息和真实红外数据。
+  - type: textarea
+    id: description
+    attributes:
+      label: Problem description / 问题描述
+      description: What happened, and which component was involved? / 发生了什么，涉及哪个组件？
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce / 复现步骤
+      placeholder: "1. ...\n2. ...\n3. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result / 预期结果
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result / 实际结果
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit / 版本或提交
+      placeholder: v1.2.6 or commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component / 组件
+      multiple: true
+      options:
+        - Firmware / 固件
+        - Cloud backend / 云端后端
+        - Web frontend / 网页前端
+        - MQTT configuration / MQTT 配置
+        - IR learner / 红外学习工具
+        - Hardware or PCB / 硬件或 PCB
+        - Documentation / 文档
+        - Not sure / 不确定
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs / 脱敏日志
+      render: shell
+  - type: checkboxes
+    id: sensitive-data
+    attributes:
+      label: Sensitive data check / 敏感信息确认
+      options:
+        - label: I removed all credentials, private keys, databases, private network details, and real IR data. / 我已移除所有凭据、私钥、数据库、私有网络信息和真实红外数据。
+          required: true

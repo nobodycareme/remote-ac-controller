@@ -1,0 +1,49 @@
+name: Documentation issue / 文档问题
+description: Report missing, incorrect, or unclear documentation / 报告缺失、错误或不清楚的文档
+title: "[Docs] "
+labels:
+  - documentation
+body:
+  - type: input
+    id: path
+    attributes:
+      label: Document path or link / 文档路径或链接
+      placeholder: docs/English/deployment.md
+    validations:
+      required: true
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: Issue type / 问题类型
+      options:
+        - Incorrect information / 信息错误
+        - Missing information / 信息缺失
+        - Unclear instructions / 说明不清
+        - Broken link or formatting / 链接或格式问题
+        - Translation mismatch / 翻译不一致
+    validations:
+      required: true
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language / 语言版本
+      options:
+        - Chinese / 中文
+        - English / 英文
+        - Both / 两者
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Suggested change / 建议修改
+      description: Quote only the minimum context needed. / 只引用必要的上下文。
+    validations:
+      required: true
+  - type: checkboxes
+    id: sensitive-data
+    attributes:
+      label: Sensitive data check / 敏感信息确认
+      options:
+        - label: I removed credentials, private keys, databases, private network details, and real IR data. / 我已移除凭据、私钥、数据库、私有网络信息和真实红外数据。
+          required: true

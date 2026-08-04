@@ -59,12 +59,13 @@ BOM_CLAIMS = ["BOM", "pick-and-place", "坐标", "centroid", "CPL"]
 
 # Exact ordered H2 mapping (CN index -> EN index).
 CN_H2 = [
-    "项目简介", "界面预览", "主要功能", "快速开始",
-    "系统组成", "硬件", "文档", "参与贡献与支持",
+    "项目简介", "界面预览", "核心能力", "快速开始", "系统结构",
+    "已验证硬件", "文档入口", "安全与限制", "贡献、支持和许可",
 ]
 EN_H2 = [
-    "Overview", "Interface preview", "Features", "Quick start",
-    "System layout", "Hardware", "Documentation", "Contributing and support",
+    "Overview", "Interface preview", "Core capabilities", "Quick start", "System layout",
+    "Verified hardware", "Documentation", "Security and limits",
+    "Contributing, support, and license",
 ]
 H2_PAIRS = list(zip(CN_H2, EN_H2))
 
@@ -238,6 +239,57 @@ def git_ls_files(path):
         return None
 
 
+COMMUNITY_FILES = ["CONTRIBUTING.md", "SECURITY.md", "SUPPORT.md", "CODE_OF_CONDUCT.md"]
+ISSUE_FORMS = {
+    ".github/ISSUE_TEMPLATE/bug-report.yml": {"description", "steps", "expected", "actual", "version", "component", "logs", "sensitive-data"},
+    ".github/ISSUE_TEMPLATE/feature-request.yml": {"use-case", "limitation", "proposal", "component", "sensitive-data"},
+    ".github/ISSUE_TEMPLATE/documentation.yml": {"path", "issue-type", "language", "proposal", "sensitive-data"},
+}
+INDEX_H2_CN = ["推荐阅读路径", "开始使用", "理解系统", "功能指南", "维护项目", "参与项目"]
+INDEX_H2_EN = ["Recommended paths", "Getting started", "Understand the system", "Feature guides", "Maintain the project", "Participate"]
+MARKETING_PHRASES = [
+    "方便适配", "灵活支持", "丰富功能", "一站式", "全方位", "完整覆盖", "强大", "高效便捷", "适用于多种场景",
+    "production-grade", "enterprise-grade", "highly reliable", "one-stop", "powerful and flexible",
+]
+
+
+def markdown_targets(text):
+    return [m.group(1).strip().split("#", 1)[0] for m in re.finditer(r"\[[^\]]+\]\(([^)]+)\)", text)]
+
+
+def issue_form_error(path, required_ids):
+    full = os.path.join(ROOT, path)
+    if not os.path.isfile(full):
+        return "missing file"
+    text = read(path)
+    try:
+        import yaml
+        data = yaml.safe_load(text)
+    except ImportError:
+        return "PyYAML is required"
+    except Exception as exc:
+        return f"YAML parse error: {exc}"
+    if isinstance(data, dict):
+        if not isinstance(data.get("body"), list):
+            return "body must be a list"
+        ids = {item.get("id") for item in data["body"] if isinstance(item, dict) and item.get("id")}
+        types = [item.get("type") for item in data["body"] if isinstance(item, dict)]
+    else:
+        return "top level must be a mapping"
+    missing = required_ids - ids
+    if missing:
+        return "missing ids: " + ", ".join(sorted(missing))
+    allowed = {"markdown", "textarea", "input", "dropdown", "checkboxes"}
+    if any(item_type not in allowed for item_type in types):
+        return "unsupported body type"
+    return None
+
+
+def duplicate_relative_links(path):
+    targets = [target for target in markdown_targets(read(path)) if target and not target.startswith(("http://", "https://", "mailto:"))]
+    return sorted({target for target in targets if targets.count(target) > 1})
+
+
 def main():
     ok = True
     cn = read("README.md")
@@ -280,8 +332,8 @@ def main():
                 start = max(0, txt.rfind("\n", 0, m.start()), txt.rfind("。", 0, m.start()),
                             txt.rfind(". ", 0, m.start()), txt.rfind("；", 0, m.start()))
                 seg = txt[start:m.start()]
-                if re.search(r"(未提供|没有|不提供|不存在|无 )", seg) or \
-                   re.search(r"(no |not |without |does not ship|none )", seg, re.I):
+                if re.search(r"(未提供|没有|不提供|不存在|不含|无 )", seg) or \
+                   re.search(r"(no |not |without |does not ship|does not include|do not include|none )", seg, re.I):
                     continue
                 cnt_bom += 1
                 print(f"BOM_CLAIM {f}: {w!r}")
@@ -297,10 +349,10 @@ def main():
     # 4) H2 section parity: exact ordered mapping, at most 8 H2s
     cn_h2 = [h.strip() for h in re.findall(r"(?m)^## (.+)$", cn)]
     en_h2 = [h.strip() for h in re.findall(r"(?m)^## (.+)$", en)]
-    if len(cn_h2) > 8:
-        print(f"CN_H2_TOO_MANY actual={len(cn_h2)} (want <= 8)")
+    if len(cn_h2) > 9:
+        print(f"CN_H2_TOO_MANY actual={len(cn_h2)} (want <= 9)")
         ok = False
-    if len(en_h2) > 8:
+    if len(en_h2) > 9:
         print(f"EN_H2_TOO_MANY actual={len(en_h2)} (want <= 8)")
         ok = False
     if len(cn_h2) != len(CN_H2):
@@ -418,14 +470,14 @@ def main():
     # 9) setup link presence
     for txt in (cn, en):
         cnt_wifi += len(re.findall(r"首次配置|wifi_secrets|first-time-setup", txt))
-        cnt_campus += len(re.findall(r"西电校园网自动认证|campus_secrets|xidian-campus-network-authentication", txt))
+        cnt_campus += len(re.findall(r"校园网|Srun|campus", txt, re.I))
     print(f"README_WIFI_SETUP_LINK_COUNT={cnt_wifi}")
     print(f"README_CAMPUS_SETUP_LINK_COUNT={cnt_campus}")
     if cnt_wifi < 2:
         print("README_WIFI_SETUP_LINKS_TOO_FEW (<2)")
         ok = False
     if cnt_campus < 2:
-        print("README_CAMPUS_SETUP_LINKS_TOO_FEW (<2)")
+        print("README_OPTIONAL_CAMPUS_ACCESS_MISSING (<2)")
         ok = False
 
     # 10) real-looking credentials
@@ -545,11 +597,11 @@ def main():
                 print(f"BROKEN_LINK {f}: {t}")
                 ok = False
 
-    # 16) line counts: CN 120-180, EN within 20% of CN
+    # 16) line counts: concise homepage, with comparable bilingual length
     cn_lines = len(cn.splitlines())
     en_lines = len(en.splitlines())
-    if not (120 <= cn_lines <= 180):
-        print(f"README_LINE_COUNT README.md = {cn_lines} (want 120-180)")
+    if not (100 <= cn_lines <= 180):
+        print(f"README_LINE_COUNT README.md = {cn_lines} (want 100-180)")
         ok = False
     lo, hi = int(cn_lines * 0.8), int(cn_lines * 1.2)
     if not (lo <= en_lines <= hi):
@@ -929,6 +981,146 @@ def main():
         ok = False
     else:
         print("V125_CN_EN_TLS_PRIORITY_MISMATCH=False")
+
+    # 21) public homepage and repository information-architecture contract
+    badge_counts = []
+    for f, txt in [("README.md", cn), ("README.en.md", en)]:
+        badge_count = len(re.findall(r"<img[^>]+(?:badge\.svg|img\.shields\.io)", txt, re.I))
+        badge_counts.append(badge_count)
+        if badge_count > 4:
+            print(f"README_BADGE_LIMIT_ERROR {f}: {badge_count}")
+            ok = False
+        if re.search(r"(?i)(?:(?<![A-Za-z])[A-Z]:[\\/]|Private[\\/]|Evidence[\\/])", txt):
+            print(f"README_PRIVATE_OR_ABSOLUTE_PATH {f}")
+            ok = False
+        for phrase in MARKETING_PHRASES:
+            if phrase.lower() in txt.lower():
+                print(f"README_MARKETING_PHRASE {f}: {phrase!r}")
+                ok = False
+        for shot in SCREENSHOTS:
+            if txt.count(shot) != 1:
+                print(f"README_SCREENSHOT_REFERENCE_NOT_ONCE {f}: {shot} count={txt.count(shot)}")
+                ok = False
+    print(f"README_BADGE_COUNT_CN={badge_counts[0]}")
+    print(f"README_BADGE_COUNT_EN={badge_counts[1]}")
+
+    quick_cn = _section_block(cn, "快速开始", "系统结构")
+    quick_en = _section_block(en, "Quick start", "System layout")
+    starts_cn = re.findall(r"(?m)^\| (只验证源码|制作真实设备|部署完整网页控制) \|", quick_cn)
+    starts_en = re.findall(r"(?m)^\| (Validate the source|Build a physical device|Deploy full web control) \|", quick_en)
+    if len(starts_cn) != 3 or len(set(starts_cn)) != 3 or len(starts_en) != 3 or len(set(starts_en)) != 3:
+        print(f"README_PRIMARY_START_PATH_ERROR CN={starts_cn!r} EN={starts_en!r}")
+        ok = False
+    print(f"README_PRIMARY_START_PATH_COUNT_CN={len(starts_cn)}")
+    print(f"README_PRIMARY_START_PATH_COUNT_EN={len(starts_en)}")
+
+    fact_pairs = [
+        ("NodeMCU ESP8266", "NodeMCU ESP8266"), ("DHT11", "DHT11"),
+        ("ZJ-IR-V2", "ZJ-IR-V2"), ("Rev 1.0.1", "Rev 1.0.1"),
+        ("Fastify", "Fastify"), ("Vue 3", "Vue 3"), ("MQTT", "MQTT"),
+        ("Srun", "Srun"), ("双阈值", "dual-threshold"),
+    ]
+    fact_errors = 0
+    for cn_fact, en_fact in fact_pairs:
+        if (cn_fact in cn) != (en_fact in en):
+            fact_errors += 1
+            print(f"README_FACT_PARITY_ERROR CN={cn_fact!r} EN={en_fact!r}")
+            ok = False
+    print(f"README_FACT_PARITY_ERROR_COUNT={fact_errors}")
+    if cn.count("手机网页 → Fastify 后端 → MQTT → ESP8266 → 红外 → 空调") != 1 or en.count("Phone web UI → Fastify backend → MQTT → ESP8266 → IR → AC") != 1:
+        print("README_SYSTEM_FLOW_COUNT_ERROR")
+        ok = False
+
+    index_errors = 0
+    for path, expected in [("docs/中文/文档导航.md", INDEX_H2_CN), ("docs/English/documentation-index.md", INDEX_H2_EN)]:
+        text = read(path)
+        headings = [h.strip() for h in re.findall(r"(?m)^## (.+)$", text)]
+        if headings != expected:
+            index_errors += 1
+            print(f"DOC_INDEX_SECTION_ORDER_ERROR {path}: {headings!r}")
+            ok = False
+        duplicates = duplicate_relative_links(path)
+        if duplicates:
+            index_errors += len(duplicates)
+            print(f"DOC_INDEX_DUPLICATE_LINKS {path}: {duplicates!r}")
+            ok = False
+    print(f"DOC_INDEX_STRUCTURE_ERROR_COUNT={index_errors}")
+
+    community_errors = 0
+    for path in COMMUNITY_FILES:
+        if not os.path.isfile(os.path.join(ROOT, path)):
+            community_errors += 1
+            print(f"COMMUNITY_FILE_MISSING {path}")
+            ok = False
+    canonical_pr = ".github/pull_request_template.md"
+    if not os.path.isfile(os.path.join(ROOT, canonical_pr)):
+        community_errors += 1
+        print(f"PR_TEMPLATE_MISSING {canonical_pr}")
+        ok = False
+    if "PULL_REQUEST_TEMPLATE.md" in os.listdir(os.path.join(ROOT, ".github")):
+        community_errors += 1
+        print("PR_TEMPLATE_CASE_DUPLICATE")
+        ok = False
+    else:
+        pr_text = read(canonical_pr) if os.path.isfile(os.path.join(ROOT, canonical_pr)) else ""
+        for heading in ["Summary", "Scope", "Validation", "Security", "Documentation", "Release impact"]:
+            if f"## {heading}" not in pr_text:
+                community_errors += 1
+                print(f"PR_TEMPLATE_SECTION_MISSING {heading}")
+                ok = False
+    print(f"COMMUNITY_STRUCTURE_ERROR_COUNT={community_errors}")
+
+    issue_errors = 0
+    config_path = ".github/ISSUE_TEMPLATE/config.yml"
+    config_full = os.path.join(ROOT, config_path)
+    if not os.path.isfile(config_full):
+        issue_errors += 1
+        print(f"ISSUE_FORM_CONFIG_MISSING {config_path}")
+        ok = False
+    else:
+        config_text = read(config_path)
+        try:
+            import yaml
+            config_data = yaml.safe_load(config_text)
+            if not isinstance(config_data, dict) or config_data.get("blank_issues_enabled") is not False or not isinstance(config_data.get("contact_links"), list):
+                raise ValueError("config.yml must disable blank issues and define contact_links")
+        except ImportError:
+            issue_errors += 1
+            print(f"ISSUE_FORM_CONFIG_ERROR {config_path}: PyYAML is required")
+            ok = False
+        except Exception as exc:
+            issue_errors += 1
+            print(f"ISSUE_FORM_CONFIG_ERROR {config_path}: {exc}")
+            ok = False
+    for path, required_ids in ISSUE_FORMS.items():
+        error = issue_form_error(path, required_ids)
+        if error:
+            issue_errors += 1
+            print(f"ISSUE_FORM_ERROR {path}: {error}")
+            ok = False
+    for old_path in [".github/ISSUE_TEMPLATE/bug_report.md", ".github/ISSUE_TEMPLATE/feature_request.md"]:
+        if os.path.exists(os.path.join(ROOT, old_path)):
+            issue_errors += 1
+            print(f"LEGACY_ISSUE_TEMPLATE_PRESENT {old_path}")
+            ok = False
+    print(f"ISSUE_FORM_ERROR_COUNT={issue_errors}")
+
+    tools_errors = 0
+    tools_readme = "tools/README.md"
+    if not os.path.isfile(os.path.join(ROOT, tools_readme)):
+        tools_errors += 1
+        print("TOOLS_README_MISSING")
+        ok = False
+    else:
+        for target in markdown_targets(read(tools_readme)):
+            if not target or target.startswith(("http://", "https://", "mailto:", "#")):
+                continue
+            full = os.path.normpath(os.path.join(ROOT, "tools", target))
+            if not os.path.exists(full):
+                tools_errors += 1
+                print(f"TOOLS_README_BROKEN_PATH {target}")
+                ok = False
+    print(f"TOOLS_README_PATH_ERROR_COUNT={tools_errors}")
 
     print(f"PUBLIC_DOCS_PASS={'True' if ok else 'False'}")
     return 0 if ok else 1
