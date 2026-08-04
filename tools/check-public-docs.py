@@ -266,15 +266,10 @@ def issue_form_error(path, required_ids):
         import yaml
         data = yaml.safe_load(text)
     except ImportError:
-        data = None
+        return "PyYAML is required"
     except Exception as exc:
         return f"YAML parse error: {exc}"
-    if data is None:
-        if "\t" in text or not re.search(r"(?m)^name: .+$", text) or not re.search(r"(?m)^body:$", text):
-            return "invalid YAML structure"
-        ids = set(re.findall(r"(?m)^    id: ([a-z0-9-]+)$", text))
-        types = re.findall(r"(?m)^  - type: ([a-z]+)$", text)
-    elif isinstance(data, dict):
+    if isinstance(data, dict):
         if not isinstance(data.get("body"), list):
             return "body must be a list"
         ids = {item.get("id") for item in data["body"] if isinstance(item, dict) and item.get("id")}
@@ -1090,10 +1085,9 @@ def main():
             if not isinstance(config_data, dict) or config_data.get("blank_issues_enabled") is not False or not isinstance(config_data.get("contact_links"), list):
                 raise ValueError("config.yml must disable blank issues and define contact_links")
         except ImportError:
-            if not re.search(r"(?m)^blank_issues_enabled: false$", config_text) or "contact_links:" not in config_text:
-                issue_errors += 1
-                print(f"ISSUE_FORM_CONFIG_ERROR {config_path}")
-                ok = False
+            issue_errors += 1
+            print(f"ISSUE_FORM_CONFIG_ERROR {config_path}: PyYAML is required")
+            ok = False
         except Exception as exc:
             issue_errors += 1
             print(f"ISSUE_FORM_CONFIG_ERROR {config_path}: {exc}")
